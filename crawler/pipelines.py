@@ -3,7 +3,9 @@ import os
 import re
 import hashlib
 import urllib.parse
+
 from urllib.parse import urlparse
+from datetime import datetime
 
 
 class BatchCrawlPipeline:
@@ -37,9 +39,7 @@ class BatchCrawlPipeline:
         return item
     
     def save_content_to_file(self, url, title, content, spider):
-        """
-        Save extracted content to JSON file
-        """
+        """Save extracted content to JSON file"""
         # Extract domain from URL as intermediate directory
         parsed_uri = urlparse(url)
         domain = '{uri.netloc}'.format(uri=parsed_uri)
@@ -58,11 +58,28 @@ class BatchCrawlPipeline:
         # Build complete file path
         filepath = os.path.join(website_dir, filename)
         
+        # Get HTTP headers from response if available
+        etag = None
+        last_modified = None
+        if hasattr(spider, 'crawler') and hasattr(spider.crawler, 'stats'):
+            stats = spider.crawler.stats.get_stats()
+            if 'etag' in stats:
+                etag = stats['etag']
+            if 'last-modified' in stats:
+                last_modified = stats['last-modified']
+        
+        # Calculate content hash
+        content_hash = hashlib.sha512(content.encode('utf-8')).hexdigest()
+        
         # Prepare JSON content
         json_content = {
             "url": url,
             "title": title,
-            "content": content
+            "content": content,
+            "etag": etag,
+            "last_modified": last_modified,
+            "content_hash": content_hash,
+            "crawled_at": datetime.now().isoformat()
         }
         
         # Write to JSON file

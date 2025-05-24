@@ -28,7 +28,6 @@ class SeatableBatchCrawlApp:
         self.app = Flask(__name__)
         self.setup_app()
 
-
     def setup_app(self):
         """Configure Flask application"""
         # Configure database
@@ -44,6 +43,17 @@ class SeatableBatchCrawlApp:
         
         # Initialize the crawler manager
         self.app.crawler_manager = CrawlerManager(self.app, self.config.CRAWL_OUTPUT_DIR)
+        
+        # Initialize the update manager
+        from crawler.update_manager import UpdateManager
+        self.app.update_manager = UpdateManager(
+            self.app, 
+            self.app.crawler_manager,
+            update_interval=604800 # Default to check for updates once a week
+        )
+        
+        # 启动更新管理器
+        self.app.update_manager.start()
         
         # Register Blueprint
         self.app.register_blueprint(api_bp)

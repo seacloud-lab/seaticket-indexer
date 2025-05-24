@@ -258,3 +258,53 @@ def add_and_crawl_website():
         return jsonify({'status': 'success', 'message': message})
     else:
         return jsonify({'status': 'error', 'message': message}), 400
+
+
+@api_bp.route('/projects/<string:project_name>/websites/url/<path:website_url>/update', methods=['POST'])
+def update_website_by_url(project_name, website_url):
+    """Manually trigger website content update"""
+    project = Project.query.filter_by(name=project_name).first()
+    if not project:
+        return (
+            jsonify({'status': 'error', 'message': f'Project "{project_name}" does not exist'}),
+            404,
+        )
+    
+    # Decode URL
+    decoded_url = unquote(website_url)
+    
+    # Find website
+    website = Website.query.filter_by(project_id=project.id, url=decoded_url).first()
+    if not website:
+        return (
+            jsonify(
+                {
+                    'status': 'error',
+                    'message': f'Website URL "{decoded_url}" does not exist in project "{project_name}"',
+                }
+            ),
+            404,
+        )
+    
+    # Get Update Manager
+    update_manager = current_app.update_manager
+    
+    # Construct output directory path
+    output_dir = os.path.join(
+        current_app.crawler_manager.output_dir,
+        f"project_{project.name}"
+    )
+    
+    # Trigger update check
+    try:
+        update_manager._check_website_for_update(website, output_dir)
+        return jsonify({
+            'status': 'success', 
+            'message': f'Update check triggered for website "{website.url}"'
+        })
+    except Exception as e:
+        logger.exception(f"Error triggering update: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Error triggering update: {str(e)}'
+        }), 500

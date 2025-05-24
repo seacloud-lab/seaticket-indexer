@@ -47,3 +47,8 @@ HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
 # TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
+
+# Add download middleware
+DOWNLOADER_MIDDLEWARES = {
+   "crawler.middlewares.HttpHeadersMiddleware": 543,
+}
