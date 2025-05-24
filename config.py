@@ -13,6 +13,10 @@ MYSQL_PORT = 3306
 MYSQL_DB = 'crawl_web'
 MYSQL_UNIX_SOCKET = ''
 
+# API Authentication
+IS_DEV = ''
+SEA_QA_PRIVATE_KEY = ''
+
 try:
     from local_settings import *
 except ImportError:
@@ -24,6 +28,7 @@ MYSQL_PASSWORD = os.getenv('WEB_CRAWLER_MYSQL_PASSWORD') or MYSQL_PASSWORD
 MYSQL_PORT = int(os.getenv('WEB_CRAWLER_MYSQL_PORT')) if os.getenv('WEB_CRAWLER_MYSQL_PORT') else MYSQL_PORT
 MYSQL_DB = os.getenv('WEB_CRAWLER_MYSQL_DB') or MYSQL_DB
 MYSQL_UNIX_SOCKET = os.getenv('WEB_CRAWLER_MYSQL_UNIX_SOCKET') or MYSQL_UNIX_SOCKET
+SEA_QA_PRIVATE_KEY = os.getenv('SEA_QA_PRIVATE_KEY') or SEA_QA_PRIVATE_KEY
 
 
 DATABASE_URI = "mysql+pymysql://%s:%s@%s:%s/%s?charset=utf8" % \
