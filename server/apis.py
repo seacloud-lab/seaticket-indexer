@@ -1,5 +1,6 @@
 import logging
 import jwt
+import os
 
 from urllib.parse import urlparse, unquote
 from functools import wraps
@@ -342,7 +343,7 @@ def update_website_by_url(project_name, website_url):
     # Construct output directory path
     output_dir = os.path.join(
         current_app.crawler_manager.output_dir,
-        f"project_{project.name}"
+        f"{project.name}"
     )
     
     # Trigger update check

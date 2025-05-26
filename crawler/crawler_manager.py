@@ -67,7 +67,7 @@ class CrawlerManager:
 
         # Create project-specific output directory
         project = Project.query.get(website.project_id)
-        project_output_dir = os.path.join(self.output_dir, f"project_{project.name}")
+        project_output_dir = os.path.join(self.output_dir, f"{project.name}")
         os.makedirs(project_output_dir, exist_ok=True)
 
         # Use deferToThread to push crawler task to thread pool

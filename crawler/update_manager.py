@@ -80,7 +80,7 @@ class UpdateManager:
                 # Construct output directory path
                 output_dir = os.path.join(
                     self.crawler_manager.output_dir,
-                    f"project_{project.name}"
+                    f"{project.name}"
                 )
                 
                 # Check if the website needs to be updated
