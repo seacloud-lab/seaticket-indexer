@@ -1,0 +1,8 @@
+flask
+waitress
+pymysql
+sqlalchemy
+scrapy
+pyjwt
+requests
+logging
