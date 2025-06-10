@@ -27,8 +27,13 @@ LANG = 'chinese'
 SEASEARCH_URL = ''
 SEASEARCH_TOKEN = ''
 
+# Seatable
+INNER_DTABLE_SERVER_URL = ''
+INNER_DTABLE_DB_URL = ''
+DTABLE_WEB_SERVICE_URL = ''
+
 try:
-    from local_settings import *
+    from web_crawl_index.local_settings import *
 except ImportError:
     pass
 
@@ -45,6 +50,9 @@ REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
 REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
 REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')
 
+INNER_DTABLE_SERVER_URL = os.environ.get('INNER_DTABLE_SERVER_URL', '') or INNER_DTABLE_SERVER_URL
+INNER_DTABLE_DB_URL = os.environ.get('INNER_DTABLE_DB_URL', '') or INNER_DTABLE_DB_URL
+DTABLE_WEB_SERVICE_URL = os.environ.get('DTABLE_WEB_SERVICE_URL', '') or DTABLE_WEB_SERVICE_URL
 
 # Crawler save directory
 CRAWL_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'crawled_content')
