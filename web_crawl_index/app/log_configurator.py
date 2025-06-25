@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from logging.handlers import RotatingFileHandler
-from config import LOG_LEVEL, LOG_FILE
+from web_crawl_index.config import LOG_LEVEL, LOG_FILE
 
 
 class LogConfigurator:
@@ -26,7 +26,7 @@ class LogConfigurator:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             log_format = '[%(asctime)s] [%(levelname)s] %(message)s'
             file_handler = RotatingFileHandler(
-                self.log_file, 
+                self.log_file,
                 maxBytes=10*1024*1024,  # 10MB
                 backupCount=5
             )
@@ -38,6 +38,6 @@ class LogConfigurator:
             handlers=handlers,
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        
+
         self.logger = logging.getLogger(self.component_name if self.component_name else __name__)
         self.logger.info(f"Log configured, level: {log_level}, output: {'stdout' if is_k8s else log_file}")

@@ -1,9 +1,9 @@
 BOT_NAME = "batch_crawl_web"
 
-SPIDER_MODULES = ["crawler.spiders"]
-NEWSPIDER_MODULE = "crawler.spiders"
+SPIDER_MODULES = ["web_crawl_index.crawler.spiders"]
+NEWSPIDER_MODULE = "web_crawl_index.crawler.spiders"
 
-# Crawl responsibly by identifying yourself (and your website) on the user-agent
+# Crawl responsibly by identifying yourself (and your site) on the user-agent
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
 # Obey robots.txt rules
@@ -12,7 +12,7 @@ ROBOTSTXT_OBEY = True
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 CONCURRENT_REQUESTS = 64
 
-# Configure a delay for requests for the same website (default: 0)
+# Configure a delay for requests for the same site (default: 0)
 DOWNLOAD_DELAY = 0.25
 # The download delay setting will honor only one of:
 CONCURRENT_REQUESTS_PER_DOMAIN = 32
@@ -26,7 +26,7 @@ DEFAULT_REQUEST_HEADERS = {
 }
 
 ITEM_PIPELINES = {
-   "crawler.pipelines.BatchCrawlPipeline": 300,
+   "web_crawl_index.crawler.pipelines.BatchCrawlPipeline": 300,
 }
 
 AUTOTHROTTLE_ENABLED = False
@@ -44,11 +44,10 @@ HTTPCACHE_DIR = "httpcache"
 HTTPCACHE_IGNORE_HTTP_CODES = []
 HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
 
-# TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
 
 # Add download middleware
 DOWNLOADER_MIDDLEWARES = {
-   "crawler.middlewares.HttpHeadersMiddleware": 543,
+   "web_crawl_index.crawler.middlewares.HttpHeadersMiddleware": 543,
 }
