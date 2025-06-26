@@ -1,15 +1,13 @@
-import os
 import config
 
 from web_crawl_index.app.log import LogConfigurator
 from web_crawl_index.app.app import WebCrawlIndexApp
+from web_crawl_index.app.signal_handler import set_signal
 
 
 def main():
-    os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'web_crawl_index.crawler.settings')
-
-    # Initialize logger with default config values
     LogConfigurator(config.LOG_LEVEL, config.LOG_FILE)
+    set_signal()
 
     app = WebCrawlIndexApp()
     app.serve_forever()

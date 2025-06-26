@@ -3,7 +3,8 @@ import logging
 import requests
 import json
 
-from datetime import datetime
+# from datetime import datetime
+import datetime
 from urllib.parse import urljoin, urlparse
 import xml.etree.ElementTree as ET
 from sqlalchemy.sql import text
@@ -50,6 +51,13 @@ class WebCrawlIndexManager:
             session.execute(text(cmd), {'site_id': site_id, 'status': status})
             session.commit()
 
+    def update_site_status_and_crawl_time(self, site_id, status):
+        last_crawled_at = datetime.datetime.now(datetime.UTC)
+        with self.db_session() as session:
+            cmd = """UPDATE sites SET status = :status, last_crawled_at=:last_crawled_at WHERE id = :site_id"""
+            session.execute(text(cmd), {'site_id': site_id, 'status': status, 'last_crawled_at': last_crawled_at})
+            session.commit()
+
     def get_project_by_id(self, project_id):
         with self.db_session() as session:
             sql = "SELECT * FROM projects WHERE id=:project_id"
@@ -71,20 +79,13 @@ class WebCrawlIndexManager:
             sites = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return sites
 
-    def crawl_site(self, site_id):
+    def crawl_site(self, site):
         """Start crawler process"""
+        site_id = site.id
         logger.info(f"Start crawling site {site_id}")
-        site = self.get_site_by_id(site_id)
-        if not site:
-            logger.warning(f"site: {site_id} does not exist.")
-            return False
-
-        # # Update site status
-        self.update_site_status(site_id, 'crawling')
 
         project_id = site.project_id
         project = self.get_project_by_id(project_id)
-        project_name = project.name
         project_uuid = project.uuid
 
         index_output_dir = os.path.join(self.output_dir, f"{project_uuid}")
@@ -194,11 +195,9 @@ class WebCrawlIndexManager:
     def finish_crawl_site(self, site_id, url, status, error_msg=None):
         if status == CrawlStatus.FAILED:
             logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, url, error_msg)
-        last_crawled_at = datetime.utcnow()
-        with self.db_session() as session:
-            cmd = """UPDATE sites SET status = :status, last_crawled_at=:last_crawled_at WHERE id = :site_id"""
-            session.execute(text(cmd), {'site_id': site_id, 'status': status, 'last_crawled_at': last_crawled_at})
-            session.commit()
+            self.update_site_status(site_id, CrawlStatus.FAILED)
+            return
+        self.update_site_status_and_crawl_time(site_id, CrawlStatus.COMPLETED)
 
     def update_sites_indexes(self):
         """Check if all sites need to be updated"""
@@ -230,17 +229,19 @@ class WebCrawlIndexManager:
         """Check if a single site needs to be updated
         """
         site_url = site.url
-        project_name = site.project_name
+        project_uuid = site.uuid
         # parse domain
         parsed_uri = urlparse(site_url)
         domain = '{uri.netloc}'.format(uri=parsed_uri)
 
-        output_dir = os.path.join(self.output_dir, project_name)
+        output_dir = os.path.join(self.output_dir, project_uuid)
         site_dir = os.path.join(output_dir, domain)
+        if not os.path.exists(output_dir):
+            logger.warning('output_dir not exist')
+            return
 
         # Retrieve all crawled URL files
         index_files = [f for f in os.listdir(site_dir) if f.endswith('.json')]
-        logger.info(f"Found {len(index_files)} index files for {site_url}")
 
         # Check each URL to see if it needs to be updated
         for filename in index_files:
@@ -270,7 +271,7 @@ class WebCrawlIndexManager:
             index_data['content'] = content
             index_data['etag'] = new_etag
             index_data['last_modified'] = new_last_modified
-            index_data['updated_at'] = datetime.now().isoformat()
+            index_data['updated_at'] = datetime.datetime.now().isoformat()
 
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(index_data, f, ensure_ascii=False, indent=2)

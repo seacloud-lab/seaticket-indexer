@@ -9,8 +9,7 @@ from web_crawl_index.crawler.web_crawl_index_manager import WebCrawlIndexManager
 class WebCrawlServer(Thread):
     def __init__(self):
         Thread.__init__(self)
-        web_crawl_index_manager = WebCrawlIndexManager()
-        application.web_crawl_index_manager = web_crawl_index_manager
+        application.web_crawl_index_manager = WebCrawlIndexManager()
         self.server = create_server(application, host=HOST, port=PORT)
 
     def run(self):

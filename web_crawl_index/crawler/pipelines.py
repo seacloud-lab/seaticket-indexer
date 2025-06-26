@@ -68,9 +68,6 @@ class BatchCrawlPipeline:
             if 'last-modified' in stats:
                 last_modified = stats['last-modified']
 
-        # Calculate content hash
-        content_hash = hashlib.sha512(content.encode('utf-8')).hexdigest()
-
         # Prepare JSON content
         json_content = {
             "url": url,
@@ -78,7 +75,6 @@ class BatchCrawlPipeline:
             "content": content,
             "etag": etag,
             "last_modified": last_modified,
-            "content_hash": content_hash,
             "crawled_at": datetime.now().isoformat()
         }
 
@@ -97,8 +93,6 @@ class BatchCrawlPipeline:
 
         # Replace invalid characters
         filename = urllib.parse.quote_plus(url)
-        # print('filename')
-        # print(filename)
         # filename = unquote(urllib.parse.quote_plus(url))
 
         # Ensure filename doesn't exceed maximum length limit (255 characters)
