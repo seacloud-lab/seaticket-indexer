@@ -78,7 +78,7 @@ class WebCrawlTaskWorker(object):
                             logger.warning('web_crawl_task: invalid.', res)
                         else:
                             site_id = data.get('site_id')
-                            self.crawl_site(site_id)
+                            self.update_site_index(site_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -87,7 +87,7 @@ class WebCrawlTaskWorker(object):
             # prevent case that redis break at program running.
             time.sleep(0.3)
 
-    def crawl_site(self, site_id):
+    def update_site_index(self, site_id):
         site = self.web_crawl_index_manager.get_site_by_id(site_id)
         if not site:
             logger.warning('site: %s not found', site_id)
@@ -97,7 +97,7 @@ class WebCrawlTaskWorker(object):
             return
         self.web_crawl_index_manager.update_site_status(site_id, CrawlStatus.CRAWLING)
         try:
-            self.web_crawl_index_manager.crawl_site(site)
+            self.web_crawl_index_manager.update_site_index(site)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', site_id, e)
             self.web_crawl_index_manager.update_site_status(site_id, CrawlStatus.FAILED)

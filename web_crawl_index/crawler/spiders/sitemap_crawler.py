@@ -16,7 +16,7 @@ def parse_item(self, response):
     """
     Parse page content and extract data
     """
-    self.logger.info(f"Processing page: {response.url}")
+    self.logger.debug(f"Processing page: {response.url}")
 
     # Extract page title
     title = response.css('title::text').get()
@@ -33,10 +33,9 @@ def parse_item(self, response):
         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     else:
         clean_text = ""
-        self.logger.warning(f"Page {response.url} has no body content")
 
     if not clean_text:
-        self.logger.warning(f"Page {response.url} has no valid content, skipping save")
+        self.logger.warning(f"Page {response.url} has no valid content")
 
     # Return extracted data
     yield {
@@ -48,14 +47,13 @@ def parse_item(self, response):
     }
 
 
-def create_sitemap_spider(name, sitemap_url, output_dir, sitemap_follow=None, sitemap_rules=None):
+def create_sitemap_spider(name, project_uuid, site_id, sitemap_url, site_index, sitemap_follow=None, sitemap_rules=None):
     """
     Dynamically create a SitemapSpider class
 
     Parameters:
         name (str): Spider name
         sitemap_url (str): Sitemap URL
-        output_dir (str): Output directory
         sitemap_follow (list): List of sitemap types to follow
         sitemap_rules (list): List of sitemap rules
 
@@ -75,16 +73,14 @@ def create_sitemap_spider(name, sitemap_url, output_dir, sitemap_follow=None, si
         'sitemap_urls': [sitemap_url],
         'sitemap_follow': sitemap_follow,
         'sitemap_rules': sitemap_rules,
-        'output_dir': output_dir,
         'parse': parse_sitemap_item,
         'parse_item': parse_item,
+        'site_index': site_index,
+        'site_id': site_id,
+        'project_uuid': project_uuid,
     }
 
     # Create class
     spider_class = type(f'{name}Spider', (SitemapSpider,), attrs)
-
-    # Ensure output directory exists
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
 
     return spider_class

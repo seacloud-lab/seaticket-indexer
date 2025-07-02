@@ -1,9 +1,10 @@
 import os
 import logging
+import time
+
 import requests
 import json
 
-# from datetime import datetime
 import datetime
 from urllib.parse import urljoin, urlparse
 import xml.etree.ElementTree as ET
@@ -18,10 +19,12 @@ from web_crawl_index.crawler.spiders.site_crawler import SiteCrawlerSpider
 from web_crawl_index.crawler.spiders.sitemap_crawler import create_sitemap_spider
 
 from web_crawl_index.db import init_db_session_class
-from web_crawl_index.config import CRAWL_OUTPUT_DIR
 from web_crawl_index.utils.constants import CrawlStatus
 from web_crawl_index.mq import get_mq
-from web_crawl_index.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+from web_crawl_index.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, SEASEARCH_URL, SEASEARCH_TOKEN
+from web_crawl_index.seasearch.index_store.site_index import SiteIndex
+from web_crawl_index.utils.seasearch_api import SeaSearchAPI
+from web_crawl_index.seasearch.utils import gen_site_index_name
 
 
 logger = logging.getLogger(__name__)
@@ -32,10 +35,11 @@ class WebCrawlIndexManager:
 
     def __init__(self):
         self.db_session = init_db_session_class()
-        self.output_dir = CRAWL_OUTPUT_DIR
         self.active_crawlers = {}
         self.settings = get_project_settings()
         self.runner = CrawlerRunner(self.settings)
+        self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
+        self.site_index = SiteIndex(self.seasearch_api)
 
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
@@ -79,7 +83,7 @@ class WebCrawlIndexManager:
             sites = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return sites
 
-    def crawl_site(self, site):
+    def update_site_index(self, site):
         """Start crawler process"""
         site_id = site.id
         logger.info(f"Start crawling site {site_id}")
@@ -88,8 +92,8 @@ class WebCrawlIndexManager:
         project = self.get_project_by_id(project_id)
         project_uuid = project.uuid
 
-        index_output_dir = os.path.join(self.output_dir, f"{project_uuid}")
-        os.makedirs(index_output_dir, exist_ok=True)
+        site_index_name = gen_site_index_name(project_uuid)
+        self.site_index.create_index_if_missing(site_index_name)
 
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
@@ -97,7 +101,7 @@ class WebCrawlIndexManager:
             site_id,
             site.url,
             site.sitemap_url,
-            index_output_dir
+            project_uuid,
         )
 
         d.addCallback(self.start_crawl)
@@ -151,29 +155,33 @@ class WebCrawlIndexManager:
         site_id = crawler_params['site_id']
         url = crawler_params['url']
         sitemap_url = crawler_params['sitemap_url']
-        output_dir = crawler_params['output_dir']
+        project_uuid = crawler_params['project_uuid']
 
         # Create crawler instance
         if sitemap_url:
             SitemapSpiderClass = create_sitemap_spider(
                 name=f"sitemap_spider_{site_id}",  # Use unique name
+                project_uuid=project_uuid,
+                site_id=site_id,
                 sitemap_url=sitemap_url,
-                output_dir=output_dir  # Use provided output directory
+                site_index=self.site_index
             )
             d = self.runner.crawl(SitemapSpiderClass)
         else:
             # Use regular spider
             d = self.runner.crawl(
                 SiteCrawlerSpider,
-                url=url,
-                output_dir=output_dir
+                project_uuid,
+                site_id,
+                url,
+                self.site_index
             )
         d.addCallback(lambda _: self.finish_crawl_site(site_id, url, CrawlStatus.COMPLETED))
         d.addErrback(lambda failure: self.finish_crawl_site(site_id, url, CrawlStatus.FAILED, str(failure)))
 
         return d
 
-    def prepare_crawler(self, site_id, url, sitemap_url, output_dir):
+    def prepare_crawler(self, site_id, url, sitemap_url, project_uuid):
         """Prepare crawler parameters, execute in thread pool"""
         if not sitemap_url:
             sitemap_url = self.get_sitemap_url(url)
@@ -185,7 +193,7 @@ class WebCrawlIndexManager:
             'site_id': site_id,
             'url': url,
             'sitemap_url': sitemap_url,
-            'output_dir': output_dir
+            'project_uuid': project_uuid,
         }
 
     def deal_prepare_crawler_error(self, failure, site_id, url):
@@ -222,59 +230,41 @@ class WebCrawlIndexManager:
                 except Exception as e:
                     logger.warning('update site index failed, site_id: %s, error: %s', site_id, e)
                     self.finish_crawl_site(site_id, url, CrawlStatus.FAILED, e)
+                    continue
 
                 self.finish_crawl_site(site_id, url, CrawlStatus.COMPLETED)
 
     def update_exist_site_index(self, site):
         """Check if a single site needs to be updated
         """
-        site_url = site.url
+        site_id = site.site_id
         project_uuid = site.uuid
-        # parse domain
-        parsed_uri = urlparse(site_url)
-        domain = '{uri.netloc}'.format(uri=parsed_uri)
 
-        output_dir = os.path.join(self.output_dir, project_uuid)
-        site_dir = os.path.join(output_dir, domain)
-        if not os.path.exists(output_dir):
-            logger.warning('output_dir not exist')
-            return
+        per_size = 100
+        start = 0
+        site_index_name = gen_site_index_name(project_uuid)
+        while True:
+            hits, total = self.site_index.query_data_by_site(site_index_name, site_id, start, per_size)
+            for hit in hits:
+                source = hit['_source']
+                etag = source['etag']
+                url = source['url']
+                last_modified = source['last_modified']
+                self.update_index_file(project_uuid, site_id, url, etag, last_modified)
 
-        # Retrieve all crawled URL files
-        index_files = [f for f in os.listdir(site_dir) if f.endswith('.json')]
+            if len(hits) < per_size:
+                break
 
-        # Check each URL to see if it needs to be updated
-        for filename in index_files:
-            filepath = os.path.join(site_dir, filename)
-            self.update_index_file(filepath)
-
-    def update_index_file(self, filepath):
+    def update_index_file(self, project_uuid, site_id, url, etag, last_modified):
         """Check if a single URL needs to be updated
-
-        Args:
-            filepath: JSON file path
         """
-
-        with open(filepath, 'r', encoding='utf-8') as f:
-            index_data = json.load(f)
-
-        url = index_data.get('url')
-        etag = index_data.get('etag')
-        last_modified = index_data.get('last_modified')
-
         is_changed, new_etag, new_last_modified = self.check_webpage_is_changed(url, etag, last_modified)
 
         # If an update is needed, send a GET request to retrieve new content.
         if is_changed:
             need_update_content, title, content = self.get_webpage_content(url, new_etag, new_last_modified)
-            index_data['title'] = title
-            index_data['content'] = content
-            index_data['etag'] = new_etag
-            index_data['last_modified'] = new_last_modified
-            index_data['updated_at'] = datetime.datetime.now().isoformat()
-
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(index_data, f, ensure_ascii=False, indent=2)
+            site_index_name = gen_site_index_name(project_uuid)
+            self.site_index.add_document(site_index_name, site_id, content, url, etag, title, last_modified)
         else:
             logger.debug(f"No update needed for {url}")
 
@@ -324,3 +314,7 @@ class WebCrawlIndexManager:
             'site_id': site_id,
         }
         self.mq.lpush('web_crawl_task', json.dumps(msg_content))
+
+    def search(self, project_uuid, keyword, start=0, size=20):
+        site_index_name = gen_site_index_name(project_uuid)
+        return self.site_index.search(site_index_name, keyword, start, size)
