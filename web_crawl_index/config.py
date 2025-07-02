@@ -21,6 +21,11 @@ MYSQL_UNIX_SOCKET = ''
 # API Authentication
 SEA_QA_PRIVATE_KEY = ''
 
+LANG = 'chinese'
+
+SEASEARCH_URL = ''
+SEASEARCH_TOKEN = ''
+
 try:
     from local_settings import *
 except ImportError:
@@ -38,7 +43,3 @@ MYSQL_UNIX_SOCKET = os.getenv('WEB_CRAWLER_MYSQL_UNIX_SOCKET') or MYSQL_UNIX_SOC
 REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
 REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
 REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')
-
-
-# Crawler save directory
-CRAWL_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'crawled_content')
