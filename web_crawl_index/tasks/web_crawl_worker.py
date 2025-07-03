@@ -7,11 +7,11 @@ from web_crawl_index.utils import get_python_executable, run
 
 
 __all__ = [
-    'WebCrawlIndexWorker',
+    'WebCrawlStarter',
 ]
 
 
-class WebCrawlIndexWorker(object):
+class WebCrawlStarter(object):
     def __init__(self):
         self._enabled = True
         self._logfile = LOG_FILE
@@ -19,17 +19,17 @@ class WebCrawlIndexWorker(object):
 
     def start(self):
         if not self.is_enabled():
-            logging.warning('Can not start web crawl index updater: it is not enabled!')
+            logging.warning('Can not start web crawl starter: it is not enabled!')
             return
 
-        logging.info('web crawl index updater is started')
-        WebCrawlIndexStarter(self._logfile, self._loglevel).start()
+        logging.info('web crawl starter is started')
+        WebCrawl(self._logfile, self._loglevel).start()
 
     def is_enabled(self):
         return self._enabled
 
 
-class WebCrawlIndexStarter(Thread):
+class WebCrawl(Thread):
     def __init__(self, logfile, loglevel):
         Thread.__init__(self)
         self._logfile = logfile

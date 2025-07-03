@@ -21,6 +21,12 @@ MYSQL_UNIX_SOCKET = ''
 # API Authentication
 SEA_QA_PRIVATE_KEY = ''
 
+# index setting
+LANG = 'chinese'
+
+SEASEARCH_URL = ''
+SEASEARCH_TOKEN = ''
+
 try:
     from local_settings import *
 except ImportError:
