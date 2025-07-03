@@ -15,7 +15,7 @@ from twisted.internet import reactor
 
 from web_crawl_index import config
 from web_crawl_index.app.log import LogConfigurator
-from web_crawl_index.crawler.web_crawl_index_manager import WebCrawlIndexManager
+from web_crawl_index.crawler.web_crawl_manager import WebCrawlManager
 
 from web_crawl_index.mq import get_mq
 from web_crawl_index.db import init_db_session_class
@@ -31,7 +31,7 @@ class WebCrawlTaskWorker(object):
 
     def __init__(self):
         self.db_session = init_db_session_class()
-        self.web_crawl_index_manager = WebCrawlIndexManager()
+        self.web_crawl_manager = WebCrawlManager()
         self.should_stop = threading.Event()
         self.worker_num = 3
         self.update_indexes_interval = 7 * 24 * 60 * 60
@@ -88,19 +88,19 @@ class WebCrawlTaskWorker(object):
             time.sleep(0.3)
 
     def crawl_site(self, site_id):
-        site = self.web_crawl_index_manager.get_site_by_id(site_id)
+        site = self.web_crawl_manager.get_site_by_id(site_id)
         if not site:
             logger.warning('site: %s not found', site_id)
             return
         if site.status == CrawlStatus.CRAWLING:
             logger.warning('site: %s is crawling', site_id)
             return
-        self.web_crawl_index_manager.update_site_status(site_id, CrawlStatus.CRAWLING)
+        self.web_crawl_manager.update_site_status(site_id, CrawlStatus.CRAWLING)
         try:
-            self.web_crawl_index_manager.crawl_site(site)
+            self.web_crawl_manager.crawl_site(site)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', site_id, e)
-            self.web_crawl_index_manager.update_site_status(site_id, CrawlStatus.FAILED)
+            self.web_crawl_manager.update_site_status(site_id, CrawlStatus.FAILED)
 
     def cron_update_web_indexes_timer(self):
         logger.info('Start to update web crawl timer, interval = %s sec', self.update_indexes_interval)
@@ -108,7 +108,7 @@ class WebCrawlTaskWorker(object):
             self.should_stop.wait(self.update_indexes_interval)
             if not self.should_stop.is_set():
                 try:
-                    self.web_crawl_index_manager.update_sites_indexes()
+                    self.web_crawl_manager.update_sites_indexes()
                 except Exception as e:
                     logger.exception('cron update site index error: %s', e)
 

@@ -22,12 +22,13 @@ from web_crawl_index.config import CRAWL_OUTPUT_DIR
 from web_crawl_index.utils.constants import CrawlStatus
 from web_crawl_index.mq import get_mq
 from web_crawl_index.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+from web_crawl_index.crawler.utils import get_site_dir
 
 
 logger = logging.getLogger(__name__)
 
 
-class WebCrawlIndexManager:
+class WebCrawlManager:
     """Crawler manager, responsible for starting and managing crawler processes"""
 
     def __init__(self):
@@ -86,10 +87,7 @@ class WebCrawlIndexManager:
 
         project_id = site.project_id
         project = self.get_project_by_id(project_id)
-        project_uuid = project.uuid
-
-        index_output_dir = os.path.join(self.output_dir, f"{project_uuid}")
-        os.makedirs(index_output_dir, exist_ok=True)
+        project_uuid = str(project.uuid)
 
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
@@ -97,7 +95,7 @@ class WebCrawlIndexManager:
             site_id,
             site.url,
             site.sitemap_url,
-            index_output_dir
+            project_uuid
         )
 
         d.addCallback(self.start_crawl)
@@ -149,52 +147,53 @@ class WebCrawlIndexManager:
     def start_crawl(self, crawler_params):
         """Callback function for starting crawler"""
         site_id = crawler_params['site_id']
-        url = crawler_params['url']
+        site_url = crawler_params['site_url']
         sitemap_url = crawler_params['sitemap_url']
-        output_dir = crawler_params['output_dir']
+        project_uuid = crawler_params['project_uuid']
 
         # Create crawler instance
         if sitemap_url:
             SitemapSpiderClass = create_sitemap_spider(
                 name=f"sitemap_spider_{site_id}",  # Use unique name
                 sitemap_url=sitemap_url,
-                output_dir=output_dir  # Use provided output directory
+                site_url=site_url,
+                project_uuid=project_uuid
             )
             d = self.runner.crawl(SitemapSpiderClass)
         else:
             # Use regular spider
             d = self.runner.crawl(
                 SiteCrawlerSpider,
-                url=url,
-                output_dir=output_dir
+                site_url=site_url,
+                project_uuid=project_uuid
             )
-        d.addCallback(lambda _: self.finish_crawl_site(site_id, url, CrawlStatus.COMPLETED))
-        d.addErrback(lambda failure: self.finish_crawl_site(site_id, url, CrawlStatus.FAILED, str(failure)))
+        d.addCallback(lambda _: self.finish_crawl_site(site_id, site_url, CrawlStatus.COMPLETED))
+        d.addErrback(lambda failure: self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure)))
 
         return d
 
-    def prepare_crawler(self, site_id, url, sitemap_url, output_dir):
+    def prepare_crawler(self, site_id, site_url, sitemap_url, project_uuid):
         """Prepare crawler parameters, execute in thread pool"""
         if not sitemap_url:
-            sitemap_url = self.get_sitemap_url(url)
+            sitemap_url = self.get_sitemap_url(site_url)
             if sitemap_url:
                 self.update_sitemap_url(site_id, sitemap_url)
 
         # Return crawler parameters
         return {
             'site_id': site_id,
-            'url': url,
+            'site_url': site_url,
             'sitemap_url': sitemap_url,
-            'output_dir': output_dir
+            'project_uuid': project_uuid
         }
 
-    def deal_prepare_crawler_error(self, failure, site_id, url):
-        self.finish_crawl_site(site_id, url, CrawlStatus.FAILED, str(failure))
+    def deal_prepare_crawler_error(self, failure, site_id, site_url):
+        self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure))
         return failure
 
-    def finish_crawl_site(self, site_id, url, status, error_msg=None):
+    def finish_crawl_site(self, site_id, site_url, status, error_msg=None):
         if status == CrawlStatus.FAILED:
-            logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, url, error_msg)
+            logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
             self.update_site_status(site_id, CrawlStatus.FAILED)
             return
         self.update_site_status_and_crawl_time(site_id, CrawlStatus.COMPLETED)
@@ -230,21 +229,12 @@ class WebCrawlIndexManager:
         """
         site_url = site.url
         project_uuid = site.uuid
-        # parse domain
-        parsed_uri = urlparse(site_url)
-        domain = '{uri.netloc}'.format(uri=parsed_uri)
 
-        output_dir = os.path.join(self.output_dir, project_uuid)
-        site_dir = os.path.join(output_dir, domain)
-        if not os.path.exists(output_dir):
-            logger.warning('output_dir not exist')
-            return
-
-        # Retrieve all crawled URL files
-        index_files = [f for f in os.listdir(site_dir) if f.endswith('.json')]
+        site_dir = get_site_dir(site_url, project_uuid)
+        crawled_site_files = [f for f in os.listdir(site_dir) if f.endswith('.json')]
 
         # Check each URL to see if it needs to be updated
-        for filename in index_files:
+        for filename in crawled_site_files:
             filepath = os.path.join(site_dir, filename)
             self.update_index_file(filepath)
 

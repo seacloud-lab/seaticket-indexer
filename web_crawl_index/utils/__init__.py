@@ -3,6 +3,7 @@ import sys
 import logging
 import atexit
 import subprocess
+import hashlib
 
 logger = logging.getLogger(__name__)
 pyexec = None
@@ -79,3 +80,7 @@ def run(argv, cwd=None, env=None, suppress_stdout=False, suppress_stderr=False, 
             kwargs['stderr'] = output
 
         return subprocess.Popen(cmdline, **kwargs)
+
+
+def md5(text):
+    return hashlib.md5(text.encode()).hexdigest()
