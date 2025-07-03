@@ -16,7 +16,7 @@ def parse_item(self, response):
     """
     Parse page content and extract data
     """
-    self.logger.info(f"Processing page: {response.url}")
+    self.logger.debug(f"Processing page: {response.url}")
 
     # Extract page title
     title = response.css('title::text').get()
