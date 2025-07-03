@@ -86,7 +86,12 @@ class SiteIndexManager:
             if len(project_sites) == 0:
                 break
             for site in project_sites:
-                self.update_site_index(site)
+                site_id = site.site_id
+                project_uuid = site.uuid
+                try:
+                    self.update_site_index(site)
+                except Exception as e:
+                    logger.error('update site index project: %, site: %s failed, error: %s', project_uuid, site_id, e)
 
     def search(self, project_uuid, keyword, start=0, size=20):
         site_index_name = gen_site_index_name(project_uuid)
