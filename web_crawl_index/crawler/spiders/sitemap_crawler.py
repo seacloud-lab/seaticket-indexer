@@ -48,14 +48,15 @@ def parse_item(self, response):
     }
 
 
-def create_sitemap_spider(name, sitemap_url, output_dir, sitemap_follow=None, sitemap_rules=None):
+def create_sitemap_spider(name, sitemap_url, site_url, project_uuid, sitemap_follow=None, sitemap_rules=None):
     """
     Dynamically create a SitemapSpider class
 
     Parameters:
         name (str): Spider name
         sitemap_url (str): Sitemap URL
-        output_dir (str): Output directory
+        site_url (str): Site URL
+        project_uuid (str): project_uuid
         sitemap_follow (list): List of sitemap types to follow
         sitemap_rules (list): List of sitemap rules
 
@@ -75,16 +76,13 @@ def create_sitemap_spider(name, sitemap_url, output_dir, sitemap_follow=None, si
         'sitemap_urls': [sitemap_url],
         'sitemap_follow': sitemap_follow,
         'sitemap_rules': sitemap_rules,
-        'output_dir': output_dir,
+        'project_uuid': project_uuid,
+        'site_url': site_url,
         'parse': parse_sitemap_item,
         'parse_item': parse_item,
     }
 
     # Create class
     spider_class = type(f'{name}Spider', (SitemapSpider,), attrs)
-
-    # Ensure output directory exists
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
 
     return spider_class

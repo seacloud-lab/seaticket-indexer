@@ -1,24 +1,18 @@
 import json
 import os
-import re
-import hashlib
-import urllib.parse
 
-from urllib.parse import urlparse, unquote
 from datetime import datetime
+from web_crawl_index.crawler.utils import url_to_filename, get_site_dir
 
 
 class BatchCrawlPipeline:
     def __init__(self):
-        self.output_dir = 'output'
+        self.project_uuid = None
+        self.site_url = None
 
     def open_spider(self, spider):
-        # Get spider's output directory (if available)
-        if hasattr(spider, 'output_dir'):
-            self.output_dir = spider.output_dir
-
-        # Create output directory
-        os.makedirs(self.output_dir, exist_ok=True)
+        self.project_uuid = spider.project_uuid
+        self.site_url = spider.site_url
 
     def close_spider(self, spider):
         pass
@@ -39,23 +33,10 @@ class BatchCrawlPipeline:
         return item
 
     def save_content_to_file(self, url, title, content, spider):
-        """Save extracted content to JSON file"""
-        # Extract domain from URL as intermediate directory
-        parsed_uri = urlparse(url)
-        domain = '{uri.netloc}'.format(uri=parsed_uri)
+        filename = url_to_filename(url)
+        site_dir = get_site_dir(self.site_url, self.project_uuid)
+        os.makedirs(site_dir, exist_ok=True)
 
-        # Convert URL to valid filename
-        filename = self.url_to_filename(url)
-
-        # Build site directory path
-        site_dir = os.path.join(self.output_dir, domain)
-
-        # Ensure site directory exists
-        if not os.path.exists(site_dir):
-            os.makedirs(site_dir)
-            spider.logger.info(f"Created site directory: {os.path.abspath(site_dir)}")
-
-        # Build complete file path
         filepath = os.path.join(site_dir, filename)
 
         # Get HTTP headers from response if available
@@ -84,22 +65,3 @@ class BatchCrawlPipeline:
 
         spider.logger.info(f"Content saved to JSON file: {os.path.abspath(filepath)}")
 
-    def url_to_filename(self, url):
-        """
-        Convert URL to valid filename
-        """
-        # Remove protocol prefix
-        url = re.sub(r'^https?://', '', url)
-
-        # Replace invalid characters
-        filename = urllib.parse.quote_plus(url)
-        # filename = unquote(urllib.parse.quote_plus(url))
-
-        # Ensure filename doesn't exceed maximum length limit (255 characters)
-        if len(filename) > 240:
-            # Keep beginning and end, use hash value in the middle
-            hash_part = hashlib.md5(url.encode('utf-8')).hexdigest()[:16]
-            filename = filename[:110] + '_' + hash_part + '_' + filename[-110:]
-
-        # Add .json extension
-        return filename + '.json'
