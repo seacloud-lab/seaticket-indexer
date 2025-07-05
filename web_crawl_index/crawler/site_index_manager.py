@@ -23,16 +23,17 @@ class SiteIndexManager:
 
     def get_project_crawled_completed_sites_by_page(self, start, limit):
         with self.db_session() as session:
-            sql = """SELECT s.id as site_id, s.url, s.sitemap_url, s.project_id, s.status, p.uuid, p.name as project_name
-             FROM sites s 
+            sql = """SELECT pc.id as site_id, pc.config, pc.project_id, pc.status, p.uuid, p.name as project_name
+             FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=s.project_id WHERE p.deleted=false AND s.status=:status LIMIT :start, :limit"""
+            ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='site' AND pc.status=:status LIMIT :start, :limit"""
             sites = session.execute(text(sql), {'start': start, 'limit': limit, 'status': CrawlStatus.COMPLETED}).fetchall()
             return sites
 
     def update_site_index(self, site):
         site_id = site.site_id
-        site_url = site.url
+        site_config = json.loads(site.config)
+        site_url = site_config.get('url')
         project_uuid = site.uuid
 
         site_dir = get_site_dir(site_url, project_uuid)
