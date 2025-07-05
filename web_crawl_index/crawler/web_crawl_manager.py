@@ -42,21 +42,21 @@ class WebCrawlManager:
 
     def get_site_by_id(self, site_id):
         with self.db_session() as session:
-            sql = "SELECT * FROM sites WHERE id=:site_id"
+            sql = "SELECT * FROM project_connection WHERE id=:site_id AND type='site'"
             site = session.execute(text(sql), {'site_id': site_id}).fetchone()
             return site
 
     def update_site_status(self, site_id, status):
         with self.db_session() as session:
-            cmd = """UPDATE sites SET status = :status WHERE id = :site_id"""
+            cmd = """UPDATE project_connection SET status = :status WHERE id = :site_id"""
             session.execute(text(cmd), {'site_id': site_id, 'status': status})
             session.commit()
 
     def update_site_status_and_crawl_time(self, site_id, status):
-        last_crawled_at = datetime.datetime.now(datetime.UTC)
+        updated_at = datetime.datetime.now(datetime.UTC)
         with self.db_session() as session:
-            cmd = """UPDATE sites SET status = :status, last_crawled_at=:last_crawled_at WHERE id = :site_id"""
-            session.execute(text(cmd), {'site_id': site_id, 'status': status, 'last_crawled_at': last_crawled_at})
+            cmd = """UPDATE project_connection SET status = :status, updated_at=:updated_at WHERE id = :site_id"""
+            session.execute(text(cmd), {'site_id': site_id, 'status': status, 'updated_at': updated_at})
             session.commit()
 
     def get_project_by_id(self, project_id):
@@ -65,18 +65,18 @@ class WebCrawlManager:
             project = session.execute(text(sql), {'project_id': project_id}).fetchone()
             return project
 
-    def update_sitemap_url(self, site_id, sitemap_url):
+    def update_site_config(self, site_id, site_config):
         with self.db_session() as session:
-            cmd = """UPDATE sites SET sitemap_url = :sitemap_url WHERE id = :site_id"""
-            session.execute(text(cmd), {'site_id': site_id, 'sitemap_url': sitemap_url})
+            cmd = """UPDATE project_connection SET config = :site_config WHERE id = :site_id"""
+            session.execute(text(cmd), {'site_id': site_id, 'site_config': site_config})
             session.commit()
 
     def get_project_site_by_page(self, start, limit):
         with self.db_session() as session:
-            sql = """SELECT w.id as site_id, w.url, w.sitemap_url, w.project_id, w.status, p.uuid, p.name as project_name
-             FROM sites w 
+            sql = """SELECT pc.id as site_id, pc.config, pc.project_id, pc.status, p.uuid, p.name as project_name
+             FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=w.project_id WHERE p.deleted=false LIMIT :start, :limit"""
+            ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='site' LIMIT :start, :limit"""
             sites = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return sites
 
@@ -85,6 +85,8 @@ class WebCrawlManager:
         site_id = site.id
         logger.info(f"Start crawling site {site_id}")
 
+        site_config = json.loads(site.config)
+        site_url = site_config.get('url')
         project_id = site.project_id
         project = self.get_project_by_id(project_id)
         project_uuid = str(project.uuid)
@@ -93,13 +95,13 @@ class WebCrawlManager:
         d = deferToThread(
             self.prepare_crawler,
             site_id,
-            site.url,
-            site.sitemap_url,
+            site_url,
+            site_config,
             project_uuid
         )
 
         d.addCallback(self.start_crawl)
-        d.addErrback(self.deal_prepare_crawler_error, site_id, site.url)
+        d.addErrback(self.deal_prepare_crawler_error, site_id, site_url)
 
     def get_sitemap_url(self, url):
         """Try to get site's sitemap URL"""
@@ -172,12 +174,15 @@ class WebCrawlManager:
 
         return d
 
-    def prepare_crawler(self, site_id, site_url, sitemap_url, project_uuid):
+    def prepare_crawler(self, site_id, site_url, site_config, project_uuid):
         """Prepare crawler parameters, execute in thread pool"""
+        sitemap_url = site_config.get('sitemap_url')
         if not sitemap_url:
             sitemap_url = self.get_sitemap_url(site_url)
             if sitemap_url:
-                self.update_sitemap_url(site_id, sitemap_url)
+                site_config['sitemap_url'] = sitemap_url
+                # update sitemap url
+                self.update_site_config(site_id, json.dumps(site_config))
 
         # Return crawler parameters
         return {
@@ -213,22 +218,22 @@ class WebCrawlManager:
                 break
             for site in project_sites:
                 site_id = site.site_id
-                url = site.url
+                project_uuid = site.uuid
+                site_config = json.loads(site.config)
+                site_url = site_config.get('url')
 
                 try:
                     # Check if the site needs to be updated
-                    self.update_exist_site_index(site)
+                    self.update_exist_site_index(site_url, project_uuid)
                 except Exception as e:
                     logger.warning('update site index failed, site_id: %s, error: %s', site_id, e)
-                    self.finish_crawl_site(site_id, url, CrawlStatus.FAILED, e)
+                    self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, e)
 
-                self.finish_crawl_site(site_id, url, CrawlStatus.COMPLETED)
+                self.finish_crawl_site(site_id, site_url, CrawlStatus.COMPLETED)
 
-    def update_exist_site_index(self, site):
+    def update_exist_site_index(self, site_url, project_uuid):
         """Check if a single site needs to be updated
         """
-        site_url = site.url
-        project_uuid = site.uuid
 
         site_dir = get_site_dir(site_url, project_uuid)
         crawled_site_files = [f for f in os.listdir(site_dir) if f.endswith('.json')]
