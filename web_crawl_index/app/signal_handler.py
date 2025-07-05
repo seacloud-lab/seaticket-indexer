@@ -4,15 +4,15 @@ import signal
 from web_crawl_index.utils import run
 
 
-def kill_face_cluster():
+def kill_web_crawler_task_worker():
     cmd = [
-        'pkill', '-f', 'web_crawl_index.crawler.web_crawler_task_worker'
+        'pkill', '-f', 'web_crawl_index.crawler.web_crawl_task_worker'
     ]
     run(cmd)
 
 
 def signal_term_handler(signal, frame):
-    kill_face_cluster()
+    kill_web_crawler_task_worker()
     os._exit(0)
 
 
