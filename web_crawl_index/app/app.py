@@ -1,5 +1,5 @@
 from web_crawl_index.server.web_crawl_server import WebCrawlServer
-from web_crawl_index.tasks.web_crawl_worker import WebCrawlStarter
+from web_crawl_index.tasks.web_crawl_starter import WebCrawlStarter
 from web_crawl_index.tasks.site_index_updater import SiteIndexUpdater
 from web_crawl_index.crawler.web_crawl_manager import WebCrawlManager
 from web_crawl_index.crawler.site_index_manager import SiteIndexManager
