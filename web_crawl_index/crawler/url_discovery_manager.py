@@ -6,12 +6,13 @@ from scrapy.linkextractors import LinkExtractor
 from scrapy.http import HtmlResponse
 
 from web_crawl_index.db import init_db_session_class
+from web_crawl_index.utils import md5
 
 logger = logging.getLogger(__name__)
 
 
 class URLDiscoveryManager:
-    """Manages dynamic URL discovery and interactions with discovered_urls table"""
+    """Manages dynamic URL discovery and interactions with site_urls table"""
     
     def __init__(self):
         self.db_session = init_db_session_class()
@@ -26,23 +27,26 @@ class URLDiscoveryManager:
             site_id: Site ID
             source: Discovery source (sitemap/scrapy/dynamic)
         """
+        url_md5 = md5(url)
+        
         with self.db_session() as session:
-            # Check URL if already exists
-            check_sql = "SELECT id FROM discovered_urls WHERE url = :url AND site_id = :site_id"
-            existing = session.execute(text(check_sql), {'url': url, 'site_id': site_id}).fetchone()
+            # Check URL if already exists using MD5
+            check_sql = "SELECT id FROM site_urls WHERE url_md5 = :url_md5 AND site_id = :site_id"
+            existing = session.execute(text(check_sql), {'url_md5': url_md5, 'site_id': site_id}).fetchone()
             
             if existing:
-                logger.debug(f"URL already exists in discovered_urls: {url}")
+                logger.debug(f"URL already exists in site_urls: {url} (MD5: {url_md5})")
                 return existing.id
             
             # Insert new URL
             insert_sql = """
-                INSERT INTO discovered_urls (url, site_id, status, source, discovered_at, created_at, updated_at)
-                VALUES (:url, :site_id, :status, :source, :discovered_at, :created_at, :updated_at)
+                INSERT INTO site_urls (url, url_md5, site_id, status, source, discovered_at, created_at, updated_at)
+                VALUES (:url, :url_md5, :site_id, :status, :source, :discovered_at, :created_at, :updated_at)
             """
             now = datetime.datetime.now(datetime.UTC)
             params = {
                 'url': url,
+                'url_md5': url_md5,
                 'site_id': site_id,
                 'status': 'pending',
                 'source': source,
@@ -52,7 +56,7 @@ class URLDiscoveryManager:
             }
             result = session.execute(text(insert_sql), params)
             session.commit()
-            logger.info(f"Added new discovered URL: {url} (site_id: {site_id})")
+            logger.info(f"Added new discovered URL: {url} (MD5: {url_md5}, site_id: {site_id})")
             return result.lastrowid
     
     def get_pending_urls(self, site_id=None, limit=100):
@@ -65,14 +69,14 @@ class URLDiscoveryManager:
         with self.db_session() as session:
             if site_id:
                 sql = """
-                    SELECT id, url, site_id FROM discovered_urls 
+                    SELECT id, url, url_md5, site_id FROM site_urls 
                     WHERE status = 'pending' AND site_id = :site_id 
                     ORDER BY discovered_at ASC LIMIT :limit
                 """
                 params = {'site_id': site_id, 'limit': limit}
             else:
                 sql = """
-                    SELECT id, url, site_id FROM discovered_urls 
+                    SELECT id, url, url_md5, site_id FROM site_urls 
                     WHERE status = 'pending' 
                     ORDER BY discovered_at ASC LIMIT :limit
                 """
@@ -80,11 +84,25 @@ class URLDiscoveryManager:
             
             return session.execute(text(sql), params).fetchall()
     
+    def get_url_by_md5(self, url_md5, site_id):
+        """Get URL by MD5 hash
+        
+        Args:
+            url_md5: URL MD5 hash
+            site_id: Site ID
+            
+        Returns:
+            URL record or None
+        """
+        with self.db_session() as session:
+            sql = "SELECT id, url, url_md5, site_id, status FROM site_urls WHERE url_md5 = :url_md5 AND site_id = :site_id"
+            return session.execute(text(sql), {'url_md5': url_md5, 'site_id': site_id}).fetchone()
+    
     def mark_url_crawling(self, url_id):
         """Mark URL as crawling status"""
         with self.db_session() as session:
             sql = """
-                UPDATE discovered_urls 
+                UPDATE site_urls 
                 SET status = 'crawling', updated_at = :updated_at 
                 WHERE id = :url_id
             """
@@ -98,7 +116,7 @@ class URLDiscoveryManager:
         """Mark URL as completed status"""
         with self.db_session() as session:
             sql = """
-                UPDATE discovered_urls 
+                UPDATE site_urls 
                 SET status = 'completed', crawled_at = :crawled_at, updated_at = :updated_at 
                 WHERE id = :url_id
             """
@@ -114,7 +132,7 @@ class URLDiscoveryManager:
         """Mark URL as failed status"""
         with self.db_session() as session:
             sql = """
-                UPDATE discovered_urls 
+                UPDATE site_urls 
                 SET status = 'failed', error_message = :error_message, updated_at = :updated_at 
                 WHERE id = :url_id
             """

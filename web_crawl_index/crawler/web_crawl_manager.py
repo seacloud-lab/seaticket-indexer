@@ -330,7 +330,7 @@ class WebCrawlManager:
         except Exception as e:
             logger.error(f"Error discovering new links from {page_url}: {str(e)}")
 
-    def process_discovered_urls(self, site_id=None, limit=50):
+    def process_site_urls(self, site_id=None, limit=50):
         """Process pending discovered URLs
         
         Args:
@@ -351,16 +351,16 @@ class WebCrawlManager:
             for url_record in pending_urls:
                 url_id = url_record.id
                 url = url_record.url
-                target_site_id = url_record.site_id
+                record_site_id = url_record.site_id
                 
                 try:
                     # Mark as processing
                     self.url_discovery_manager.mark_url_crawling(url_id)
                     
                     # Get site information
-                    site = self.get_site_by_id(target_site_id)
+                    site = self.get_site_by_id(record_site_id)
                     if not site:
-                        logger.warning(f"Site not found for discovered URL: {url} (site_id: {target_site_id})")
+                        logger.warning(f"Site not found for discovered URL: {url} (site_id: {record_site_id})")
                         self.url_discovery_manager.mark_url_failed(url_id, "Site not found")
                         continue
                     
@@ -382,7 +382,7 @@ class WebCrawlManager:
             return processed_count
             
         except Exception as e:
-            logger.error(f"Error in process_discovered_urls: {str(e)}")
+            logger.error(f"Error in process_site_urls: {str(e)}")
             return 0
 
     def crawl_single_url(self, url, site):
