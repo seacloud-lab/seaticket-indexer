@@ -16,6 +16,7 @@ from twisted.internet.threads import deferToThread
 
 from web_crawl_index.crawler.spiders.site_crawler import SiteCrawlerSpider
 from web_crawl_index.crawler.spiders.sitemap_crawler import create_sitemap_spider
+from web_crawl_index.crawler.url_discovery_manager import URLDiscoveryManager
 
 from web_crawl_index.db import init_db_session_class
 from web_crawl_index.config import CRAWL_OUTPUT_DIR
@@ -37,6 +38,7 @@ class WebCrawlManager:
         self.active_crawlers = {}
         self.settings = get_project_settings()
         self.runner = CrawlerRunner(self.settings)
+        self.url_discovery_manager = URLDiscoveryManager()
 
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
@@ -229,6 +231,7 @@ class WebCrawlManager:
         """
         site_url = site.url
         project_uuid = site.uuid
+        site_id = site.site_id
 
         site_dir = get_site_dir(site_url, project_uuid)
         crawled_site_files = [f for f in os.listdir(site_dir) if f.endswith('.json')]
@@ -236,13 +239,15 @@ class WebCrawlManager:
         # Check each URL to see if it needs to be updated
         for filename in crawled_site_files:
             filepath = os.path.join(site_dir, filename)
-            self.update_index_file(filepath)
+            self.update_index_file(filepath, site_id, site_url)
 
-    def update_index_file(self, filepath):
+    def update_index_file(self, filepath, site_id=None, site_url=None):
         """Check if a single URL needs to be updated
 
         Args:
             filepath: JSON file path
+            site_id: Site ID for dynamic link discovery
+            site_url: Site URL for determining allowed domains
         """
 
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -256,17 +261,200 @@ class WebCrawlManager:
 
         # If an update is needed, send a GET request to retrieve new content.
         if is_changed:
-            need_update_content, title, content = self.get_webpage_content(url, new_etag, new_last_modified)
-            index_data['title'] = title
-            index_data['content'] = content
-            index_data['etag'] = new_etag
-            index_data['last_modified'] = new_last_modified
-            index_data['updated_at'] = datetime.datetime.now().isoformat()
+            need_update_content, title, content, html_content = self.get_webpage_content(url, new_etag, new_last_modified)
+            if need_update_content:
+                index_data['title'] = title
+                index_data['content'] = content
+                index_data['etag'] = new_etag
+                index_data['last_modified'] = new_last_modified
+                index_data['updated_at'] = datetime.datetime.now().isoformat()
 
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(index_data, f, ensure_ascii=False, indent=2)
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(index_data, f, ensure_ascii=False, indent=2)
+                
+                # Dynamic discovery of new links
+                if site_id and site_url and html_content:
+                    self.discover_new_links_from_updated_page(html_content, url, site_id, site_url)
         else:
             logger.debug(f"No update needed for {url}")
+
+    def get_webpage_content(self, url, etag, last_modified):
+        headers = {}
+        if etag:
+            headers['If-None-Match'] = etag
+        if last_modified:
+            headers['If-Modified-Since'] = last_modified
+
+        response = requests.get(url, headers=headers, timeout=15)
+
+        need_update_content = False
+        html_content = None
+        if response.status_code == 200:
+            need_update_content = True
+            html_content = response.text
+            soup = BeautifulSoup(response.text, 'html.parser')
+            title = soup.title.text if soup.title else ''
+            # Extract content
+            for script in soup(["script", "style"]):
+                script.extract()
+            content = soup.get_text(" ", strip=True)
+
+            return need_update_content, title, content, html_content
+        return need_update_content, '', '', None
+
+    def discover_new_links_from_updated_page(self, html_content, page_url, site_id, site_url):
+        """Discover new links from updated page
+        
+        Args:
+            html_content: HTML content of the page
+            page_url: Page URL
+            site_id: Site ID
+            site_url: Site root URL
+        """
+        try:
+            # Determine allowed domains
+            parsed_site_url = urlparse(site_url)
+            allowed_domains = [parsed_site_url.netloc]
+            
+            # Use URLDiscoveryManager to discover new links
+            new_links_count = self.url_discovery_manager.discover_new_links_from_content(
+                html_content=html_content,
+                base_url=page_url,
+                site_id=site_id,
+                allowed_domains=allowed_domains
+            )
+            
+            if new_links_count > 0:
+                logger.info(f"Discovered {new_links_count} new links from updated page: {page_url}")
+                
+        except Exception as e:
+            logger.error(f"Error discovering new links from {page_url}: {str(e)}")
+
+    def process_discovered_urls(self, site_id=None, limit=50):
+        """Process pending discovered URLs
+        
+        Args:
+            site_id: Optional site ID
+            limit: Processing limit
+        
+        Returns:
+            Number of processed URLs
+        """
+        try:
+            pending_urls = self.url_discovery_manager.get_pending_urls(site_id=site_id, limit=limit)
+            
+            if not pending_urls:
+                logger.debug("No pending URLs to process")
+                return 0
+            
+            processed_count = 0
+            for url_record in pending_urls:
+                url_id = url_record.id
+                url = url_record.url
+                target_site_id = url_record.site_id
+                
+                try:
+                    # Mark as processing
+                    self.url_discovery_manager.mark_url_crawling(url_id)
+                    
+                    # Get site information
+                    site = self.get_site_by_id(target_site_id)
+                    if not site:
+                        logger.warning(f"Site not found for discovered URL: {url} (site_id: {target_site_id})")
+                        self.url_discovery_manager.mark_url_failed(url_id, "Site not found")
+                        continue
+                    
+                    # Crawl single URL
+                    success = self.crawl_single_url(url, site)
+                    
+                    if success:
+                        self.url_discovery_manager.mark_url_completed(url_id)
+                        processed_count += 1
+                        logger.info(f"Successfully crawled discovered URL: {url}")
+                    else:
+                        self.url_discovery_manager.mark_url_failed(url_id, "Crawl failed")
+                        
+                except Exception as e:
+                    logger.error(f"Error processing discovered URL {url}: {str(e)}")
+                    self.url_discovery_manager.mark_url_failed(url_id, str(e))
+            
+            logger.info(f"Processed {processed_count} discovered URLs")
+            return processed_count
+            
+        except Exception as e:
+            logger.error(f"Error in process_discovered_urls: {str(e)}")
+            return 0
+
+    def crawl_single_url(self, url, site):
+        """Crawl a single URL
+        
+        Args:
+            url: URL to crawl
+            site: Site information
+            
+        Returns:
+            bool: Whether successful
+        """
+        try:
+            # Check if URL has already been crawled
+            project_uuid = str(self.get_project_by_id(site.project_id).uuid)
+            site_dir = get_site_dir(site.url, project_uuid)
+            
+            # Generate filename
+            from web_crawl_index.crawler.utils import url_to_filename
+            filename = url_to_filename(url) + '.json'
+            filepath = os.path.join(site_dir, filename)
+            
+            # Skip if file already exists
+            if os.path.exists(filepath):
+                logger.debug(f"URL already crawled, skipping: {url}")
+                return True
+            
+            # Make HTTP request to get content
+            response = requests.get(url, timeout=15, allow_redirects=True)
+            if response.status_code != 200:
+                logger.warning(f"Failed to fetch URL {url}: HTTP {response.status_code}")
+                return False
+            
+            # Parse content
+            soup = BeautifulSoup(response.text, 'html.parser')
+            title = soup.title.text if soup.title else ''
+            
+            # Extract text content
+            for script in soup(["script", "style"]):
+                script.extract()
+            content = soup.get_text(" ", strip=True)
+            
+            # Save to file
+            os.makedirs(site_dir, exist_ok=True)
+            
+            page_data = {
+                'url': url,
+                'title': title,
+                'content': content,
+                'etag': response.headers.get('ETag'),
+                'last_modified': response.headers.get('Last-Modified'),
+                'timestamp': datetime.datetime.now().isoformat(),
+                'updated_at': datetime.datetime.now().isoformat(),
+                'source': 'dynamic'
+            }
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(page_data, f, ensure_ascii=False, indent=2)
+            
+            # Discover more links from newly crawled page
+            self.discover_new_links_from_updated_page(
+                html_content=response.text,
+                page_url=url,
+                site_id=site.id,
+                site_url=site.url
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error crawling single URL {url}: {str(e)}")
+            return False
 
     def check_webpage_is_changed(self, url, etag, last_modified):
         response = requests.head(url, timeout=10, allow_redirects=True)
@@ -286,28 +474,6 @@ class WebCrawlManager:
             is_changed = True
 
         return is_changed, new_etag, new_last_modified
-
-    def get_webpage_content(self, url, etag, last_modified):
-        headers = {}
-        if etag:
-            headers['If-None-Match'] = etag
-        if last_modified:
-            headers['If-Modified-Since'] = last_modified
-
-        response = requests.get(url, headers=headers, timeout=15)
-
-        need_update_content = False
-        if response.status_code == 200:
-            need_update_content = True
-            soup = BeautifulSoup(response.text, 'html.parser')
-            title = soup.title.text if soup.title else ''
-            # Extract content
-            for script in soup(["script", "style"]):
-                script.extract()
-            content = soup.get_text(" ", strip=True)
-
-            return need_update_content, title, content
-        return need_update_content, '', ''
 
     def add_crawl_site_task(self, site_id):
         msg_content = {

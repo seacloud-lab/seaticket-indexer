@@ -35,6 +35,7 @@ class WebCrawlTaskWorker(object):
         self.should_stop = threading.Event()
         self.worker_num = 3
         self.update_indexes_interval = 7 * 24 * 60 * 60
+        self.discovered_urls_interval = 60 * 60 * 24
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         reactor.suggestThreadPoolSize(10)
@@ -59,7 +60,21 @@ class WebCrawlTaskWorker(object):
             t.start()
 
         threading.Thread(target=self.cron_update_web_indexes_timer, name='timer', daemon=True).start()
+
+        threading.Thread(target=self.cron_process_discovered_urls_timer, name='discovered_urls_timer', daemon=True).start()
         threading.Thread(target=reactor.run, name='reactor_thread', daemon=True, kwargs={'installSignalHandlers': False}).start()
+
+    def cron_process_discovered_urls_timer(self):
+        logger.info('Start discovered URLs processing timer, interval = %s sec', self.discovered_urls_interval)
+        while not self.should_stop.is_set():
+            self.should_stop.wait(self.discovered_urls_interval)
+            if not self.should_stop.is_set():
+                try:
+                    processed_count = self.web_crawl_manager.process_discovered_urls(limit=50)
+                    if processed_count > 0:
+                        logger.info(f'Processed {processed_count} discovered URLs')
+                except Exception as e:
+                    logger.exception('Error processing discovered URLs: %s', e)
 
     def web_crawl_handler(self):
         logger.info('%s starting web crawl work' % self.tname)
