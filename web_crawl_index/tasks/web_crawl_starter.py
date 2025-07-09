@@ -22,8 +22,8 @@ class WebCrawlStarter(object):
             logging.warning('Can not start web crawl starter: it is not enabled!')
             return
 
-        logging.info('web crawl starter is started')
         WebCrawl(self._logfile, self._loglevel).start()
+        logging.info('web crawl starter is started')
 
     def is_enabled(self):
         return self._enabled

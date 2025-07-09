@@ -78,6 +78,6 @@ def search():
     except:
         count = 20
 
-    results = application.site_index_manager.search(project_uuid, query, start=0, size=count)
+    results = application.index_manager.search(project_uuid, query, start=0, size=count)
 
     return {'results': results}, 200
