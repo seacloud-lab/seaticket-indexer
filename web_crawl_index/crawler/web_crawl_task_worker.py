@@ -58,7 +58,7 @@ class WebCrawlTaskWorker(object):
             t = threading.Thread(target=self.web_crawl_handler, name='web_crawl_handler_thread_' + str(i), daemon=True)
             t.start()
 
-        threading.Thread(target=self.cron_update_web_indexes_timer, name='timer', daemon=True).start()
+        threading.Thread(target=self.cron_crawl_web_sites, name='cron_crawl_web_sites_thread', daemon=True).start()
         threading.Thread(target=reactor.run, name='reactor_thread', daemon=True, kwargs={'installSignalHandlers': False}).start()
 
     def web_crawl_handler(self):
@@ -82,37 +82,29 @@ class WebCrawlTaskWorker(object):
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
-            logger.error('%s Crawl site Task Error' % self.tname)
+            logger.error('%s Crawl site Error' % self.tname)
             logger.error(e, exc_info=True)
             # prevent case that redis break at program running.
             time.sleep(0.3)
 
     def crawl_site(self, site_id):
-        site = self.web_crawl_manager.get_site_by_id(site_id)
-        if not site:
-            logger.warning('site: %s not found', site_id)
-            return
-        if site.status == CrawlStatus.CRAWLING:
-            logger.warning('site: %s is crawling', site_id)
-            return
-        self.web_crawl_manager.update_site_status(site_id, CrawlStatus.CRAWLING)
         try:
-            self.web_crawl_manager.crawl_site(site)
+            self.web_crawl_manager.crawl_site(site_id)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', site_id, e)
             self.web_crawl_manager.update_site_status(site_id, CrawlStatus.FAILED)
 
-    def cron_update_web_indexes_timer(self):
-        logger.info('Start to update web crawl timer, interval = %s sec', self.update_indexes_interval)
+    def cron_crawl_web_sites(self):
+        logger.info('Start to crawl web sites timer, interval = %s sec', self.update_indexes_interval)
         while not self.should_stop.is_set():
             self.should_stop.wait(self.update_indexes_interval)
             if not self.should_stop.is_set():
                 try:
                     self.web_crawl_manager.update_sites_indexes()
                 except Exception as e:
-                    logger.exception('cron update site index error: %s', e)
+                    logger.exception('cron crawl sites error: %s', e)
 
-                logger.info('finish updating crawl web...')
+                logger.info('finish cron crawl sites...')
 
     def signal_term_handler(self, signal, frame):
         os._exit(0)

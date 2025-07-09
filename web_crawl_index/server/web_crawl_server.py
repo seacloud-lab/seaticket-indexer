@@ -6,10 +6,10 @@ from web_crawl_index.server.apis import application
 
 
 class WebCrawlServer(Thread):
-    def __init__(self, web_crawl_manager, site_index_manager):
+    def __init__(self, web_crawl_manager, index_manager):
         Thread.__init__(self)
         application.web_crawl_manager = web_crawl_manager
-        application.site_index_manager = site_index_manager
+        application.index_manager = index_manager
         self.server = create_server(application, host=HOST, port=PORT)
 
     def run(self):

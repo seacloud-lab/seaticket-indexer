@@ -3,7 +3,6 @@ import logging
 import requests
 import json
 
-# from datetime import datetime
 import datetime
 from urllib.parse import urljoin, urlparse
 import xml.etree.ElementTree as ET
@@ -42,7 +41,10 @@ class WebCrawlManager:
 
     def get_site_by_id(self, site_id):
         with self.db_session() as session:
-            sql = "SELECT * FROM project_connection WHERE id=:site_id AND type='site'"
+            sql = """SELECT pc.id as site_id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid
+             FROM project_connection pc 
+            INNER JOIN projects p 
+            ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='site' AND pc.id=:site_id"""
             site = session.execute(text(sql), {'site_id': site_id}).fetchone()
             return site
 
@@ -53,7 +55,7 @@ class WebCrawlManager:
             session.commit()
 
     def update_site_status_and_crawl_time(self, site_id, status):
-        updated_at = datetime.datetime.now(datetime.UTC)
+        updated_at = datetime.datetime.now()
         with self.db_session() as session:
             cmd = """UPDATE project_connection SET status = :status, updated_at=:updated_at WHERE id = :site_id"""
             session.execute(text(cmd), {'site_id': site_id, 'status': status, 'updated_at': updated_at})
@@ -73,23 +75,30 @@ class WebCrawlManager:
 
     def get_project_site_by_page(self, start, limit):
         with self.db_session() as session:
-            sql = """SELECT pc.id as site_id, pc.config, pc.project_id, pc.status, p.uuid, p.name as project_name
+            sql = """SELECT pc.id as site_id, pc.config, pc.project_id, pc.status, p.uuid
              FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='site' LIMIT :start, :limit"""
             sites = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return sites
 
-    def crawl_site(self, site):
+    def crawl_site(self, site_id):
         """Start crawler process"""
-        site_id = site.id
+        site = self.get_site_by_id(site_id)
+        if not site:
+            logger.warning('site: %s not found', site_id)
+            return
+        if site.status == CrawlStatus.CRAWLING:
+            logger.warning('site: %s is crawling', site_id)
+            return
+        self.update_site_status(site_id, CrawlStatus.CRAWLING)
+
         logger.info(f"Start crawling site {site_id}")
 
+        site_id = site.site_id
         site_config = json.loads(site.config)
         site_url = site_config.get('url')
-        project_id = site.project_id
-        project = self.get_project_by_id(project_id)
-        project_uuid = str(project.uuid)
+        project_uuid = str(site.project_uuid)
 
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
@@ -201,7 +210,10 @@ class WebCrawlManager:
             logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
             self.update_site_status(site_id, CrawlStatus.FAILED)
             return
+
         self.update_site_status_and_crawl_time(site_id, CrawlStatus.COMPLETED)
+        self.add_site_index_task(site_id)
+        logger.info('finish crawl site: %s', site_id)
 
     def update_sites_indexes(self):
         """Check if all sites need to be updated"""
@@ -319,3 +331,9 @@ class WebCrawlManager:
             'site_id': site_id,
         }
         self.mq.lpush('web_crawl_task', json.dumps(msg_content))
+
+    def add_site_index_task(self, site_id):
+        msg_content = {
+            'connection_id': site_id,
+        }
+        self.mq.lpush('index_task', json.dumps(msg_content))

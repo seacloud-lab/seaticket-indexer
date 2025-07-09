@@ -4,6 +4,8 @@ import logging
 import atexit
 import subprocess
 import hashlib
+from datetime import datetime
+
 
 logger = logging.getLogger(__name__)
 pyexec = None
@@ -84,3 +86,12 @@ def run(argv, cwd=None, env=None, suppress_stdout=False, suppress_stderr=False, 
 
 def md5(text):
     return hashlib.md5(text.encode()).hexdigest()
+
+
+def time_difference_to_midnight():
+    now = datetime.now()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    time_diff = now - midnight
+    seconds_diff = time_diff.total_seconds()
+    seconds_diff = (24 * 60 * 60) - seconds_diff
+    return seconds_diff
