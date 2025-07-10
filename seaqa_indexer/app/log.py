@@ -26,7 +26,7 @@ class LogConfigurator(object):
     def _basic_config(self):
         '''Log to stdout. Mainly for development.'''
         kw = {
-            'format': '[web_crawl_index] [%(asctime)s] [%(levelname)s] %(name)s:%(lineno)s %(message)s',
+            'format': '[seaqa_indexer] [%(asctime)s] [%(levelname)s] %(name)s:%(lineno)s %(message)s',
             'datefmt': '%Y-%m-%d %H:%M:%S',
             'level': self._level,
             'stream': sys.stdout
@@ -37,7 +37,7 @@ class LogConfigurator(object):
     def add_syslog_handler(self):
         handler = logging.handlers.SysLogHandler(address='/dev/log')
         handler.setLevel(self._level)
-        formatter = logging.Formatter('web_crawl_index[%(process)d]: %(message)s')
+        formatter = logging.Formatter('seaqa_indexer[%(process)d]: %(message)s')
         handler.setFormatter(formatter)
         logging.root.addHandler(handler)
 

@@ -1,8 +1,8 @@
 import json
 import logging
 
-from web_crawl_index.utils import md5
-from web_crawl_index.config import LANG
+from seaqa_indexer.utils import md5
+from seaqa_indexer.config import LANG
 
 logger = logging.getLogger(__name__)
 

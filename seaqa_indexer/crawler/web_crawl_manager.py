@@ -13,15 +13,15 @@ from scrapy.crawler import CrawlerRunner
 from scrapy.utils.project import get_project_settings
 from twisted.internet.threads import deferToThread
 
-from web_crawl_index.crawler.spiders.site_crawler import SiteCrawlerSpider
-from web_crawl_index.crawler.spiders.sitemap_crawler import create_sitemap_spider
+from seaqa_indexer.crawler.spiders.site_crawler import SiteCrawlerSpider
+from seaqa_indexer.crawler.spiders.sitemap_crawler import create_sitemap_spider
 
-from web_crawl_index.db import init_db_session_class
-from web_crawl_index.config import CRAWL_OUTPUT_DIR
-from web_crawl_index.utils.constants import CrawlStatus
-from web_crawl_index.mq import get_mq
-from web_crawl_index.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-from web_crawl_index.crawler.utils import get_site_dir
+from seaqa_indexer.db import init_db_session_class
+from seaqa_indexer.config import CRAWL_OUTPUT_DIR
+from seaqa_indexer.utils.constants import CrawlStatus
+from seaqa_indexer.mq import get_mq
+from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+from seaqa_indexer.crawler.utils import get_site_dir
 
 
 logger = logging.getLogger(__name__)

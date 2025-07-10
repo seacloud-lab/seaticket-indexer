@@ -1,7 +1,7 @@
 BOT_NAME = "batch_crawl_web"
 
-SPIDER_MODULES = ["web_crawl_index.crawler.spiders"]
-NEWSPIDER_MODULE = "web_crawl_index.crawler.spiders"
+SPIDER_MODULES = ["seaqa_indexer.crawler.spiders"]
+NEWSPIDER_MODULE = "seaqa_indexer.crawler.spiders"
 
 # Crawl responsibly by identifying yourself (and your site) on the user-agent
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -26,7 +26,7 @@ DEFAULT_REQUEST_HEADERS = {
 }
 
 ITEM_PIPELINES = {
-   "web_crawl_index.crawler.pipelines.BatchCrawlPipeline": 300,
+   "seaqa_indexer.crawler.pipelines.BatchCrawlPipeline": 300,
 }
 
 AUTOTHROTTLE_ENABLED = False
@@ -49,5 +49,5 @@ FEED_EXPORT_ENCODING = "utf-8"
 
 # Add download middleware
 DOWNLOADER_MIDDLEWARES = {
-   "web_crawl_index.crawler.middlewares.HttpHeadersMiddleware": 543,
+   "seaqa_indexer.crawler.middlewares.HttpHeadersMiddleware": 543,
 }

@@ -1,8 +1,8 @@
 import config
 
-from web_crawl_index.app.log import LogConfigurator
-from web_crawl_index.app.app import WebCrawlIndexApp
-from web_crawl_index.app.signal_handler import set_signal
+from seaqa_indexer.app.log import LogConfigurator
+from seaqa_indexer.app.app import WebCrawlIndexApp
+from seaqa_indexer.app.signal_handler import set_signal
 
 
 def main():

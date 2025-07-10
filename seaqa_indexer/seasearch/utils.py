@@ -1,4 +1,4 @@
-from web_crawl_index.utils.constants import SITE_INDEX_PREFIX
+from seaqa_indexer.utils.constants import SITE_INDEX_PREFIX
 
 
 def gen_site_index_name(project_uuid):
