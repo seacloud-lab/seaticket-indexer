@@ -7,13 +7,13 @@ import signal
 from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
 
 
-from web_crawl_index import config
-from web_crawl_index.app.log import LogConfigurator
-from web_crawl_index.seasearch.index_manager import IndexManager
+from seaqa_indexer import config
+from seaqa_indexer.app.log import LogConfigurator
+from seaqa_indexer.seasearch.index_manager import IndexManager
 
-from web_crawl_index.mq import get_mq
-from web_crawl_index.db import init_db_session_class
-from web_crawl_index.utils import time_difference_to_midnight
+from seaqa_indexer.mq import get_mq
+from seaqa_indexer.db import init_db_session_class
+from seaqa_indexer.utils import time_difference_to_midnight
 
 
 logger = logging.getLogger(__name__)

@@ -3,7 +3,7 @@ import os
 import re
 import hashlib
 import urllib.parse
-from web_crawl_index.config import CRAWL_OUTPUT_DIR
+from seaqa_indexer.config import CRAWL_OUTPUT_DIR
 
 
 def url_to_filename(url):

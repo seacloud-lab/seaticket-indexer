@@ -2,7 +2,7 @@ import json
 import os
 
 from datetime import datetime
-from web_crawl_index.crawler.utils import url_to_filename, get_site_dir
+from seaqa_indexer.crawler.utils import url_to_filename, get_site_dir
 
 
 class BatchCrawlPipeline:
