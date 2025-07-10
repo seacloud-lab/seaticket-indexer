@@ -28,7 +28,31 @@ logger = logging.getLogger(__name__)
 class WebCrawlTaskWorker(object):
     """ The handler for redis message queue
     """
-
+    
+    def cron_cleanup_removed_urls_timer(self):
+        """Periodically clean up removed URL records"""
+        try:
+            logger.info("Starting cleanup of old removed URLs...")
+            
+            # Get all completed sites
+            with self.web_crawl_manager.db_session() as session:
+                sql = "SELECT id FROM sites WHERE status = 'completed'"
+                sites = session.execute(text(sql)).fetchall()
+            
+            total_cleaned = 0
+            for site in sites:
+                try:
+                    cleaned = self.web_crawl_manager.cleanup_removed_urls_for_site(site.id, days_threshold=30)
+                    total_cleaned += cleaned
+                except Exception as e:
+                    logger.error(f"Error cleaning site {site.id}: {str(e)}")
+                    continue
+            
+            logger.info(f"Cleanup completed. Total removed URLs cleaned: {total_cleaned}")
+            
+        except Exception as e:
+            logger.error(f"Error in cron_cleanup_removed_urls_timer: {str(e)}")
+    
     def __init__(self):
         self.db_session = init_db_session_class()
         self.web_crawl_manager = WebCrawlManager()
@@ -36,12 +60,19 @@ class WebCrawlTaskWorker(object):
         self.worker_num = 3
         self.update_indexes_interval = 7 * 24 * 60 * 60
         self.site_urls_interval = 60 * 60 * 24
-
+    
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         reactor.suggestThreadPoolSize(10)
-
+    
         self.set_signal()
         self.worker_list = []
+    
+        self.scheduler.add_job(
+            self.cron_cleanup_removed_urls_timer,
+            'interval',
+            weeks=1,
+            id='cleanup_removed_urls_timer'
+        )
 
     @property
     def tname(self):

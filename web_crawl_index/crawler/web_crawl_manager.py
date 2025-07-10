@@ -301,9 +301,9 @@ class WebCrawlManager:
 
             return need_update_content, title, content, html_content
         return need_update_content, '', '', None
-
+    
     def discover_new_links_from_updated_page(self, html_content, page_url, site_id, site_url):
-        """Discover new links from updated page
+        """Discover new links from updated page and sync removed links
         
         Args:
             html_content: HTML content of the page
@@ -316,19 +316,34 @@ class WebCrawlManager:
             parsed_site_url = urlparse(site_url)
             allowed_domains = [parsed_site_url.netloc]
             
-            # Use URLDiscoveryManager to discover new links
-            new_links_count = self.url_discovery_manager.discover_new_links_from_content(
+            new_count, removed_count = self.url_discovery_manager.discover_and_sync_links_from_content(
                 html_content=html_content,
                 base_url=page_url,
                 site_id=site_id,
                 allowed_domains=allowed_domains
             )
             
-            if new_links_count > 0:
-                logger.info(f"Discovered {new_links_count} new links from updated page: {page_url}")
+            if new_count > 0 or removed_count > 0:
+                logger.info(f"Page {page_url}: discovered {new_count} new links, marked {removed_count} as removed")
                 
         except Exception as e:
-            logger.error(f"Error discovering new links from {page_url}: {str(e)}")
+            logger.error(f"Error discovering/syncing links from {page_url}: {str(e)}")
+    
+    def cleanup_removed_urls_for_site(self, site_id, days_threshold=30):
+        """Clean up expired removed URL records for a site
+        
+        Args:
+            site_id: Site ID
+            days_threshold: Deletion threshold in days
+        """
+        try:
+            cleaned_count = self.url_discovery_manager.cleanup_old_removed_urls(site_id, days_threshold)
+            if cleaned_count > 0:
+                logger.info(f"Cleaned up {cleaned_count} old removed URLs for site {site_id}")
+            return cleaned_count
+        except Exception as e:
+            logger.error(f"Error cleaning up removed URLs for site {site_id}: {str(e)}")
+            return 0
 
     def process_site_urls(self, site_id=None, limit=50):
         """Process pending discovered URLs

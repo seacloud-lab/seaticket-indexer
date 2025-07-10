@@ -1,22 +1,23 @@
 import logging
 import datetime
-from urllib.parse import urljoin, urlparse
+import hashlib
+from urllib.parse import urlparse
 from sqlalchemy.sql import text
 from scrapy.linkextractors import LinkExtractor
 from scrapy.http import HtmlResponse
-
 from web_crawl_index.db import init_db_session_class
-from web_crawl_index.utils import md5
 
 logger = logging.getLogger(__name__)
 
+def md5(text):
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
 
 class URLDiscoveryManager:
     """Manages dynamic URL discovery and interactions with site_urls table"""
     
     def __init__(self):
         self.db_session = init_db_session_class()
-        # Use the same LinkExtractor as SiteCrawlerSpider
+
         self.link_extractor = LinkExtractor()
     
     def add_discovered_url(self, url, site_id, source='dynamic'):
@@ -31,12 +32,27 @@ class URLDiscoveryManager:
         
         with self.db_session() as session:
             # Check URL if already exists using MD5
-            check_sql = "SELECT id FROM site_urls WHERE url_md5 = :url_md5 AND site_id = :site_id"
+            check_sql = "SELECT id, status FROM site_urls WHERE url_md5 = :url_md5 AND site_id = :site_id"
             existing = session.execute(text(check_sql), {'url_md5': url_md5, 'site_id': site_id}).fetchone()
             
             if existing:
-                logger.debug(f"URL already exists in site_urls: {url} (MD5: {url_md5})")
-                return existing.id
+                if existing.status == 'removed':
+                    reactivate_sql = """
+                        UPDATE site_urls 
+                        SET status = 'pending', source = :source, updated_at = :updated_at
+                        WHERE id = :url_id
+                    """
+                    session.execute(text(reactivate_sql), {
+                        'url_id': existing.id,
+                        'source': source,
+                        'updated_at': datetime.datetime.now(datetime.UTC)
+                    })
+                    session.commit()
+                    logger.info(f"Reactivated removed URL: {url} (MD5: {url_md5})")
+                    return existing.id
+                else:
+                    logger.debug(f"URL already exists in site_urls: {url} (MD5: {url_md5})")
+                    return existing.id
             
             # Insert new URL
             insert_sql = """
@@ -84,19 +100,187 @@ class URLDiscoveryManager:
             
             return session.execute(text(sql), params).fetchall()
     
-    def get_url_by_md5(self, url_md5, site_id):
-        """Get URL by MD5 hash
+    def get_urls_by_domain_from_site(self, site_id, domain):
+        """Get all active URLs for a specific domain under a specific site
         
         Args:
-            url_md5: URL MD5 hash
             site_id: Site ID
+            domain: Domain name
             
         Returns:
-            URL record or None
+            List of active URLs
         """
         with self.db_session() as session:
-            sql = "SELECT id, url, url_md5, site_id, status FROM site_urls WHERE url_md5 = :url_md5 AND site_id = :site_id"
-            return session.execute(text(sql), {'url_md5': url_md5, 'site_id': site_id}).fetchone()
+            sql = """
+                SELECT id, url, url_md5, status FROM site_urls 
+                WHERE site_id = :site_id 
+                AND url LIKE :domain_pattern
+                AND status IN ('pending', 'crawling', 'completed')
+            """
+            domain_pattern = f"%{domain}%"
+            return session.execute(text(sql), {
+                'site_id': site_id,
+                'domain_pattern': domain_pattern
+            }).fetchall()
+    
+    def mark_urls_as_removed(self, url_ids, reason="No longer found in source"):
+        """Batch mark URLs as removed status
+        
+        Args:
+            url_ids: List of URL IDs
+            reason: Removal reason
+        """
+        if not url_ids:
+            return 0
+            
+        with self.db_session() as session:
+            removal_info = f"REMOVED: {reason} at {datetime.datetime.now(datetime.UTC).isoformat()}"
+            
+            sql = """
+                UPDATE site_urls 
+                SET status = 'removed', 
+                    error_message = :removal_info,
+                    updated_at = :updated_at
+                WHERE id IN :url_ids
+            """
+            
+            # Build IN clause
+            placeholders = ','.join([':id' + str(i) for i in range(len(url_ids))])
+            sql = sql.replace(':url_ids', f"({placeholders})")
+            
+            params = {
+                'removal_info': removal_info,
+                'updated_at': datetime.datetime.now(datetime.UTC)
+            }
+            
+            for i, url_id in enumerate(url_ids):
+                params[f'id{i}'] = url_id
+            
+            result = session.execute(text(sql), params)
+            session.commit()
+            
+            logger.info(f"Marked {result.rowcount} URLs as removed: {reason}")
+            return result.rowcount
+    
+    def cleanup_old_removed_urls(self, site_id=None, days_threshold=30):
+        """Clean up URL records that have been marked as removed for a long time
+        
+        Args:
+            site_id: Optional site ID
+            days_threshold: Deletion threshold in days
+        """
+        with self.db_session() as session:
+            base_sql = """
+                DELETE FROM site_urls 
+                WHERE status = 'removed' 
+                AND updated_at < :threshold_date
+            """
+            
+            params = {
+                'threshold_date': datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=days_threshold)
+            }
+            
+            if site_id:
+                base_sql += " AND site_id = :site_id"
+                params['site_id'] = site_id
+            
+            result = session.execute(text(base_sql), params)
+            session.commit()
+            
+            cleaned_count = result.rowcount
+            if cleaned_count > 0:
+                site_info = f" for site {site_id}" if site_id else ""
+                logger.info(f"Cleaned up {cleaned_count} old removed URLs{site_info}")
+            
+            return cleaned_count
+    
+    def discover_and_sync_links_from_content(self, html_content, base_url, site_id, allowed_domains=None):
+        """Discover new links from page content and sync removed links
+        
+        Args:
+            html_content: HTML content
+            base_url: Page URL
+            site_id: Site ID
+            allowed_domains: List of allowed domains
+        
+        Returns:
+            (new_links_count, removed_links_count): Number of new and removed links
+        """
+        try:
+            # Extract all links from current page
+            current_urls = set(self.extract_links_from_html(html_content, base_url, allowed_domains))
+            
+            # Get all active URLs for the same domain under this site
+            if allowed_domains:
+                domain = allowed_domains[0]
+                existing_urls = self.get_urls_by_domain_from_site(site_id, domain)
+            else:
+                # If no domain restriction specified, get all active URLs
+                with self.db_session() as session:
+                    sql = """
+                        SELECT id, url, url_md5, status FROM site_urls 
+                        WHERE site_id = :site_id 
+                        AND status IN ('pending', 'crawling', 'completed')
+                    """
+                    existing_urls = session.execute(text(sql), {'site_id': site_id}).fetchall()
+            
+            # Build mapping of existing URLs
+            existing_urls_map = {url_record.url: url_record for url_record in existing_urls}
+            existing_urls_set = set(existing_urls_map.keys())
+            
+            # Discover new URLs
+            new_urls = current_urls - existing_urls_set
+            new_links_count = 0
+            for url in new_urls:
+                try:
+                    url_id = self.add_discovered_url(url, site_id, source='dynamic')
+                    if url_id:
+                        new_links_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to add discovered URL {url}: {str(e)}")
+            
+            # Find potentially removed URLs
+            potentially_removed_urls = existing_urls_set - current_urls
+            
+            # Only mark dynamic source URLs as removed to be conservative
+            removed_url_ids = []
+            for url in potentially_removed_urls:
+                url_record = existing_urls_map[url]
+                if hasattr(url_record, 'source') and getattr(url_record, 'source', '') == 'dynamic':
+                    removed_url_ids.append(url_record.id)
+            
+            removed_links_count = 0
+            if removed_url_ids:
+                removed_links_count = self.mark_urls_as_removed(
+                    removed_url_ids, 
+                    f"No longer found in page {base_url}"
+                )
+            
+            if new_links_count > 0 or removed_links_count > 0:
+                logger.info(f"Page {base_url}: +{new_links_count} new, -{removed_links_count} removed")
+            
+            return new_links_count, removed_links_count
+            
+        except Exception as e:
+            logger.error(f"Error in discover_and_sync_links_from_content for {base_url}: {str(e)}")
+            return 0, 0
+    
+    def discover_new_links_from_content(self, html_content, base_url, site_id, allowed_domains=None):
+        """Discover new links from page content and add to database (backward compatibility)
+        
+        Args:
+            html_content: HTML content
+            base_url: Page URL
+            site_id: Site ID
+            allowed_domains: List of allowed domains
+        
+        Returns:
+            Number of newly discovered links
+        """
+        new_count, _ = self.discover_and_sync_links_from_content(
+            html_content, base_url, site_id, allowed_domains
+        )
+        return new_count
     
     def mark_url_crawling(self, url_id):
         """Mark URL as crawling status"""
@@ -179,31 +363,3 @@ class URLDiscoveryManager:
         except Exception as e:
             logger.error(f"Error extracting links from {base_url}: {str(e)}")
             return []
-    
-    def discover_new_links_from_content(self, html_content, base_url, site_id, allowed_domains=None):
-        """Discover new links from page content and add to database
-        
-        Args:
-            html_content: HTML content
-            base_url: Page URL
-            site_id: Site ID
-            allowed_domains: List of allowed domains
-        
-        Returns:
-            Number of newly discovered links
-        """
-        extracted_urls = self.extract_links_from_html(html_content, base_url, allowed_domains)
-        
-        new_links_count = 0
-        for url in extracted_urls:
-            try:
-                url_id = self.add_discovered_url(url, site_id, source='dynamic')
-                if url_id:
-                    new_links_count += 1
-            except Exception as e:
-                logger.warning(f"Failed to add discovered URL {url}: {str(e)}")
-        
-        if new_links_count > 0:
-            logger.info(f"Discovered {new_links_count} new links from {base_url}")
-        
-        return new_links_count
