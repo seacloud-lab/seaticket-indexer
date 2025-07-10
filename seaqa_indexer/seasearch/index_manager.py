@@ -4,14 +4,14 @@ import json
 import datetime
 from sqlalchemy.sql import text
 
-from web_crawl_index.db import init_db_session_class
-from web_crawl_index.utils.constants import CrawlStatus, ConnectionType
-from web_crawl_index.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-from web_crawl_index.seasearch.index_store.site_index import SiteIndex
-from web_crawl_index.utils.seasearch_api import SeaSearchAPI
-from web_crawl_index.seasearch.utils import gen_site_index_name, get_all_index_by_site
-from web_crawl_index.crawler.utils import get_site_dir
-from web_crawl_index.mq import get_mq
+from seaqa_indexer.db import init_db_session_class
+from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType
+from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
+from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
+from seaqa_indexer.seasearch.utils import gen_site_index_name, get_all_index_by_site
+from seaqa_indexer.crawler.utils import get_site_dir
+from seaqa_indexer.mq import get_mq
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class IndexManager:
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.index_time
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id"""
@@ -39,17 +39,17 @@ class IndexManager:
              FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.status=:status 
-            AND (pc.updated_at > pc.index_time OR pc.index_time IS NULL) LIMIT :start, :limit"""
+            AND (pc.updated_at > pc.indexed_at OR pc.indexed_at IS NULL) LIMIT :start, :limit"""
             sites = session.execute(text(sql),
                                     {'start': start, 'limit': limit, 'status': CrawlStatus.COMPLETED}
                                     ).fetchall()
             return sites
 
-    def update_finish_index_time(self, connection_id):
-        index_time = datetime.datetime.now()
+    def finish_index(self, connection_id):
+        indexed_at = datetime.datetime.now()
         with self.db_session() as session:
-            cmd = """UPDATE project_connection SET index_time=:index_time WHERE id = :connection_id"""
-            session.execute(text(cmd), {'connection_id': connection_id, 'index_time': index_time})
+            cmd = """UPDATE project_connection SET indexed_at=:indexed_at WHERE id = :connection_id"""
+            session.execute(text(cmd), {'connection_id': connection_id, 'indexed_at': indexed_at})
             session.commit()
 
     def update_site_index(self, project_connection):
@@ -127,16 +127,16 @@ class IndexManager:
             return
 
         update_at = connection.updated_at
-        index_time = connection.index_time
+        indexed_at = connection.indexed_at
+        connection_type = connection.type
         status = connection.status
 
-        if (not index_time or index_time > update_at) and status == CrawlStatus.COMPLETED:
-            connection_type = connection.type
+        if (not indexed_at or indexed_at > update_at) and status == CrawlStatus.COMPLETED:
             if connection_type == ConnectionType.SITE.value:
                 self.update_site_index(connection)
 
-            self.update_finish_index_time(connection_id)
-            logger.info('finish index project connection: %s', connection_id)
+            self.finish_index(connection_id)
+            logger.info('finish index project connection: %s, connection_type: %s', connection_id, connection_type)
 
     def add_connection_index_task(self, connection_id):
         msg_content = {

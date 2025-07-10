@@ -13,13 +13,13 @@ install_reactor('twisted.internet.asyncioreactor.AsyncioSelectorReactor')
 
 from twisted.internet import reactor
 
-from web_crawl_index import config
-from web_crawl_index.app.log import LogConfigurator
-from web_crawl_index.crawler.web_crawl_manager import WebCrawlManager
+from seaqa_indexer import config
+from seaqa_indexer.app.log import LogConfigurator
+from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 
-from web_crawl_index.mq import get_mq
-from web_crawl_index.db import init_db_session_class
-from web_crawl_index.utils.constants import CrawlStatus
+from seaqa_indexer.mq import get_mq
+from seaqa_indexer.db import init_db_session_class
+from seaqa_indexer.utils.constants import CrawlStatus
 
 
 logger = logging.getLogger(__name__)
@@ -133,7 +133,7 @@ def start():
 
 def main():
     LogConfigurator(config.LOG_LEVEL, config.LOG_FILE)
-    os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'web_crawl_index.crawler.settings')
+    os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'seaqa_indexer.crawler.settings')
     start()
 
 

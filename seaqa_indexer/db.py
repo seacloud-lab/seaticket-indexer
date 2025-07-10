@@ -7,7 +7,7 @@ from sqlalchemy.exc import DisconnectionError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import Pool
 
-from web_crawl_index.config import MYSQL_DB_NAME, MYSQL_HOST, MYSQL_PORT, MYSQL_PASSWORD, MYSQL_USER
+from seaqa_indexer.config import MYSQL_DB_NAME, MYSQL_HOST, MYSQL_PORT, MYSQL_PASSWORD, MYSQL_USER
 
 
 logger = logging.getLogger(__name__)

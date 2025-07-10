@@ -4,7 +4,7 @@ import json
 from functools import wraps
 from flask import request, jsonify, Flask
 
-from web_crawl_index import config
+from seaqa_indexer import config
 
 application = Flask(__name__)
 

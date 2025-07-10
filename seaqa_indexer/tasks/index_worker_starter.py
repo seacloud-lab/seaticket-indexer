@@ -2,8 +2,8 @@
 import logging
 from threading import Thread, Event
 
-from web_crawl_index.config import LOG_FILE, LOG_LEVEL
-from web_crawl_index.utils import get_python_executable, run
+from seaqa_indexer.config import LOG_FILE, LOG_LEVEL
+from seaqa_indexer.utils import get_python_executable, run
 
 
 __all__ = [
@@ -40,7 +40,7 @@ class IndexWorker(Thread):
         try:
             cmd = [
                 get_python_executable(),
-                '-m', 'web_crawl_index.seasearch.index_task_worker'
+                '-m', 'seaqa_indexer.seasearch.index_task_worker'
             ]
             run(cmd, )
         except Exception as e:

@@ -1,19 +1,19 @@
 import os
 import signal
 
-from web_crawl_index.utils import run
+from seaqa_indexer.utils import run
 
 
 def kill_web_crawler_task_worker():
     cmd = [
-        'pkill', '-f', 'web_crawl_index.crawler.web_crawl_task_worker'
+        'pkill', '-f', 'seaqa_indexer.crawler.web_crawl_task_worker'
     ]
     run(cmd)
 
 
 def kill_index_task_worker():
     cmd = [
-        'pkill', '-f', 'web_crawl_index.seasearch.index_task_worker'
+        'pkill', '-f', 'seaqa_indexer.seasearch.index_task_worker'
     ]
     run(cmd)
 

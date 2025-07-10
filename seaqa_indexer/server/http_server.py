@@ -1,11 +1,11 @@
 from threading import Thread
 from waitress import create_server
 
-from web_crawl_index.config import HOST, PORT
-from web_crawl_index.server.apis import application
+from seaqa_indexer.config import HOST, PORT
+from seaqa_indexer.server.apis import application
 
 
-class WebCrawlServer(Thread):
+class HttpServer(Thread):
     def __init__(self, web_crawl_manager, index_manager):
         Thread.__init__(self)
         application.web_crawl_manager = web_crawl_manager
