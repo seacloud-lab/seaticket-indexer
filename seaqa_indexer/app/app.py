@@ -1,8 +1,8 @@
 from seaqa_indexer.server.http_server import HttpServer
-from seaqa_indexer.tasks.web_crawl_worker_starter import WebCrawlWorkerStarter
+from seaqa_indexer.workers.web_crawl_worker_starter import WebCrawlWorkerStarter
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 from seaqa_indexer.seasearch.index_manager import IndexManager
-from seaqa_indexer.tasks.index_worker_starter import IndexWorkerStarter
+from seaqa_indexer.workers.index_worker_starter import IndexWorkerStarter
 
 
 class WebCrawlIndexApp(object):

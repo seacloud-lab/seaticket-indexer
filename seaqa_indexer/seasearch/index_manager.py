@@ -131,7 +131,11 @@ class IndexManager:
         connection_type = connection.type
         status = connection.status
 
-        if (not indexed_at or indexed_at > update_at) and status == CrawlStatus.COMPLETED:
+        if status != CrawlStatus.COMPLETED:
+            logger.warning('project connection: %s does not update completed.')
+            return
+
+        if not indexed_at or indexed_at < update_at:
             if connection_type == ConnectionType.SITE.value:
                 self.update_site_index(connection)
 
