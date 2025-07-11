@@ -34,26 +34,15 @@ class SiteCrawlerSpider(CrawlSpider):
         title = response.css('title::text').get()
 
         # Extract the main content of the page (
-        # Remove scripts, styles, and other unnecessary elements
-        body_content = response.xpath('//body').extract_first()
-        if body_content:
-            # Remove HTML tags
-            clean_text = re.sub(r'<script.*?</script>', '', body_content, flags=re.DOTALL)
-            clean_text = re.sub(r'<style.*?</style>', '', clean_text, flags=re.DOTALL)
-            clean_text = re.sub(r'<[^>]+>', ' ', clean_text)
-            # Remove extra spaces
-            clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-        else:
-            clean_text = ""
-
-        if not clean_text:
-            self.logger.warning(f"Page {response.url} no text content was found")
+        selector_list = response.xpath('//article//text()')
+        body_content = ''
+        for selector in selector_list:
+            selector_text = selector.get().strip()
+            body_content += selector_text
 
         # Return the extracted data
         yield {
             'url': response.url,
             'title': title,
-            'content': clean_text,
-            'timestamp': response.meta.get('timestamp', None),
-            'source': 'normal'
+            'content': body_content
         }
