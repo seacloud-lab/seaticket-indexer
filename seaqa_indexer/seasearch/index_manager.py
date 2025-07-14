@@ -46,7 +46,7 @@ class IndexManager:
             return sites
 
     def finish_index(self, connection_id):
-        indexed_at = datetime.datetime.now()
+        indexed_at = datetime.datetime.now(datetime.UTC)
         with self.db_session() as session:
             cmd = """UPDATE project_connection SET indexed_at=:indexed_at WHERE id = :connection_id"""
             session.execute(text(cmd), {'connection_id': connection_id, 'indexed_at': indexed_at})
