@@ -55,7 +55,7 @@ class WebCrawlManager:
             session.commit()
 
     def update_site_status_and_crawl_time(self, site_id, status):
-        updated_at = datetime.datetime.now()
+        updated_at = datetime.datetime.now(datetime.UTC)
         with self.db_session() as session:
             cmd = """UPDATE project_connection SET status = :status, updated_at=:updated_at WHERE id = :site_id"""
             session.execute(text(cmd), {'site_id': site_id, 'status': status, 'updated_at': updated_at})
