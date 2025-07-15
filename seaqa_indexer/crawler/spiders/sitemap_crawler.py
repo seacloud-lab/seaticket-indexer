@@ -1,6 +1,3 @@
-import re
-import os
-
 from scrapy.spiders import SitemapSpider
 
 

@@ -1,32 +1,31 @@
-import logging
-from scrapy import signals
+import requests
+from scrapy.http import HtmlResponse
 
+class UpdateCheckMiddleware:
+    def process_request(self, request, spider):
+        if not hasattr(spider, 'existing_cache_info') or not spider.existing_cache_info:
+            return None
 
-logger = logging.getLogger(__name__)
+        url = request.url
+        if url in spider.existing_cache_info:
+            cache_info = spider.existing_cache_info[url]
 
+            try:
+                head_response = requests.head(url, timeout=10, allow_redirects=True)
+                response_etag = head_response.headers.get('ETag')
+                response_last_modified = head_response.headers.get('Last-Modified')
 
-class HttpHeadersMiddleware:
-    """Middleware for saving HTTP header information"""
-    
-    @classmethod
-    def from_crawler(cls, crawler):
-        middleware = cls()
-        crawler.signals.connect(middleware.spider_opened, signal=signals.spider_opened)
-        return middleware
-        
-    def spider_opened(self, spider):
-        logger.info(f"HTTP Headers middleware enabled for {spider.name}")
-        
-    def process_response(self, request, response, spider):
-        """Process the response, save HTTP header information"""
-        # Save ETag
-        if 'ETag' in response.headers:
-            etag = response.headers['ETag'].decode('utf-8')
-            spider.crawler.stats.set_value('etag', etag)
-            
-        # Save Last-Modified
-        if 'Last-Modified' in response.headers:
-            last_modified = response.headers['Last-Modified'].decode('utf-8')
-            spider.crawler.stats.set_value('last-modified', last_modified)
-            
-        return response
+                content_changed = False
+                if response_etag and cache_info.get('etag') != response_etag:
+                    content_changed = True
+                elif response_last_modified and cache_info.get('last_modified') != response_last_modified:
+                    content_changed = True
+                
+                if not content_changed:
+                    spider.logger.debug(f"No changes detected for {url}, skipping download")
+                    return HtmlResponse(url=url, status=200, request=request, flags=['not_modified'])
+
+            except requests.RequestException as e:
+                spider.logger.warning(f"HEAD request failed for {url}: {e}, proceeding with full download")
+
+        return None

@@ -4,7 +4,7 @@ import requests
 import json
 
 import datetime
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
 from sqlalchemy.sql import text
 from bs4 import BeautifulSoup
@@ -161,11 +161,11 @@ class WebCrawlManager:
         site_url = crawler_params['site_url']
         sitemap_url = crawler_params['sitemap_url']
         project_uuid = crawler_params['project_uuid']
-
+        
         # Create crawler instance
         if sitemap_url:
             SitemapSpiderClass = create_sitemap_spider(
-                name=f"sitemap_spider_{site_id}",  # Use unique name
+                name=f"sitemap_spider_{site_id}", # Use unique name
                 sitemap_url=sitemap_url,
                 site_url=site_url,
                 project_uuid=project_uuid,
@@ -173,29 +173,27 @@ class WebCrawlManager:
             )
             d = self.runner.crawl(SitemapSpiderClass)
         else:
-            # Use regular spider
             d = self.runner.crawl(
                 SiteCrawlerSpider,
                 site_url=site_url,
                 project_uuid=project_uuid,
                 site_id=site_id,
             )
+        
         d.addCallback(lambda _: self.finish_crawl_site(site_id, site_url, CrawlStatus.COMPLETED))
         d.addErrback(lambda failure: self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure)))
-
         return d
 
     def prepare_crawler(self, site_id, site_url, site_config, project_uuid):
         """Prepare crawler parameters, execute in thread pool"""
         sitemap_url = site_config.get('sitemap_url')
+        
         if not sitemap_url:
             sitemap_url = self.get_sitemap_url(site_url)
             if sitemap_url:
                 site_config['sitemap_url'] = sitemap_url
-                # update sitemap url
                 self.update_site_config(site_id, json.dumps(site_config))
 
-        # Return crawler parameters
         return {
             'site_id': site_id,
             'site_url': site_url,
@@ -219,7 +217,6 @@ class WebCrawlManager:
 
     def update_sites_indexes(self):
         """Check if all sites need to be updated"""
-
         start, limit = 0, 1000
         while True:
             try:
@@ -231,31 +228,14 @@ class WebCrawlManager:
             if len(project_sites) == 0:
                 break
             for site in project_sites:
-                site_id = site.site_id
-                project_uuid = site.uuid
                 site_config = json.loads(site.config)
                 site_url = site_config.get('url')
-
+                site_id = site.site_id
                 try:
-                    # Check if the site needs to be updated
-                    self.update_exist_site_index(site_url, project_uuid)
+                    self.crawl_site(site_id)
                 except Exception as e:
-                    logger.warning('update site index failed, site_id: %s, error: %s', site_id, e)
+                    logger.warning('update crawl site failed, site_id: %s, error: %s', site_id, e)
                     self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, e)
-
-                self.finish_crawl_site(site_id, site_url, CrawlStatus.COMPLETED)
-
-    def update_exist_site_index(self, site_url, project_uuid):
-        """Check if a single site needs to be updated
-        """
-
-        site_dir = get_site_dir(site_url, project_uuid)
-        crawled_site_files = [f for f in os.listdir(site_dir) if f.endswith('.json')]
-
-        # Check each URL to see if it needs to be updated
-        for filename in crawled_site_files:
-            filepath = os.path.join(site_dir, filename)
-            self.update_index_file(filepath)
 
     def update_index_file(self, filepath):
         """Check if a single URL needs to be updated

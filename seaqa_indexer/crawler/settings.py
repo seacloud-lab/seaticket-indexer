@@ -25,6 +25,10 @@ DEFAULT_REQUEST_HEADERS = {
    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 }
 
+DOWNLOADER_MIDDLEWARES = {
+   'seaqa_indexer.crawler.middlewares.UpdateCheckMiddleware': 543,
+}
+
 ITEM_PIPELINES = {
    "seaqa_indexer.crawler.pipelines.BatchCrawlPipeline": 300,
 }
@@ -46,8 +50,3 @@ HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
 
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
-
-# Add download middleware
-DOWNLOADER_MIDDLEWARES = {
-   "seaqa_indexer.crawler.middlewares.HttpHeadersMiddleware": 543,
-}
