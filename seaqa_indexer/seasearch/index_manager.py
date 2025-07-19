@@ -8,10 +8,15 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
+from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_site_index_name, get_all_index_by_site
+from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_url_to_site_info_by_site_id, \
+    get_path_to_index_info_by_connection_id, get_content_by_download_link
 from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.mq import get_mq
+from seaqa_indexer.utils.seahub_api import SeahubAPI
+from seaqa_indexer.utils import md5, time_str_to_utc_time
+from seaqa_indexer.seasearch.extract import ExtractorFactory
 
 
 logger = logging.getLogger(__name__)
@@ -22,6 +27,7 @@ class IndexManager:
         self.db_session = init_db_session_class()
         self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
         self.site_index = SiteIndex(self.seasearch_api)
+        self.seafile_index = SeafileIndex(self.seasearch_api)
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def get_project_connection_by_id(self, connection_id):
@@ -45,14 +51,32 @@ class IndexManager:
                                     ).fetchall()
             return sites
 
-    def finish_index(self, connection_id):
+    def finish_index(self, connection_id, updated_at=None, config=None):
         indexed_at = datetime.datetime.now(datetime.UTC)
         with self.db_session() as session:
-            cmd = """UPDATE project_connection SET indexed_at=:indexed_at WHERE id = :connection_id"""
-            session.execute(text(cmd), {'connection_id': connection_id, 'indexed_at': indexed_at})
+            cmd = """UPDATE project_connection SET indexed_at=:indexed_at"""
+            params = {'connection_id': connection_id, 'indexed_at': indexed_at}
+            if updated_at:
+                cmd += ", updated_at=:updated_at"
+                params['updated_at'] = updated_at
+            if config:
+                cmd += ", config=:config"
+                params['config'] = json.dumps(config)
+            cmd += " WHERE id = :connection_id"
+            session.execute(text(cmd), params)
             session.commit()
 
     def update_site_index(self, project_connection):
+        update_at = project_connection.updated_at
+        indexed_at = project_connection.indexed_at
+        status = project_connection.status
+        if status != CrawlStatus.COMPLETED:
+            logger.warning('project connection: %s does not update completed.')
+            return
+
+        if indexed_at and indexed_at > update_at:
+            return
+
         site_id = project_connection.id
         site_config = json.loads(project_connection.config)
         site_url = site_config.get('url')
@@ -60,10 +84,10 @@ class IndexManager:
 
         site_dir = get_site_dir(site_url, project_uuid)
         crawled_site_files = [f for f in os.listdir(site_dir)]
-        site_index_name = gen_site_index_name(project_uuid)
+        site_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
         self.site_index.create_index_if_missing(site_index_name)
 
-        index_site_url_to_site_info = get_all_index_by_site(self.site_index, site_index_name, site_id)
+        index_site_url_to_site_info = get_all_url_to_site_info_by_site_id(self.site_index, site_index_name, site_id)
         index_site_urls_set = set(index_site_url_to_site_info.keys())
         crawled_site_urls_set = set()
 
@@ -97,6 +121,72 @@ class IndexManager:
         need_cleared_site_url_index_set = index_site_urls_set - crawled_site_urls_set
         self.site_index.delete_indexes_by_urls(site_index_name, need_cleared_site_url_index_set)
 
+        self.finish_index(site_id)
+
+    def update_seafile_index(self, project_connection):
+        connection_id = project_connection.id
+        config = json.loads(project_connection.config)
+        server_url = config.get('server_url')
+        api_token = config.get('api_token')
+        old_repo_id = config.get('repo_id')
+        old_last_modified = project_connection.updated_at
+        project_uuid = project_connection.project_uuid
+
+        seahub_api = SeahubAPI(server_url, api_token)
+        repo_info = seahub_api.get_repo_info()
+        new_repo_id = repo_info.get('repo_id')
+        new_last_modified = repo_info.get('last_modified')
+
+        new_last_modified = time_str_to_utc_time(new_last_modified)
+        if new_repo_id == old_repo_id and str(old_last_modified) == str(new_last_modified).split('+')[0]:
+            logger.info('connection: %s, repo: %s does not change, skip this update', connection_id, new_repo_id)
+            return
+
+        seafile_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
+        self.seafile_index.create_index_if_missing(seafile_index_name)
+
+        index_id_to_index_info = get_path_to_index_info_by_connection_id(self.seafile_index, seafile_index_name, connection_id)
+        old_index_ids_set = set(index_id_to_index_info.keys())
+        new_index_ids_set = set()
+
+        repo_items = seahub_api.list_items_in_dir('/', 'f')
+
+        for dirent in repo_items.get('dirent_list'):
+            parent_dir = dirent.get('parent_dir')
+            dirent_name = dirent.get('name')
+            mtime = dirent.get('mtime')
+
+            key = md5(str(connection_id) + new_repo_id + parent_dir + dirent_name)
+            new_index_ids_set.add(key)
+            index_info = index_id_to_index_info.get(key, {})
+
+            logger.debug('start to connection: %s repo_id: %s, parent_dir: %s, name: %s', connection_id, new_repo_id, parent_dir, dirent_name)
+
+            old_mtime = index_info.get('mtime')
+            timestamp_mtime = datetime.datetime.fromisoformat(mtime).timestamp()
+            if old_mtime:
+                old_mtime = old_mtime / 1000
+
+            if timestamp_mtime == old_mtime:
+                logger.debug('connection: %s, repo_id: %s, parent_dir: %s, name: %s is not change.',
+                            connection_id, new_repo_id, parent_dir, dirent_name)
+                continue
+
+            download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
+            content = get_content_by_download_link(download_link)
+            if content:
+                file_path = os.path.join(parent_dir, dirent_name)
+                extractor = ExtractorFactory.get_extractor(dirent_name)
+                content = extractor.extract(connection_id, new_repo_id, content, file_path) if extractor else None
+            self.seafile_index.update_document(seafile_index_name, connection_id, content, new_repo_id, parent_dir, dirent_name, timestamp_mtime)
+
+        # clear deleted site crawled url
+        need_cleared_seafile_index_set = old_index_ids_set - new_index_ids_set
+        self.seafile_index.delete_indexes_by_ids(seafile_index_name, need_cleared_seafile_index_set)
+
+        config['repo_id'] = new_repo_id
+        self.finish_index(connection_id, updated_at=new_last_modified, config=config)
+
     def update_indexes(self):
         start, limit = 0, 1000
         while True:
@@ -111,12 +201,10 @@ class IndexManager:
             for project_connection in project_connections:
                 connection_id = project_connection.id
                 project_uuid = project_connection.project_uuid
-                connection_type = project_connection.type
                 try:
-                    if connection_type == ConnectionType.SITE.value:
-                        self.add_connection_index_task(connection_id)
+                    self.add_connection_index_task(connection_id)
                 except Exception as e:
-                    logger.error('update index failed, project_uuid: %, connection_id: %s failed, error: %s', project_uuid, connection_id, e)
+                    logger.error('timer update index failed, project_uuid: %, connection_id: %s failed, error: %s', project_uuid, connection_id, e)
                     continue
 
     def update_index(self, connection_id):
@@ -126,21 +214,14 @@ class IndexManager:
             logger.warning('project connection: %s , not exist')
             return
 
-        update_at = connection.updated_at
-        indexed_at = connection.indexed_at
         connection_type = connection.type
-        status = connection.status
 
-        if status != CrawlStatus.COMPLETED:
-            logger.warning('project connection: %s does not update completed.')
-            return
+        if connection_type == ConnectionType.SITE.value:
+            self.update_site_index(connection)
+        elif connection_type == ConnectionType.SEAFILE.value:
+            self.update_seafile_index(connection)
 
-        if not indexed_at or indexed_at < update_at:
-            if connection_type == ConnectionType.SITE.value:
-                self.update_site_index(connection)
-
-            self.finish_index(connection_id)
-            logger.info('finish index project connection: %s, connection_type: %s', connection_id, connection_type)
+        logger.info('finish index project connection: %s, connection_type: %s', connection_id, connection_type)
 
     def add_connection_index_task(self, connection_id):
         msg_content = {
@@ -148,6 +229,10 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
-    def search(self, project_uuid, keyword, start=0, size=20):
-        site_index_name = gen_site_index_name(project_uuid)
-        return self.site_index.search(site_index_name, keyword, start, size)
+    def search(self, project_uuid, connection_type, keyword, start=0, size=20):
+        index_name = gen_index_name_by_type(project_uuid, connection_type)
+        if connection_type == ConnectionType.SEAFILE.value:
+            results = self.seafile_index.search(index_name, keyword, start, size)
+        elif connection_type == ConnectionType.SITE.value:
+            results = self.site_index.search(index_name, keyword, start, size)
+        return results

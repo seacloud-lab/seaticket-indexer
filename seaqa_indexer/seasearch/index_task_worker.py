@@ -111,7 +111,7 @@ class IndexTaskWorker(object):
         try:
             self.index_manager.update_index(connection_id)
         except Exception as e:
-            logger.error('update connection: %s index failed, error: %s', connection_id, e)
+            logger.exception('update connection: %s index failed, error: %s', connection_id, e)
 
     def add_to_undo_task(self, connection_id):
         """Push task back to the end of the queue.

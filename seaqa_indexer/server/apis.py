@@ -51,6 +51,15 @@ def add_init_crawl_site_task():
     return jsonify({'success': True}), 200
 
 
+@application.route('/add-index-seafile-task', methods=['GET'])
+@auth_required
+def add_index_seafile_task():
+    connection_id = request.args.get('connection_id')
+    application.index_manager.add_connection_index_task(connection_id)
+
+    return jsonify({'success': True}), 200
+
+
 @application.route('/search', methods=['POST'])
 @auth_required
 def search():
@@ -66,6 +75,7 @@ def search():
 
     query = data.get('query').strip()
     project_uuid = data.get('project_uuid')
+    connection_type = data.get('connection_type', 'site')
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
@@ -78,6 +88,6 @@ def search():
     except:
         count = 20
 
-    results = application.index_manager.search(project_uuid, query, start=0, size=count)
+    results = application.index_manager.search(project_uuid, connection_type, query, start=0, size=count)
 
     return {'results': results}, 200

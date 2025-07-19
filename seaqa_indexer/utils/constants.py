@@ -13,6 +13,25 @@ class ConnectionType(Enum):
     GITHUB_ISSUE = 'github_issue'
     DISCOURSE_FORUM = 'discourse_forum'
     SITE = 'site'
+    SEAFILE = 'seafile'
 
 
-SITE_INDEX_PREFIX = 'site_'
+CONNECTION_TYPE_TO_INDEX_PREFIX = {
+    connection_type.value: connection_type.value + '_' for connection_type in ConnectionType
+}
+
+text_suffixes = [
+    'txt',
+    'md',
+    'markdown'
+]
+
+office_suffixes = [
+    'docx',
+    'pptx',
+    'pdf',
+    'odt',
+    'ods',
+    'odp',
+    'sdoc',
+]
