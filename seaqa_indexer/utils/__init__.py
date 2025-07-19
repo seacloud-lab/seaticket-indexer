@@ -4,7 +4,7 @@ import logging
 import atexit
 import subprocess
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 logger = logging.getLogger(__name__)
@@ -95,3 +95,10 @@ def time_difference_to_midnight():
     seconds_diff = time_diff.total_seconds()
     seconds_diff = (24 * 60 * 60) - seconds_diff
     return seconds_diff
+
+
+def time_str_to_utc_time(time_str):
+    dt = datetime.fromisoformat(time_str)
+    utc_time = dt.astimezone(timezone.utc)
+    return utc_time
+
