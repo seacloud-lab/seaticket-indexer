@@ -35,3 +35,5 @@ office_suffixes = [
     'odp',
     'sdoc',
 ]
+
+REPO_FILE_SIZE_LIMIT = 10 * 1024 * 1024

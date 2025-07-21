@@ -5,10 +5,17 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+class FileNotFoundException(Exception):
+    pass
+
+
 def parse_response(response):
     if response.status_code == 400:
         logger.warning('seahub error: %s', response.text)
-    if response.status_code > 400:
+
+    if response.status_code == 404:
+        raise FileNotFoundException()
+    elif response.status_code > 400:
         raise ConnectionError(response.status_code, response.text)
     else:
         try:
@@ -58,6 +65,7 @@ class SeahubAPI(object):
         }
 
         response = requests.get(url, headers=self.headers, params=data)
+        raise FileNotFoundException()
 
         return parse_response(response)
 
