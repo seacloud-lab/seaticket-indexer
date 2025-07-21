@@ -5,7 +5,7 @@ import datetime
 from sqlalchemy.sql import text
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType
+from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_FILE_SIZE_LIMIT
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
@@ -14,7 +14,7 @@ from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_url_to
     get_path_to_index_info_by_connection_id, get_content_by_download_link
 from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.utils.seahub_api import SeahubAPI
+from seaqa_indexer.utils.seahub_api import SeahubAPI, FileNotFoundException
 from seaqa_indexer.utils import md5, time_str_to_utc_time
 from seaqa_indexer.seasearch.extract import ExtractorFactory
 
@@ -155,6 +155,7 @@ class IndexManager:
             parent_dir = dirent.get('parent_dir')
             dirent_name = dirent.get('name')
             mtime = dirent.get('mtime')
+            size = dirent.get('size')
 
             key = md5(str(connection_id) + new_repo_id + parent_dir + dirent_name)
             new_index_ids_set.add(key)
@@ -172,12 +173,22 @@ class IndexManager:
                             connection_id, new_repo_id, parent_dir, dirent_name)
                 continue
 
-            download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
-            content = get_content_by_download_link(download_link)
-            if content:
-                file_path = os.path.join(parent_dir, dirent_name)
-                extractor = ExtractorFactory.get_extractor(dirent_name)
-                content = extractor.extract(connection_id, new_repo_id, content, file_path) if extractor else None
+            content = None
+            if size > REPO_FILE_SIZE_LIMIT:
+                self.seafile_index.update_document(seafile_index_name, connection_id, content, new_repo_id, parent_dir, dirent_name, timestamp_mtime)
+                continue
+
+            file_path = os.path.join(parent_dir, dirent_name)
+            extractor = ExtractorFactory.get_extractor(dirent_name)
+            if extractor:
+                try:
+                    download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
+                except FileNotFoundException:
+                    logger.warning('connection: %s, repo_id: %s, parent_dir: %s, name: %s file not found',
+                                   connection_id, new_repo_id, parent_dir, dirent_name)
+                    continue
+                content = get_content_by_download_link(download_link)
+                content = extractor.extract(connection_id, new_repo_id, content, file_path)
             self.seafile_index.update_document(seafile_index_name, connection_id, content, new_repo_id, parent_dir, dirent_name, timestamp_mtime)
 
         # clear deleted site crawled url
