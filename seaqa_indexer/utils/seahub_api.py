@@ -21,7 +21,7 @@ class SeahubAPI(object):
 
     def __init__(self, server, token, timeout=180):
         self.token = token
-        self.server = server
+        self.server = server.rstrip('/')
         self.timeout = timeout
         self.headers = None
         self.gen_header()
