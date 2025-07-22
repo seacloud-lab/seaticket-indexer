@@ -65,7 +65,6 @@ class SeahubAPI(object):
         }
 
         response = requests.get(url, headers=self.headers, params=data)
-        raise FileNotFoundException()
 
         return parse_response(response)
 
