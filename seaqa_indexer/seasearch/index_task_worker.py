@@ -140,7 +140,7 @@ class IndexTaskWorker(object):
                 except Exception as e:
                     logger.exception('cron update index error: %s', e)
 
-                logger.info('finish updating indexes...')
+                logger.info('put all indexes task into queue...')
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)
