@@ -41,15 +41,12 @@ class IndexManager:
 
     def get_pending_index_project_connections(self, start, limit):
         with self.db_session() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false AND pc.status=:status 
-            AND (pc.updated_at > pc.indexed_at OR pc.indexed_at IS NULL) LIMIT :start, :limit"""
-            sites = session.execute(text(sql),
-                                    {'start': start, 'limit': limit, 'status': CrawlStatus.COMPLETED}
-                                    ).fetchall()
-            return sites
+            ON p.id=pc.project_id WHERE p.deleted=false LIMIT :start, :limit"""
+            connections = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
+            return connections
 
     def finish_index(self, connection_id, updated_at=None, config=None):
         indexed_at = datetime.datetime.now(datetime.UTC)
@@ -212,6 +209,15 @@ class IndexManager:
             for project_connection in project_connections:
                 connection_id = project_connection.id
                 project_uuid = project_connection.project_uuid
+                connection_type = project_connection.type
+                status = project_connection.status
+                updated_at = project_connection.updated_at
+                indexed_at = project_connection.indexed_at
+                if connection_type == ConnectionType.SITE.value:
+                    if status != CrawlStatus.COMPLETED:
+                        continue
+                    elif indexed_at and updated_at and indexed_at > updated_at:
+                        continue
                 try:
                     self.add_connection_index_task(connection_id)
                 except Exception as e:
