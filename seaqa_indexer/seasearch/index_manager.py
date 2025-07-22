@@ -15,7 +15,7 @@ from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_url_to
 from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seahub_api import SeahubAPI, FileNotFoundException
-from seaqa_indexer.utils import md5, time_str_to_utc_time
+from seaqa_indexer.utils import md5, time_str_to_utc_time, decrypt_config, encrypt_config
 from seaqa_indexer.seasearch.extract import ExtractorFactory
 
 
@@ -58,7 +58,7 @@ class IndexManager:
                 params['updated_at'] = updated_at
             if config:
                 cmd += ", config=:config"
-                params['config'] = json.dumps(config)
+                params['config'] = encrypt_config(config)
             cmd += " WHERE id = :connection_id"
             session.execute(text(cmd), params)
             session.commit()
@@ -122,7 +122,7 @@ class IndexManager:
 
     def update_seafile_index(self, project_connection):
         connection_id = project_connection.id
-        config = json.loads(project_connection.config)
+        config = decrypt_config(json.loads(project_connection.config))
         server_url = config.get('server_url')
         api_token = config.get('api_token')
         old_repo_id = config.get('repo_id')
