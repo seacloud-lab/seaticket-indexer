@@ -131,8 +131,7 @@ class SeafileIndex(object):
             query_map['bool']['filter'] = []
         return query_map
 
-    def search(self, project_uuid, keyword, start, size, search_filename_only=False):
-        bulk_search_params = []
+    def get_search_param(self, project_uuid, keyword, start, size, search_filename_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_filename_only)
         query_map['bool']['should'] = searches
@@ -154,8 +153,12 @@ class SeafileIndex(object):
             'index': index_name,
             'query': data
         }
-        bulk_search_params.append(repo_query_info)
+        return repo_query_info
 
+    def search(self, project_uuid, keyword, start, size, search_filename_only=False):
+        bulk_search_params = []
+        search_param = self.get_search_param(project_uuid, keyword, start, size, search_filename_only)
+        bulk_search_params.append(search_param)
         query_body = json.dumps({
             'index_queries': bulk_search_params
         })

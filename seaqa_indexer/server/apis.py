@@ -75,7 +75,7 @@ def search():
 
     query = data.get('query').strip()
     project_uuid = data.get('project_uuid')
-    connection_type = data.get('connection_type', 'site')
+    connection_type = data.get('connection_type')
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
