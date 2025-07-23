@@ -10,7 +10,7 @@ from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, RED
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_url_to_site_info_by_site_id, \
+from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_id_to_site_info_by_site_id, \
     get_path_to_index_info_by_connection_id, get_content_by_download_link
 from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.mq import get_mq
@@ -48,8 +48,7 @@ class IndexManager:
             connections = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return connections
 
-    def finish_index(self, connection_id, updated_at=None, config=None):
-        indexed_at = datetime.datetime.now(datetime.UTC)
+    def finish_index(self, connection_id, indexed_at, updated_at=None, config=None):
         with self.db_session() as session:
             cmd = """UPDATE project_connection SET indexed_at=:indexed_at"""
             params = {'connection_id': connection_id, 'indexed_at': indexed_at}
@@ -74,21 +73,20 @@ class IndexManager:
         if indexed_at and indexed_at > update_at:
             return
 
-        site_id = project_connection.id
+        connection_id = project_connection.id
         site_config = json.loads(project_connection.config)
         site_url = site_config.get('url')
         project_uuid = project_connection.project_uuid
+        new_indexed_at = datetime.datetime.now(datetime.UTC)
 
         site_dir = get_site_dir(site_url, project_uuid)
         crawled_site_files = [f for f in os.listdir(site_dir)]
         site_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
         self.site_index.create_index_if_missing(site_index_name)
 
-        index_site_url_to_site_info = get_all_url_to_site_info_by_site_id(self.site_index, site_index_name, site_id)
-        index_site_urls_set = set(index_site_url_to_site_info.keys())
-        crawled_site_urls_set = set()
-
-        indexed_site_info = index_site_url_to_site_info.get(site_url)
+        index_id_to_site_info = get_all_id_to_site_info_by_site_id(self.site_index, site_index_name, connection_id)
+        old_index_ids_set = set(index_id_to_site_info.keys())
+        new_index_ids_set = set()
 
         for filename in crawled_site_files:
             filepath = os.path.join(site_dir, filename)
@@ -102,23 +100,25 @@ class IndexManager:
             content = crawled_data.get('content')
             title = crawled_data.get('title')
 
-            crawled_site_urls_set.add(url)
+            key = md5(str(connection_id) + url)
+            new_index_ids_set.add(key)
 
             logger.debug('start to update url: %s', url)
+            indexed_site_info = index_id_to_site_info.get(key)
 
             if not indexed_site_info:
-                self.site_index.add_document(site_index_name, site_id, content, url, etag, title, last_modified)
+                self.site_index.add_document(site_index_name, connection_id, content, url, etag, title, last_modified)
             else:
                 if (etag and indexed_site_info.get('etag') == etag) or \
                         (last_modified and indexed_site_info.get('last_modified') == last_modified):
                     continue
-                self.site_index.update_document(site_index_name, site_id, content, url, etag, title, last_modified)
+                self.site_index.update_document(site_index_name, connection_id, content, url, etag, title, last_modified)
 
         # clear deleted site crawled url
-        need_cleared_site_url_index_set = index_site_urls_set - crawled_site_urls_set
-        self.site_index.delete_indexes_by_urls(site_index_name, need_cleared_site_url_index_set)
+        need_cleared_site_id_set = old_index_ids_set - new_index_ids_set
+        self.site_index.delete_indexes_by_ids(site_index_name, need_cleared_site_id_set)
 
-        self.finish_index(site_id)
+        self.finish_index(connection_id, new_indexed_at)
 
     def update_seafile_index(self, project_connection):
         connection_id = project_connection.id
@@ -141,6 +141,7 @@ class IndexManager:
 
         seafile_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
         self.seafile_index.create_index_if_missing(seafile_index_name)
+        new_indexed_at = datetime.datetime.now(datetime.UTC)
 
         index_id_to_index_info = get_path_to_index_info_by_connection_id(self.seafile_index, seafile_index_name, connection_id)
         old_index_ids_set = set(index_id_to_index_info.keys())
@@ -193,7 +194,7 @@ class IndexManager:
         self.seafile_index.delete_indexes_by_ids(seafile_index_name, need_cleared_seafile_index_set)
 
         config['repo_id'] = new_repo_id
-        self.finish_index(connection_id, updated_at=new_last_modified, config=config)
+        self.finish_index(connection_id, new_indexed_at, updated_at=new_last_modified, config=config)
 
     def update_indexes(self):
         start, limit = 0, 1000
@@ -247,9 +248,68 @@ class IndexManager:
         self.mq.lpush('index_task', json.dumps(msg_content))
 
     def search(self, project_uuid, connection_type, keyword, start=0, size=20):
-        index_name = gen_index_name_by_type(project_uuid, connection_type)
+        result_docs = {
+            'site_list': [],
+            'seafile_list': [],
+        }
         if connection_type == ConnectionType.SEAFILE.value:
+            index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
             results = self.seafile_index.search(index_name, keyword, start, size)
+            result_docs['seafile_list'] = results
+
         elif connection_type == ConnectionType.SITE.value:
+            index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
             results = self.site_index.search(index_name, keyword, start, size)
-        return results
+            result_docs['site_list'] = results
+        else:
+            bulk_search_params = []
+            # seafile_index
+            seafile_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
+            seafile_search_param = self.seafile_index.get_search_param(seafile_index_name, keyword, start, size)
+            bulk_search_params.append(seafile_search_param)
+
+            # site index
+            site_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
+            site_search_param = self.site_index.get_search_param(site_index_name, keyword, start, size)
+            bulk_search_params.append(site_search_param)
+            query_body = json.dumps({
+                'index_queries': bulk_search_params
+            })
+            results = self.seasearch_api.unified_search(query_body)
+
+            hits = results.get('hits', []).get('hits', [])
+            total = results.get('hits', {}).get('total', {}).get('value', 0)
+
+            if not hits:
+                return result_docs
+            for hit in hits:
+                index_name = hit.get('_index')
+                source = hit.get('_source')
+                score = hit.get('_score')
+                _id = hit.get('_id')
+                if index_name.startswith(ConnectionType.SEAFILE.value):
+                    r = {
+                        'filename': source['filename'],
+                        'path': source['path'],
+                        'repo_id': source['repo_id'],
+                        'connection_id': source['connection_id'],
+                        'content': source['content'],
+                        'score': score,
+                        '_id': _id,
+                    }
+                    result_docs['seafile_list'].append(r)
+                elif index_name.startswith(ConnectionType.SITE.value):
+                    r = {
+                        'title': source['title'],
+                        'url': source['url'],
+                        'connection_id': source['connection_id'],
+                        'content': source['content'],
+                        'score': score,
+                        '_id': _id,
+                    }
+                    result_docs['site_list'].append(r)
+
+            logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
+                         project_uuid, result_docs)
+
+        return result_docs
