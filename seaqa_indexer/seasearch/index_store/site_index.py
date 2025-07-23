@@ -11,7 +11,7 @@ SEASEARCH_BULK_OPETATE_LIMIT = 100
 class SiteIndex(object):
     mapping = {
         'properties': {
-            'site_id': {
+            'connection_id': {
                 'type': 'keyword'
             },
             'url': {
@@ -129,8 +129,7 @@ class SiteIndex(object):
             query_map['bool']['filter'] = []
         return query_map
 
-    def search(self, project_uuid, keyword, start, size, search_title_only=False):
-        bulk_search_params = []
+    def get_search_param(self, project_uuid, keyword, start, size, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
@@ -139,7 +138,7 @@ class SiteIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['site_id', 'url', 'title', 'content'],
+            '_source': ['connection_id', 'url', 'title', 'content'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -148,12 +147,16 @@ class SiteIndex(object):
             }
         }
         index_name = project_uuid
-        repo_query_info = {
+        site_query_info = {
             'index': index_name,
             'query': data
         }
-        bulk_search_params.append(repo_query_info)
+        return site_query_info
 
+    def search(self, project_uuid, keyword, start, size, search_title_only=False):
+        bulk_search_params = []
+        search_param = self.get_search_param(project_uuid, keyword, start, size, search_title_only)
+        bulk_search_params.append(search_param)
         query_body = json.dumps({
             'index_queries': bulk_search_params
         })
@@ -173,7 +176,7 @@ class SiteIndex(object):
             r = {
                 'title': source['title'],
                 'url': source['url'],
-                'site_id': source['site_id'],
+                'connection_id': source['connection_id'],
                 'content': source['content'],
                 'score': score,
                 '_id': _id,
@@ -186,14 +189,14 @@ class SiteIndex(object):
 
         return site_docs
 
-    def update_document(self, index_name, site_id, content, url, etag, title, last_modified):
-        self.add_document(index_name, site_id, content, url, etag, title, last_modified)
+    def update_document(self, index_name, connection_id, content, url, etag, title, last_modified):
+        self.add_document(index_name, connection_id, content, url, etag, title, last_modified)
 
-    def add_document(self, index_name, site_id, content, url, etag, title, last_modified):
+    def add_document(self, index_name, connection_id, content, url, etag, title, last_modified):
         bulk_add_params = []
-        index_info = {'index': {'_index': index_name, '_id': md5(url)}}
+        index_info = {'index': {'_index': index_name, '_id': md5(str(connection_id) + url)}}
         doc_info = {
-            'site_id': site_id,
+            'connection_id': connection_id,
             'content': content,
             'url': url,
             'etag': etag,
@@ -205,12 +208,12 @@ class SiteIndex(object):
         bulk_add_params.append(doc_info)
         self.seasearch_api.bulk(index_name, bulk_add_params)
 
-    def query_data_by_site(self, index_name, site_id, start, size):
+    def query_data_by_site(self, index_name, connection_id, start, size):
         dsl = {
             "query": {
                 "bool": {
                     "must": [
-                        {"term": {"site_id": site_id}}
+                        {"term": {"connection_id": connection_id}}
                     ]
                 }
             },
@@ -229,10 +232,10 @@ class SiteIndex(object):
 
         return doc_item['hits']['hits'], total
 
-    def delete_indexes_by_urls(self, index_name, urls):
+    def delete_indexes_by_ids(self, index_name, ids):
         delete_params = []
-        for url in urls:
-            delete_params.append({'delete': {'_id': md5(url), '_index': index_name}})
+        for _id in ids:
+            delete_params.append({'delete': {'_id': _id, '_index': index_name}})
             if len(delete_params) >= SEASEARCH_BULK_OPETATE_LIMIT:
                 self.seasearch_api.bulk(index_name, delete_params)
                 delete_params = []
