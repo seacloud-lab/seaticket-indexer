@@ -13,7 +13,7 @@ class SiteCrawlerSpider(CrawlSpider):
         Rule(LinkExtractor(), callback='parse_item', follow=True),
     )
 
-    def __init__(self, site_url, project_uuid, *args, **kwargs):
+    def __init__(self, site_url, project_uuid, site_id, *args, **kwargs):
         super(SiteCrawlerSpider, self).__init__(*args, **kwargs)
         # Set Starting URL
         self.start_urls = [site_url]
@@ -22,7 +22,7 @@ class SiteCrawlerSpider(CrawlSpider):
         domain = '{uri.netloc}'.format(uri=parsed_uri)
         self.allowed_domains = [domain]
         self.project_uuid = project_uuid
-        self.site_url = site_url
+        self.site_id = site_id
 
     def parse_item(self, response):
         """

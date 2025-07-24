@@ -36,7 +36,7 @@ def parse_item(self, response):
     }
 
 
-def create_sitemap_spider(name, sitemap_url, site_url, project_uuid, sitemap_follow=None, sitemap_rules=None):
+def create_sitemap_spider(name, sitemap_url, site_url, project_uuid, site_id, sitemap_follow=None, sitemap_rules=None):
     """
     Dynamically create a SitemapSpider class
 
@@ -45,6 +45,7 @@ def create_sitemap_spider(name, sitemap_url, site_url, project_uuid, sitemap_fol
         sitemap_url (str): Sitemap URL
         site_url (str): Site URL
         project_uuid (str): project_uuid
+        site_id (str): site_id
         sitemap_follow (list): List of sitemap types to follow
         sitemap_rules (list): List of sitemap rules
 
@@ -68,6 +69,7 @@ def create_sitemap_spider(name, sitemap_url, site_url, project_uuid, sitemap_fol
         'site_url': site_url,
         'parse': parse_sitemap_item,
         'parse_item': parse_item,
+        'site_id': site_id,
     }
 
     # Create class
