@@ -27,9 +27,7 @@ def url_to_filename(url):
     return filename + '.json'
 
 
-def get_site_dir(site_url, project_uuid):
-    parsed_uri = urlparse(site_url)
-    domain = '{uri.netloc}'.format(uri=parsed_uri)
+def get_site_dir(site_id, project_uuid):
     base_dir = os.path.join(CRAWL_OUTPUT_DIR, project_uuid)
-    site_dir = os.path.join(base_dir, domain)
+    site_dir = os.path.join(base_dir, str(site_id))
     return site_dir

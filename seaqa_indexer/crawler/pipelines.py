@@ -8,11 +8,11 @@ from seaqa_indexer.crawler.utils import url_to_filename, get_site_dir
 class BatchCrawlPipeline:
     def __init__(self):
         self.project_uuid = None
-        self.site_url = None
+        self.site_id = None
 
     def open_spider(self, spider):
         self.project_uuid = spider.project_uuid
-        self.site_url = spider.site_url
+        self.site_id = spider.site_id
 
     def close_spider(self, spider):
         pass
@@ -34,7 +34,7 @@ class BatchCrawlPipeline:
 
     def save_content_to_file(self, url, title, content, spider):
         filename = url_to_filename(url)
-        site_dir = get_site_dir(self.site_url, self.project_uuid)
+        site_dir = get_site_dir(self.site_id, self.project_uuid)
         os.makedirs(site_dir, exist_ok=True)
 
         filepath = os.path.join(site_dir, filename)
