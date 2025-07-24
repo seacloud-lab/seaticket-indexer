@@ -4,11 +4,16 @@ import logging
 import atexit
 import subprocess
 import hashlib
+import json
 from datetime import datetime, timezone
+from copy import deepcopy
+from seaqa_indexer.utils.hasher import AESPasswordHasher
 
 
 logger = logging.getLogger(__name__)
 pyexec = None
+
+ENCRYPT_KEYS = ['api_token']
 
 
 def find_in_path(prog):
@@ -101,4 +106,26 @@ def time_str_to_utc_time(time_str):
     dt = datetime.fromisoformat(time_str)
     utc_time = dt.astimezone(timezone.utc)
     return utc_time
+
+
+def decrypt_config(config):
+    config_clone = deepcopy(config)
+    cryptor = AESPasswordHasher()
+    decrypted_details = {
+        key: cryptor.decode(config_clone[key])
+        for key in ENCRYPT_KEYS if key in config_clone and config_clone[key]
+    }
+    config_clone.update(decrypted_details)
+    return config_clone
+
+
+def encrypt_config(config):
+    detail_clone = deepcopy(config)
+    cryptor = AESPasswordHasher()
+    encrypted_details = {
+        key: cryptor.encode(detail_clone[key])
+        for key in ENCRYPT_KEYS if key in detail_clone and detail_clone[key]
+    }
+    detail_clone.update(encrypted_details)
+    return json.dumps(detail_clone)
 
