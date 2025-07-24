@@ -27,6 +27,8 @@ LANG = 'chinese'
 SEASEARCH_URL = ''
 SEASEARCH_TOKEN = ''
 
+SEAQA_WEB_SECRET_KEY = ''
+
 try:
     from local_settings import *
 except ImportError:
