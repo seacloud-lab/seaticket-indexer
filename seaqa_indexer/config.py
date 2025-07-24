@@ -18,9 +18,6 @@ MYSQL_PORT = 3306
 MYSQL_DB = 'sea_qa'
 MYSQL_UNIX_SOCKET = ''
 
-# API Authentication
-SEA_QA_PRIVATE_KEY = ''
-
 # index setting
 LANG = 'chinese'
 
@@ -34,7 +31,7 @@ try:
 except ImportError:
     pass
 
-JWT_PRIVATE_KEY = os.environ.get('JWT_PRIVATE_KEY', '') or SEA_QA_PRIVATE_KEY
+JWT_PRIVATE_KEY = os.environ.get('JWT_PRIVATE_KEY', '')
 
 MYSQL_HOST = os.getenv('SEAQA_MYSQL_DB_HOST') or MYSQL_HOST
 MYSQL_USER = os.getenv('SEAQA_MYSQL_DB_USER') or MYSQL_USER
