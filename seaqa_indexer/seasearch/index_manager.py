@@ -248,19 +248,16 @@ class IndexManager:
         self.mq.lpush('index_task', json.dumps(msg_content))
 
     def search(self, project_uuid, connection_type, keyword, start=0, size=20):
-        result_docs = {
-            'site_list': [],
-            'seafile_list': [],
-        }
+        result_docs = []
         if connection_type == ConnectionType.SEAFILE.value:
             index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
             results = self.seafile_index.search(index_name, keyword, start, size)
-            result_docs['seafile_list'] = results
+            result_docs = results
 
         elif connection_type == ConnectionType.SITE.value:
             index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
             results = self.site_index.search(index_name, keyword, start, size)
-            result_docs['site_list'] = results
+            result_docs = results
         else:
             bulk_search_params = []
             # seafile_index
@@ -296,8 +293,9 @@ class IndexManager:
                         'content': source['content'],
                         'score': score,
                         '_id': _id,
+                        'type': 'seafile',
                     }
-                    result_docs['seafile_list'].append(r)
+                    result_docs.append(r)
                 elif index_name.startswith(ConnectionType.SITE.value):
                     r = {
                         'title': source['title'],
@@ -306,8 +304,9 @@ class IndexManager:
                         'content': source['content'],
                         'score': score,
                         '_id': _id,
+                        'type': 'site',
                     }
-                    result_docs['site_list'].append(r)
+                    result_docs.append(r)
 
             logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
                          project_uuid, result_docs)
