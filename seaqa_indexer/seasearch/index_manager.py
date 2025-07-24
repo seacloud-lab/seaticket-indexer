@@ -79,7 +79,7 @@ class IndexManager:
         site_url = site_config.get('url')
         project_uuid = project_connection.project_uuid
 
-        site_dir = get_site_dir(site_url, project_uuid)
+        site_dir = get_site_dir(site_id, project_uuid)
         crawled_site_files = [f for f in os.listdir(site_dir)]
         site_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
         self.site_index.create_index_if_missing(site_index_name)

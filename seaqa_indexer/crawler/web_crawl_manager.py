@@ -168,7 +168,8 @@ class WebCrawlManager:
                 name=f"sitemap_spider_{site_id}",  # Use unique name
                 sitemap_url=sitemap_url,
                 site_url=site_url,
-                project_uuid=project_uuid
+                project_uuid=project_uuid,
+                site_id=site_id,
             )
             d = self.runner.crawl(SitemapSpiderClass)
         else:
@@ -176,7 +177,8 @@ class WebCrawlManager:
             d = self.runner.crawl(
                 SiteCrawlerSpider,
                 site_url=site_url,
-                project_uuid=project_uuid
+                project_uuid=project_uuid,
+                site_id=site_id,
             )
         d.addCallback(lambda _: self.finish_crawl_site(site_id, site_url, CrawlStatus.COMPLETED))
         d.addErrback(lambda failure: self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure)))
