@@ -5,7 +5,7 @@ import datetime
 from sqlalchemy.sql import text
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_FILE_SIZE_LIMIT
+from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_FILE_SIZE_LIMIT, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
@@ -17,6 +17,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seahub_api import SeahubAPI, FileNotFoundException
 from seaqa_indexer.utils import md5, time_str_to_utc_time, decrypt_config, encrypt_config
 from seaqa_indexer.seasearch.extract import ExtractorFactory
+from seaqa_indexer.app.event_redis import redis_cache
 
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,9 @@ class IndexManager:
         repo_info = seahub_api.get_repo_info()
         new_repo_id = repo_info.get('repo_id')
         new_last_modified = repo_info.get('last_modified')
+        new_repo_name = repo_info.get('repo_name')
+
+        redis_cache.set(new_repo_id, json.dumps({server_url: new_repo_name}), REPO_NAME_CACHE_TIME_OUT)
 
         new_last_modified = time_str_to_utc_time(new_last_modified)
         if new_repo_id == old_repo_id and str(old_last_modified) == str(new_last_modified).split('+')[0]:
@@ -194,6 +198,7 @@ class IndexManager:
         self.seafile_index.delete_indexes_by_ids(seafile_index_name, need_cleared_seafile_index_set)
 
         config['repo_id'] = new_repo_id
+        config['repo_name'] = new_repo_name
         self.finish_index(connection_id, new_indexed_at, updated_at=new_last_modified, config=config)
 
     def update_indexes(self):
@@ -285,6 +290,22 @@ class IndexManager:
                 score = hit.get('_score')
                 _id = hit.get('_id')
                 if index_name.startswith(ConnectionType.SEAFILE.value):
+                    repo_id = source['repo_id']
+                    connection_id = source['connection_id']
+                    repo_cache_info = redis_cache.get(repo_id)
+                    if not repo_cache_info:
+                        project_connection = self.get_project_connection_by_id(connection_id)
+                        if not project_connection:
+                            continue
+                        repo_name = json.loads(project_connection.config).get('repo_name')
+                        server_url = json.loads(project_connection.config).get('server_url')
+                        repo_cache_info = json.dumps({server_url: repo_name})
+                        redis_cache.set(repo_id, repo_cache_info, REPO_NAME_CACHE_TIME_OUT)
+
+                    repo_cache_info = json.loads(repo_cache_info)
+                    server_url = list(repo_cache_info.keys())[0]
+                    repo_name = list(repo_cache_info.values())[0]
+
                     r = {
                         'filename': source['filename'],
                         'path': source['path'],
@@ -292,6 +313,8 @@ class IndexManager:
                         'connection_id': source['connection_id'],
                         'content': source['content'],
                         'score': score,
+                        'repo_name': repo_name,
+                        'server_url': server_url,
                         '_id': _id,
                         'type': 'seafile',
                     }
