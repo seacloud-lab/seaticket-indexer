@@ -31,7 +31,7 @@ class SiteCrawlerSpider(CrawlSpider):
     
     def _load_existing_cache_info(self):
         """Load the ETag and Last-Modified information of an existing file"""
-        site_dir = get_site_dir(self.site_url, self.project_uuid)
+        site_dir = get_site_dir(self.site_id, self.project_uuid)
         if not os.path.exists(site_dir):
             return
             

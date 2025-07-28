@@ -8,22 +8,20 @@ from seaqa_indexer.crawler.utils import url_to_filename, get_site_dir
 class BatchCrawlPipeline:
     def __init__(self):
         self.project_uuid = None
-        self.site_url = None
         self.site_id = None
         self.existing_files = set()
         self.processed_urls = set()
 
     def open_spider(self, spider):
         self.project_uuid = spider.project_uuid
-        self.site_url = spider.site_url
         self.site_id = spider.site_id
         
-        site_dir = get_site_dir(self.site_url, self.project_uuid)
+        site_dir = get_site_dir(self.site_id, self.project_uuid)
         if os.path.exists(site_dir):
             self.existing_files = set(f for f in os.listdir(site_dir) if f.endswith('.json'))
 
     def close_spider(self, spider):
-        site_dir = get_site_dir(self.site_url, self.project_uuid)
+        site_dir = get_site_dir(self.site_id, self.project_uuid)
         processed_files = set(url_to_filename(url) for url in self.processed_urls)
         files_to_delete = self.existing_files - processed_files
         
@@ -101,7 +99,7 @@ class BatchCrawlPipeline:
     def _handle_not_modified(self, item, spider):
         url = item['url']
         filename = url_to_filename(url)
-        site_dir = get_site_dir(self.site_url, self.project_uuid)
+        site_dir = get_site_dir(self.site_id, self.project_uuid)
         filepath = os.path.join(site_dir, filename)
         
         if os.path.exists(filepath):
