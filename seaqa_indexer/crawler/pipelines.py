@@ -41,7 +41,7 @@ class BatchCrawlPipeline:
                 not_modified = item.get('not_modified', False)
                 
                 if not_modified:
-                    self._handle_not_modified(item, spider)
+                   return item
                 else:
                     self.save_content_with_update_logic(
                         item['url'],
@@ -71,9 +71,8 @@ class BatchCrawlPipeline:
             "content": content,
             "etag": item.get('etag') if item else None,
             "last_modified": item.get('last_modified') if item else None,
-            "crawled_at": datetime.now().isoformat()
         }
-        
+
         # Check if file exists
         if os.path.exists(filepath):
             # File exists - update it
@@ -81,7 +80,7 @@ class BatchCrawlPipeline:
                 existing_content = json.load(f)
             
             new_content['updated_at'] = datetime.now().isoformat()
-            new_content['created_at'] = existing_content.get('created_at', existing_content.get('crawled_at'))
+            new_content['created_at'] = existing_content.get('created_at')
             
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(new_content, f, ensure_ascii=False, indent=2)
@@ -95,23 +94,3 @@ class BatchCrawlPipeline:
                 json.dump(new_content, f, ensure_ascii=False, indent=2)
             
             spider.logger.info(f"Created new file: {filename}")
-
-    def _handle_not_modified(self, item, spider):
-        url = item['url']
-        filename = url_to_filename(url)
-        site_dir = get_site_dir(self.site_id, self.project_uuid)
-        filepath = os.path.join(site_dir, filename)
-        
-        if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                existing_content = json.load(f)
-            
-            # Only update the cache header and check the time.
-            existing_content['etag'] = item.get('etag')
-            existing_content['last_modified'] = item.get('last_modified')
-            existing_content['last_checked_at'] = datetime.now().isoformat()
-            
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(existing_content, f, ensure_ascii=False, indent=2)
-            
-            spider.logger.debug(f"Skipped unmodified URL: {url}")
