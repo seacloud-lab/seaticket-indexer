@@ -89,12 +89,9 @@ def create_sitemap_spider(name, sitemap_url, site_url, project_uuid, site_id, si
     # Create class
     spider_class = type(f'{name}Spider', (SitemapSpider,), attrs)
 
-    # Initialize cache info
-    spider_class._load_existing_cache_info = classmethod(_load_existing_cache_info)
-
     def custom_init(self, *args, **kwargs):
         SitemapSpider.__init__(self, *args, **kwargs)
-        setattr(self, 'existing_cache_info', {})
+        self.existing_cache_info = {}
         self._load_existing_cache_info()
         self.logger.info(f"Spider loaded {len(self.existing_cache_info)} cached URLs for {self.site_url}")
 
