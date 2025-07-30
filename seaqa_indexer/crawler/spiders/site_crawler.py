@@ -17,6 +17,8 @@ class SiteCrawlerSpider(CrawlSpider):
 
     def __init__(self, site_url, project_uuid, site_id, *args, **kwargs):
         super(SiteCrawlerSpider, self).__init__(*args, **kwargs)
+        if not site_url.endswith('/'):
+            site_url += '/'
         self.start_urls = [site_url]
         parsed_uri = urlparse(site_url)
         domain = '{uri.netloc}'.format(uri=parsed_uri)
