@@ -212,14 +212,16 @@ class IndexManager:
                 INSERT INTO github_issues (
                     id, repo_owner, repo_name, issue_number, title, body, state,
                     created_at, updated_at, closed_at, labels,
-                    comments, connection_id
+                    comments, connection_id, author, url
                 ) VALUES (
                     :id, :repo_owner, :repo_name, :issue_number, :title, :body, :state,
                     :created_at, :updated_at, :closed_at, :labels,
-                    :comments, :connection_id
+                    :comments, :connection_id, :author, :url
                 )
                 ON DUPLICATE KEY UPDATE
                     title = VALUES(title),
+                    author = VALUES(author),
+                    url = VALUES(url),
                     body = VALUES(body),
                     state = VALUES(state),
                     updated_at = VALUES(updated_at),
@@ -228,22 +230,65 @@ class IndexManager:
                     comments = VALUES(comments)
             """)
 
+            labels = issue.get('labels', [])
+            label_names = [label['name'] for label in labels if 'name' in label]
+
             session.execute(sql, {
                 'id': issue['id'],
                 'repo_owner': repo_owner,
                 'repo_name': repo_name,
                 'issue_number': issue['number'],
                 'title': issue.get('title'),
+                'author': issue.get('user', {}).get('login', ''),
+                'url': issue.get('html_url', ''),
                 'body': issue.get('body'),
                 'state': issue.get('state'),
                 'created_at': datetime.datetime.strptime(issue.get('created_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get('created_at') else None,
                 'updated_at': datetime.datetime.strptime(issue.get('updated_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get('updated_at') else None,
                 'closed_at': datetime.datetime.strptime(issue.get('closed_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get('closed_at') else None,
-                'labels': json.dumps(issue.get('labels', [])),
+                'labels': json.dumps(label_names),
                 'comments': issue.get('comments'),
                 'connection_id': str(connection_id)
             })
             session.commit()
+    
+    def get_connection_id_by_issue_info(self, repo_name, repo_owner, issue_number):
+        with self.db_session() as session:
+            sql = """
+                SELECT connection_id
+                FROM github_issues
+                WHERE repo_owner = :repo_owner
+                AND repo_name = :repo_name
+                AND issue_number = :issue_number
+                LIMIT 1
+            """
+            result = session.execute(
+                text(sql),
+                {
+                    'repo_owner': repo_owner,
+                    'repo_name': repo_name,
+                    'issue_number': issue_number
+                }
+            ).fetchone()
+
+        return result.connection_id if result else None
+
+
+    def get_webhook_secret(self, connection_id):
+        with self.db_session() as session:
+            cmd = "SELECT config FROM project_connection WHERE id = :connection_id"
+            result = session.execute(text(cmd), {'connection_id': connection_id}).fetchone()
+            if not result:
+                return None
+            config_str = result[0]
+
+            if not config_str:
+                return None
+            
+            config = json.loads(config_str)
+
+            return config.get('webhook_secret')
+
 
     def delete_issues_from_db(self,ids):
         with self.db_session() as session:
@@ -252,13 +297,11 @@ class IndexManager:
                 session.execute(sql, {'id': id_issue})
             session.commit()
 
-
-
     def update_github_issue_index(self, project_connection):
         connection_id = project_connection.id
-        config = json.loads(project_connection.config)
+        config = decrypt_config(json.loads(project_connection.config))
         server_url = config.get('repository')
-        api_token = config.get('api_token')
+        api_token = config.get('token')
         old_last_modified = project_connection.updated_at
         project_uuid = project_connection.project_uuid
         repo_owner, repo_name = "", ""
@@ -290,7 +333,6 @@ class IndexManager:
             issue_id = issue['id']
             key = (repo_owner, repo_name, issue_id)
             new_index_ids_set.add(key)
-
             self.github_issue_index.add_or_update_issue(index_name, connection_id, repo_owner, repo_name, issue)
             self.save_issues_to_db(connection_id, repo_owner, repo_name, issue)
 
@@ -301,6 +343,16 @@ class IndexManager:
         self.github_issue_index.delete_indexes_by_ids(index_name, ids_to_delete)
 
         self.finish_index(connection_id, new_indexed_at, updated_at=new_indexed_at, config=config)
+
+    def update_github_issue_by_webhook(self,connection_id, issue, repo_owner, repo_name):
+        new_indexed_at = datetime.datetime.now(datetime.UTC)
+        connection = self.get_project_connection_by_id(connection_id)
+        project_uuid, connection_type = connection.id, connection.type
+        index_name = gen_index_name_by_type(project_uuid, connection_type)
+
+        self.github_issue_index.add_or_update_issue(index_name, connection_id, repo_owner, repo_name, issue)
+        self.save_issues_to_db(connection_id, repo_owner, repo_name, issue)
+        self.finish_index(self,connection_id, new_indexed_at)
 
     def update_indexes(self):
         start, limit = 0, 1000

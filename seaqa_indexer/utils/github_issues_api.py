@@ -23,7 +23,7 @@ class GitHubAPI:
             'Accept': 'application/vnd.github+json'
         }
         if self.token:
-            headers['Authorization'] = f'token {self.token}'
+            headers['Authorization'] = f'Bearer {self.token}'
         return headers
 
     def _request(self, url, params=None):
@@ -38,7 +38,7 @@ class GitHubAPI:
             logger.error('GitHub API request failed: %s', str(e))
             raise
 
-    def list_issues(self, since, state='open', per_page=30, page=1):
+    def list_issues(self, since, state='all', per_page=30, page=1):
         """
         state: open / closed / all
         """
@@ -52,7 +52,7 @@ class GitHubAPI:
             params['since'] = since
         return self._request(url, params=params)
 
-    def list_all_issues(self,since, state='open', per_page=30):
+    def list_all_issues(self,since, state='all', per_page=30):
         all_issues = []
         page = 1
         while True:

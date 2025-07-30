@@ -243,6 +243,8 @@ class GitHubIssueIndex(object):
             'url' : issue_data['url'],
             'issue_number': issue_data['number'],
             'title': issue_data['title'],
+            'author': issue_data.get('user', {}).get('login', ''),
+            'url': issue_data.get('html_url', ''),
             'body': issue_data['body'] or '',
             'state': issue_data['state'],
             'labels': [label['name'] for label in issue_data.get('labels', [])],
