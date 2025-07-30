@@ -46,6 +46,24 @@ def get_path_to_index_info_by_connection_id(seafile_index, index_name, connectio
     return path_to_index_info
 
 
+def get_all_id_to_issue_info_by_issue_id(github_issue_index, site_index_name, connection_id):
+    per_size = 1000
+    start = 0
+    site_id_to_site_info = {}
+    while True:
+        hits, total = github_issue_index.query_issue_by_ids(site_index_name, connection_id)
+        for hit in hits:
+            source = hit['_source']
+            url = source['url']
+            key = md5(str(connection_id) + url)
+            site_id_to_site_info[key] = source
+
+        start += per_size
+        if len(hits) < per_size:
+            break
+    return site_id_to_site_info
+
+
 def get_content_by_download_link(download_url):
     response = requests.get(download_url)
     if response.status_code != 200:

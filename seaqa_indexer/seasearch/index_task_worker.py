@@ -57,6 +57,10 @@ class IndexTaskWorker(object):
             t = threading.Thread(target=self.index_task_worker, name='index_task_worker_thread_' + str(i), daemon=True)
             t.start()
 
+        for i in range(int(self.worker_num)):
+            t = threading.Thread(target=self.issue_task_worker(), name='issue_task_worker_thread_' + str(i), daemon=True)
+            t.start()
+
         threading.Thread(target=self.cron_update_indexes, name='cron_update_indexes_thread', daemon=True).start()
         threading.Thread(target=self.refresh_lock, name='refresh_thread', daemon=True).start()
 
@@ -83,6 +87,31 @@ class IndexTaskWorker(object):
             logger.error('%s index project connection Error' % self.tname)
             logger.error(e, exc_info=True)
             # prevent case that redis break at program running.
+            time.sleep(0.3)
+
+    def issue_task_worker(self):
+        logger.info('%s starting index task worker' % self.tname)
+        try:
+            while not self.should_stop.is_set():
+                try:
+                    res = self.mq.brpop('issue_index_task', timeout=30)
+                    if res is not None:
+                        key, value = res
+                        try:
+                            task_data = json.loads(value)
+                        except:
+                            task_data = None
+
+                        if not task_data:
+                            logger.warning('issue_task: invalid format.', res)
+                        else:
+                            issue_index_id = task_data.get('issue_index_id')
+                            self.work_task_handler(issue_index_id)
+                except (ResponseError, NoMQAvailable, TimeoutError) as e:
+                    logger.error('Redis connection failed: %s' % e)
+        except Exception as e:
+            logger.error('%s index project connection Error' % self.tname)
+            logger.error(e, exc_info=True)
             time.sleep(0.3)
 
     def work_task_handler(self, connection_id):

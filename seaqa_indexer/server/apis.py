@@ -60,6 +60,14 @@ def add_index_seafile_task():
     return jsonify({'success': True}), 200
 
 
+@application.route('/add_github_issues_index_task', methods=['GET'])
+@auth_required
+def add_github_issues_index_task():
+    issue_index_id = request.args.get('issue_index_id')
+    application.index_manager.add_github_issue_index_task(issue_index_id)
+    return jsonify({'success': True}), 200
+
+
 @application.route('/search', methods=['POST'])
 @auth_required
 def search():
