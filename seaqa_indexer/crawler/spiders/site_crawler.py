@@ -22,12 +22,11 @@ class SiteCrawlerSpider(CrawlSpider):
         domain = '{uri.netloc}'.format(uri=parsed_uri)
         self.allowed_domains = [domain]
         self.project_uuid = project_uuid
-        self.site_url = site_url
         self.site_id = site_id
 
         self.existing_cache_info = {}
         self._load_existing_cache_info()
-        self.logger.info(f"Spider loaded {len(self.existing_cache_info)} cached URLs for {site_url}")
+        self.logger.debug(f"Spider loaded {len(self.existing_cache_info)} cached URLs for {site_url}")
     
     def _load_existing_cache_info(self):
         """Load the ETag and Last-Modified information of an existing file"""

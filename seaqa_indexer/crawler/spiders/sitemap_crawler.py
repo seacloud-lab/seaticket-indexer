@@ -43,7 +43,7 @@ def parse_item(self, response):
     # Parse HTML, extract plain text/metadata
     response_etag = response.headers.get('ETag')
     response_last_modified = response.headers.get('Last-Modified')
-    
+
     try:
         if response_etag:
             response_etag = response_etag.decode('utf-8')
@@ -91,12 +91,14 @@ def create_sitemap_spider(name, sitemap_url, site_url, project_uuid, site_id, si
 
     # Initialize cache info
     spider_class._load_existing_cache_info = classmethod(_load_existing_cache_info)
-    spider_class.__init__ = lambda self, *args, **kwargs: (
-        SitemapSpider.__init__(self, *args, **kwargs),
-        setattr(self, 'existing_cache_info', {}),
-        self._load_existing_cache_info(),
+
+    def custom_init(self, *args, **kwargs):
+        SitemapSpider.__init__(self, *args, **kwargs)
+        setattr(self, 'existing_cache_info', {})
+        self._load_existing_cache_info()
         self.logger.info(f"Spider loaded {len(self.existing_cache_info)} cached URLs for {self.site_url}")
-    )
+
+    spider_class.__init__ = custom_init
 
     return spider_class
 
