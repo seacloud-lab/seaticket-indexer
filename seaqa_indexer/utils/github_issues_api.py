@@ -38,7 +38,7 @@ class GitHubAPI:
             logger.error('GitHub API request failed: %s', str(e))
             raise
 
-    def list_issues(self, state='open', per_page=30, page=1):
+    def list_issues(self, since, state='open', per_page=30, page=1):
         """
         state: open / closed / all
         """
@@ -48,14 +48,16 @@ class GitHubAPI:
             'per_page': per_page,
             'page': page
         }
+        if since:
+            params['since'] = since
         return self._request(url, params=params)
 
-    def list_all_issues(self, state='open', per_page=30):
+    def list_all_issues(self,since, state='open', per_page=30):
         all_issues = []
         page = 1
         while True:
             try:
-                issues = self.list_issues(state=state, per_page=per_page, page=page)
+                issues = self.list_issues(since=since, state=state, per_page=per_page, page=page)
             except Exception as e:
                 logger.error(f"Failed to fetch page {page} of issues: {e}")
                 break
