@@ -23,6 +23,9 @@ class UpdateCheckMiddleware:
                 
                 if not content_changed:
                     spider.logger.debug(f"No changes detected for {url}, skipping download")
+                    # Add the skipped URL to the set on the spider instance
+                    if hasattr(spider, 'not_modified_urls'):
+                        spider.not_modified_urls.add(url)
                     return HtmlResponse(url=url, status=200, request=request, flags=['not_modified'])
 
             except requests.RequestException as e:

@@ -15,6 +15,7 @@ class BatchCrawlPipeline:
     def open_spider(self, spider):
         self.project_uuid = spider.project_uuid
         self.site_id = spider.site_id
+        spider.not_modified_urls = set()
 
         site_dir = get_site_dir(self.site_id, self.project_uuid)
         if os.path.exists(site_dir):
@@ -22,7 +23,11 @@ class BatchCrawlPipeline:
 
     def close_spider(self, spider):
         site_dir = get_site_dir(self.site_id, self.project_uuid)
-        processed_files = set(url_to_filename(url) for url in self.processed_urls)
+
+        # Combine URLs processed by the pipeline and URLs skipped by the middleware
+        all_kept_urls = self.processed_urls.union(getattr(spider, 'not_modified_urls', set()))
+        processed_files = set(url_to_filename(url) for url in all_kept_urls)
+
         files_to_delete = self.existing_files - processed_files
 
         for filename in files_to_delete:
