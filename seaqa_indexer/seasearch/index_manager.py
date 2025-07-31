@@ -206,6 +206,53 @@ class IndexManager:
         config['repo_name'] = new_repo_name
         self.finish_index(connection_id, new_indexed_at, updated_at=new_last_modified, config=config)
 
+    def save_issues_to_db(self, connection_id, repo_owner, repo_name, issue):
+        with self.db_session() as session:
+            sql = text("""
+                INSERT INTO github_issues (
+                    id, repo_owner, repo_name, issue_number, title, body, state,
+                    created_at, updated_at, closed_at, labels,
+                    comments, connection_id
+                ) VALUES (
+                    :id, :repo_owner, :repo_name, :issue_number, :title, :body, :state,
+                    :created_at, :updated_at, :closed_at, :labels,
+                    :comments, :connection_id
+                )
+                ON DUPLICATE KEY UPDATE
+                    title = VALUES(title),
+                    body = VALUES(body),
+                    state = VALUES(state),
+                    updated_at = VALUES(updated_at),
+                    closed_at = VALUES(closed_at),
+                    labels = VALUES(labels),
+                    comments = VALUES(comments)
+            """)
+
+            session.execute(sql, {
+                'id': issue['id'],
+                'repo_owner': repo_owner,
+                'repo_name': repo_name,
+                'issue_number': issue['number'],
+                'title': issue.get('title'),
+                'body': issue.get('body'),
+                'state': issue.get('state'),
+                'created_at': datetime.datetime.strptime(issue.get('created_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get('created_at') else None,
+                'updated_at': datetime.datetime.strptime(issue.get('updated_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get('updated_at') else None,
+                'closed_at': datetime.datetime.strptime(issue.get('closed_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get('closed_at') else None,
+                'labels': json.dumps(issue.get('labels', [])),
+                'comments': issue.get('comments'),
+                'connection_id': str(connection_id)
+            })
+            session.commit()
+
+    def delete_issues_from_db(self,ids):
+        with self.db_session() as session:
+            sql = text("DELETE FROM github_issues WHERE id = :id")
+            for id_issue in ids:
+                session.execute(sql, {'id': id_issue})
+            session.commit()
+
+
 
     def update_github_issue_index(self, project_connection):
         connection_id = project_connection.id
@@ -235,16 +282,22 @@ class IndexManager:
         new_index_ids_set = set()
 
         github_api = GitHubAPI(api_token, repo_owner, repo_name)
-        # since = old_last_modified.isoformat() + "Z" if old_last_modified else None
-        for issue in github_api.list_all_issues():
+        since = old_last_modified.isoformat() + "Z" if old_last_modified else None
+
+        for issue in github_api.list_all_issues(since=since):
+            if 'pull_request' in issue:
+                continue
             issue_id = issue['id']
             key = (repo_owner, repo_name, issue_id)
             new_index_ids_set.add(key)
 
             self.github_issue_index.add_or_update_issue(index_name, connection_id, repo_owner, repo_name, issue)
+            self.save_issues_to_db(connection_id, repo_owner, repo_name, issue)
 
         to_delete = old_index_ids_set - new_index_ids_set
         ids_to_delete = [old_index_map[k] for k in to_delete]
+
+        self.delete_issues_from_db(ids_to_delete)
         self.github_issue_index.delete_indexes_by_ids(index_name, ids_to_delete)
 
         self.finish_index(connection_id, new_indexed_at, updated_at=new_indexed_at, config=config)
