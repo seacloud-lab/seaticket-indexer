@@ -7,14 +7,13 @@ import datetime
 from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
 from sqlalchemy.sql import text
-from bs4 import BeautifulSoup
 
 from scrapy.crawler import CrawlerRunner
 from scrapy.utils.project import get_project_settings
 from twisted.internet.threads import deferToThread
 
 from seaqa_indexer.crawler.spiders.site_crawler import SiteCrawlerSpider
-from seaqa_indexer.crawler.spiders.sitemap_crawler import create_sitemap_spider
+from seaqa_indexer.crawler.spiders.sitemap_crawler import SitemapCrawlerSpider
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.config import CRAWL_OUTPUT_DIR
@@ -99,6 +98,8 @@ class WebCrawlManager:
         site_config = json.loads(site.config)
         site_url = site_config.get('url')
         project_uuid = str(site.project_uuid)
+        site_dir = get_site_dir(site_id, project_uuid)
+        os.makedirs(site_dir, exist_ok=True)
 
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
@@ -161,17 +162,16 @@ class WebCrawlManager:
         site_url = crawler_params['site_url']
         sitemap_url = crawler_params['sitemap_url']
         project_uuid = crawler_params['project_uuid']
-        
+
         # Create crawler instance
         if sitemap_url:
-            SitemapSpiderClass = create_sitemap_spider(
-                name=f"sitemap_spider_{site_id}", # Use unique name
-                sitemap_url=sitemap_url,
-                site_url=site_url,
-                project_uuid=project_uuid,
-                site_id=site_id,
+            d = self.runner.crawl(
+                SitemapCrawlerSpider,
+                site_url,
+                project_uuid,
+                site_id,
+                sitemap_url
             )
-            d = self.runner.crawl(SitemapSpiderClass)
         else:
             d = self.runner.crawl(
                 SiteCrawlerSpider,
@@ -179,7 +179,7 @@ class WebCrawlManager:
                 project_uuid=project_uuid,
                 site_id=site_id,
             )
-        
+
         d.addCallback(lambda _: self.finish_crawl_site(site_id, site_url, CrawlStatus.COMPLETED))
         d.addErrback(lambda failure: self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure)))
         return d
@@ -187,7 +187,7 @@ class WebCrawlManager:
     def prepare_crawler(self, site_id, site_url, site_config, project_uuid):
         """Prepare crawler parameters, execute in thread pool"""
         sitemap_url = site_config.get('sitemap_url')
-        
+
         if not sitemap_url:
             sitemap_url = self.get_sitemap_url(site_url)
             if sitemap_url:
@@ -236,77 +236,6 @@ class WebCrawlManager:
                 except Exception as e:
                     logger.warning('update crawl site failed, site_id: %s, error: %s', site_id, e)
                     self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, e)
-
-    def update_index_file(self, filepath):
-        """Check if a single URL needs to be updated
-
-        Args:
-            filepath: JSON file path
-        """
-
-        with open(filepath, 'r', encoding='utf-8') as f:
-            index_data = json.load(f)
-
-        url = index_data.get('url')
-        etag = index_data.get('etag')
-        last_modified = index_data.get('last_modified')
-
-        is_changed, new_etag, new_last_modified = self.check_webpage_is_changed(url, etag, last_modified)
-
-        # If an update is needed, send a GET request to retrieve new content.
-        if is_changed:
-            need_update_content, title, content = self.get_webpage_content(url, new_etag, new_last_modified)
-            index_data['title'] = title
-            index_data['content'] = content
-            index_data['etag'] = new_etag
-            index_data['last_modified'] = new_last_modified
-            index_data['updated_at'] = datetime.datetime.now().isoformat()
-
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(index_data, f, ensure_ascii=False, indent=2)
-        else:
-            logger.debug(f"No update needed for {url}")
-
-    def check_webpage_is_changed(self, url, etag, last_modified):
-        response = requests.head(url, timeout=10, allow_redirects=True)
-        # Check the ETag or Last-Modified in the HTTP header.
-        new_etag = response.headers.get('ETag')
-        new_last_modified = response.headers.get('Last-Modified')
-
-        is_changed = False
-        # If the server returns 304 Not Modified, there is no need to update.
-        if response.status_code == 304:
-            is_changed = False
-
-        if new_etag and etag != new_etag:
-            is_changed = True
-
-        if new_last_modified and last_modified != new_last_modified:
-            is_changed = True
-
-        return is_changed, new_etag, new_last_modified
-
-    def get_webpage_content(self, url, etag, last_modified):
-        headers = {}
-        if etag:
-            headers['If-None-Match'] = etag
-        if last_modified:
-            headers['If-Modified-Since'] = last_modified
-
-        response = requests.get(url, headers=headers, timeout=15)
-
-        need_update_content = False
-        if response.status_code == 200:
-            need_update_content = True
-            soup = BeautifulSoup(response.text, 'html.parser')
-            title = soup.title.text if soup.title else ''
-            # Extract content
-            for script in soup(["script", "style"]):
-                script.extract()
-            content = soup.get_text(" ", strip=True)
-
-            return need_update_content, title, content
-        return need_update_content, '', ''
 
     def add_crawl_site_task(self, site_id):
         msg_content = {

@@ -25,10 +25,6 @@ DEFAULT_REQUEST_HEADERS = {
    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 }
 
-DOWNLOADER_MIDDLEWARES = {
-   'seaqa_indexer.crawler.middlewares.UpdateCheckMiddleware': 543,
-}
-
 ITEM_PIPELINES = {
    "seaqa_indexer.crawler.pipelines.BatchCrawlPipeline": 300,
 }
