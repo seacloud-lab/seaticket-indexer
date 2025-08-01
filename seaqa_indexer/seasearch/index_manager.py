@@ -252,86 +252,98 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
-    def search(self, project_uuid, connection_type, keyword, start=0, size=20):
+    def search(self, project_uuid, connection_types, keyword, start=0, size=20):
         result_docs = []
-        if connection_type == ConnectionType.SEAFILE.value:
-            index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
-            results = self.seafile_index.search(index_name, keyword, start, size)
-            result_docs = results
+        bulk_search_params = []
+        connection_type_list = connection_types.split(',') if connection_types else []
 
-        elif connection_type == ConnectionType.SITE.value:
-            index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
-            results = self.site_index.search(index_name, keyword, start, size)
-            result_docs = results
-        else:
-            bulk_search_params = []
-            # seafile_index
-            seafile_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
-            seafile_search_param = self.seafile_index.get_search_param(seafile_index_name, keyword, start, size)
-            bulk_search_params.append(seafile_search_param)
+        for connection_type in connection_type_list:
+            if connection_type == ConnectionType.SEAFILE.value:
+                seafile_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
+                seafile_search_param = self.seafile_index.get_search_param(seafile_index_name, keyword, start, size)
+                bulk_search_params.append(seafile_search_param)
+            elif connection_type == ConnectionType.SITE.value:
+                site_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
+                site_search_param = self.site_index.get_search_param(site_index_name, keyword, start, size)
+                bulk_search_params.append(site_search_param)
+            elif connection_type == ConnectionType.EMAIL.value:
+                email_index_name = gen_index_name_by_type(project_uuid, ConnectionType.EMAIL.value)
+                email_search_param = self.email_index.get_search_param(email_index_name, keyword, start, size)
+                bulk_search_params.append(email_search_param)
+            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                github_issue_index_name = gen_index_name_by_type(project_uuid, ConnectionType.GITHUB_ISSUE.value)
+                github_issue_search_param = self.github_issue_index.get_search_param(github_issue_index_name, keyword, start, size)
+                bulk_search_params.append(github_issue_search_param)
+            elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+                discourse_forum_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
+                discourse_forum_search_param = self.discourse_forum_index.get_search_param(discourse_forum_index_name, keyword, start, size)
+                bulk_search_params.append(discourse_forum_search_param)
 
-            # site index
-            site_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
-            site_search_param = self.site_index.get_search_param(site_index_name, keyword, start, size)
-            bulk_search_params.append(site_search_param)
-            query_body = json.dumps({
-                'index_queries': bulk_search_params
-            })
-            results = self.seasearch_api.unified_search(query_body)
+        query_body = json.dumps({
+            'index_queries': bulk_search_params
+        })
+        results = self.seasearch_api.unified_search(query_body)
 
-            hits = results.get('hits', []).get('hits', [])
-            total = results.get('hits', {}).get('total', {}).get('value', 0)
+        hits = results.get('hits', []).get('hits', [])
+        total = results.get('hits', {}).get('total', {}).get('value', 0)
 
-            if not hits:
-                return result_docs
-            for hit in hits:
-                index_name = hit.get('_index')
-                source = hit.get('_source')
-                score = hit.get('_score')
-                _id = hit.get('_id')
-                if index_name.startswith(ConnectionType.SEAFILE.value):
-                    repo_id = source['repo_id']
-                    connection_id = source['connection_id']
-                    repo_cache_info = redis_cache.get(repo_id)
-                    if not repo_cache_info:
-                        project_connection = self.get_project_connection_by_id(connection_id)
-                        if not project_connection:
-                            continue
-                        repo_name = json.loads(project_connection.config).get('repo_name')
-                        server_url = json.loads(project_connection.config).get('server_url')
-                        repo_cache_info = json.dumps({server_url: repo_name})
-                        redis_cache.set(repo_id, repo_cache_info, REPO_NAME_CACHE_TIME_OUT)
+        if not hits:
+            return result_docs
+        for hit in hits:
+            index_name = hit.get('_index')
+            source = hit.get('_source')
+            score = hit.get('_score')
+            _id = hit.get('_id')
+            if index_name.startswith(ConnectionType.SEAFILE.value):
+                repo_id = source['repo_id']
+                connection_id = source['connection_id']
+                repo_cache_info = redis_cache.get(repo_id)
+                if not repo_cache_info:
+                    project_connection = self.get_project_connection_by_id(connection_id)
+                    if not project_connection:
+                        continue
+                    repo_name = json.loads(project_connection.config).get('repo_name')
+                    server_url = json.loads(project_connection.config).get('server_url')
+                    repo_cache_info = json.dumps({server_url: repo_name})
+                    redis_cache.set(repo_id, repo_cache_info, REPO_NAME_CACHE_TIME_OUT)
 
-                    repo_cache_info = json.loads(repo_cache_info)
-                    server_url = list(repo_cache_info.keys())[0]
-                    repo_name = list(repo_cache_info.values())[0]
+                repo_cache_info = json.loads(repo_cache_info)
+                server_url = list(repo_cache_info.keys())[0]
+                repo_name = list(repo_cache_info.values())[0]
 
-                    r = {
-                        'filename': source['filename'],
-                        'path': source['path'],
-                        'repo_id': source['repo_id'],
-                        'connection_id': source['connection_id'],
-                        'content': source['content'],
-                        'score': score,
-                        'repo_name': repo_name,
-                        'server_url': server_url,
-                        '_id': _id,
-                        'type': 'seafile',
-                    }
-                    result_docs.append(r)
-                elif index_name.startswith(ConnectionType.SITE.value):
-                    r = {
-                        'title': source['title'],
-                        'url': source['url'],
-                        'connection_id': source['connection_id'],
-                        'content': source['content'],
-                        'score': score,
-                        '_id': _id,
-                        'type': 'site',
-                    }
-                    result_docs.append(r)
+                r = {
+                    'filename': source['filename'],
+                    'path': source['path'],
+                    'repo_id': source['repo_id'],
+                    'connection_id': source['connection_id'],
+                    'content': source['content'],
+                    'score': score,
+                    'repo_name': repo_name,
+                    'server_url': server_url,
+                    '_id': _id,
+                    'type': 'seafile',
+                }
+                result_docs.append(r)
+            elif index_name.startswith(ConnectionType.SITE.value):
+                r = {
+                    'title': source['title'],
+                    'url': source['url'],
+                    'connection_id': source['connection_id'],
+                    'content': source['content'],
+                    'score': score,
+                    '_id': _id,
+                    'type': 'site',
+                }
+                result_docs.append(r)
+            # TODO other index type
+            elif index_name.startswith(ConnectionType.EMAIL.value):
+                pass
+            elif index_name.startswith(ConnectionType.GITHUB_ISSUE.value):
+                pass
+            elif index_name.startswith(ConnectionType.DISCOURSE_FORUM.value):
+                pass
 
-            logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
-                         project_uuid, result_docs)
+        logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
+                        project_uuid, result_docs)
 
         return result_docs

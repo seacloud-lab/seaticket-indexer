@@ -75,7 +75,7 @@ def search():
 
     query = data.get('query').strip()
     project_uuid = data.get('project_uuid')
-    connection_type = data.get('connection_type')
+    connection_types = data.get('connection_types')
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
@@ -88,6 +88,6 @@ def search():
     except:
         count = 20
 
-    results = application.index_manager.search(project_uuid, connection_type, query, start=0, size=count)
+    results = application.index_manager.search(project_uuid, connection_types, query, start=0, size=count)
 
     return {'results': results}, 200
