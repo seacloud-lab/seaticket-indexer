@@ -46,8 +46,3 @@ HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
 
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
-
-# Add download middleware
-DOWNLOADER_MIDDLEWARES = {
-   "seaqa_indexer.crawler.middlewares.HttpHeadersMiddleware": 543,
-}
