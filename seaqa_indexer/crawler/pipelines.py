@@ -1,7 +1,6 @@
 import json
 import os
 
-from datetime import datetime
 from seaqa_indexer.crawler.utils import url_to_filename, get_site_dir
 
 
@@ -15,53 +14,38 @@ class BatchCrawlPipeline:
         self.site_id = spider.site_id
 
     def close_spider(self, spider):
-        pass
+        site_dir = get_site_dir(self.site_id, self.project_uuid)
+        urls_to_delete = set(spider.existing_site_info.keys()) - spider.processed_urls
+
+        for url in urls_to_delete:
+            filename = url_to_filename(url)
+            filepath = os.path.join(site_dir, filename)
+            os.remove(filepath)
+            spider.logger.info('delete filename: %s', url)
+
+        spider.logger.info(f"Update completed: processed {len(spider.processed_urls)} URLs, deleted {len(urls_to_delete)} removed pages")
 
     def process_item(self, item, spider):
-        # If content exists, save to individual file
-        if 'url' in item and 'title' in item and 'content' in item:
-            try:
-                self.save_content_to_file(
-                    item['url'],
-                    item['title'],
-                    item['content'],
-                    spider
-                )
-            except Exception as e:
-                spider.logger.error(f"Error saving content to file: {str(e)}")
-
+        self.save_content(item)
         return item
 
-    def save_content_to_file(self, url, title, content, spider):
+    def save_content(self, item):
+        url = item['url']
+        title = item['title']
+        content = item['content']
+        etag = item.get('etag') if item else None
+        last_modified = item.get('last_modified') if item else None
         filename = url_to_filename(url)
         site_dir = get_site_dir(self.site_id, self.project_uuid)
-        os.makedirs(site_dir, exist_ok=True)
-
         filepath = os.path.join(site_dir, filename)
 
-        # Get HTTP headers from response if available
-        etag = None
-        last_modified = None
-        if hasattr(spider, 'crawler') and hasattr(spider.crawler, 'stats'):
-            stats = spider.crawler.stats.get_stats()
-            if 'etag' in stats:
-                etag = stats['etag']
-            if 'last-modified' in stats:
-                last_modified = stats['last-modified']
-
-        # Prepare JSON content
-        json_content = {
+        new_content = {
             "url": url,
             "title": title,
             "content": content,
             "etag": etag,
             "last_modified": last_modified,
-            "crawled_at": datetime.now().isoformat()
         }
 
-        # Write to JSON file
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(json_content, f, ensure_ascii=False, indent=2)
-
-        spider.logger.info(f"Content saved to JSON file: {os.path.abspath(filepath)}")
-
+            json.dump(new_content, f, ensure_ascii=False, indent=2)

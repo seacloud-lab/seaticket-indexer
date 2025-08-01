@@ -1,9 +1,7 @@
-import re
-import os
-
 from urllib.parse import urlparse
 from scrapy.linkextractors import LinkExtractor
 from scrapy.spiders import CrawlSpider, Rule
+from seaqa_indexer.crawler.utils import spider_parse_item, load_existing_site_info
 
 
 class SiteCrawlerSpider(CrawlSpider):
@@ -15,34 +13,24 @@ class SiteCrawlerSpider(CrawlSpider):
 
     def __init__(self, site_url, project_uuid, site_id, *args, **kwargs):
         super(SiteCrawlerSpider, self).__init__(*args, **kwargs)
-        # Set Starting URL
         self.start_urls = [site_url]
-        # Extract the domain name from the URL.
         parsed_uri = urlparse(site_url)
         domain = '{uri.netloc}'.format(uri=parsed_uri)
         self.allowed_domains = [domain]
         self.project_uuid = project_uuid
         self.site_id = site_id
+        self.processed_urls = set()
+
+        self.existing_site_info = {}
+        self._load_existing_site_info()
+        self.logger.info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
+
+    def _load_existing_site_info(self):
+        """Load the ETag and Last-Modified information of an existing file"""
+        load_existing_site_info(self.site_id, self.project_uuid, self.existing_site_info)
 
     def parse_item(self, response):
-        """
-            Parse the page content and extract the data
-        """
-        self.logger.debug(f"Processing the page: {response.url}")
-
-        # Extract page title
-        title = response.css('title::text').get()
-
-        # Extract the main content of the page (
-        selector_list = response.xpath('//article//text()')
-        body_content = ''
-        for selector in selector_list:
-            selector_text = selector.get().strip()
-            body_content += selector_text
-
-        # Return the extracted data
-        yield {
-            'url': response.url,
-            'title': title,
-            'content': body_content
-        }
+        """Parse the page content and extract the data"""
+        item = spider_parse_item(self, response)
+        if item:
+            yield item

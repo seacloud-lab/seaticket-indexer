@@ -1,78 +1,33 @@
-import re
-import os
-
 from scrapy.spiders import SitemapSpider
+from seaqa_indexer.crawler.utils import spider_parse_item, load_existing_site_info
 
 
-def parse_sitemap_item(self, response):
-    """
-    Process each URL obtained from sitemap
-    """
-    self.logger.info(f"Processing sitemap item: {response.url}")
-    return self.parse_item(response)
+class SitemapCrawlerSpider(SitemapSpider):
+    name = 'sitemap_crawler'
+    sitemap_rules = [('.*', 'parse_item')]
+    sitemap_follow = ['.xml']
+    sitemap_urls = []
 
+    def __init__(self, site_url, project_uuid, site_id, sitemap_url, *args, **kwargs):
+        super(SitemapCrawlerSpider, self).__init__(*args, **kwargs)
+        self.start_urls = [site_url]
+        self.project_uuid = project_uuid
+        self.site_id = site_id
+        self.sitemap_urls = [sitemap_url]
+        self.parse_item = self.parse_item
+        self.processed_urls = set()
 
-def parse_item(self, response):
-    """
-    Parse page content and extract data
-    """
-    self.logger.debug(f"Processing page: {response.url}")
+        self.existing_site_info = {}
+        self._load_existing_site_info()
+        self.logger.info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
 
-    # Extract page title
-    title = response.css('title::text').get()
+    def _load_existing_site_info(self):
+        """Load the ETag and Last-Modified information of an existing file"""
+        load_existing_site_info(self.site_id, self.project_uuid, self.existing_site_info)
 
-    # Extract page body content
-    selector_list = response.xpath('//article//text()')
-    body_content = ''
-    for selector in selector_list:
-        selector_text = selector.get().strip()
-        body_content += selector_text
+    def parse_item(self, response):
+        """Parse the page content and extract the data"""
+        item = spider_parse_item(self, response)
+        if item:
+            yield item
 
-    # Return extracted data
-    yield {
-        'url': response.url,
-        'title': title,
-        'content': body_content
-    }
-
-
-def create_sitemap_spider(name, sitemap_url, site_url, project_uuid, site_id, sitemap_follow=None, sitemap_rules=None):
-    """
-    Dynamically create a SitemapSpider class
-
-    Parameters:
-        name (str): Spider name
-        sitemap_url (str): Sitemap URL
-        site_url (str): Site URL
-        project_uuid (str): project_uuid
-        site_id (str): site_id
-        sitemap_follow (list): List of sitemap types to follow
-        sitemap_rules (list): List of sitemap rules
-
-    Returns:
-        type: Dynamically created spider class
-    """
-    # Set default values
-    if sitemap_follow is None:
-        sitemap_follow = ['.xml']
-
-    if sitemap_rules is None:
-        sitemap_rules = [('.*', 'parse_item')]
-
-    # Create class attributes dictionary
-    attrs = {
-        'name': name.lower(),
-        'sitemap_urls': [sitemap_url],
-        'sitemap_follow': sitemap_follow,
-        'sitemap_rules': sitemap_rules,
-        'project_uuid': project_uuid,
-        'site_url': site_url,
-        'parse': parse_sitemap_item,
-        'parse_item': parse_item,
-        'site_id': site_id,
-    }
-
-    # Create class
-    spider_class = type(f'{name}Spider', (SitemapSpider,), attrs)
-
-    return spider_class
