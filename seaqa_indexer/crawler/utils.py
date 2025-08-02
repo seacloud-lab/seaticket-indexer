@@ -101,3 +101,7 @@ def load_existing_site_info(site_id, project_uuid, existing_site_info):
                 'etag': data.get('etag'),
                 'last_modified': data.get('last_modified'),
             }
+
+
+def get_base_dir(project_uuid):
+    return os.path.join(CRAWL_OUTPUT_DIR, project_uuid)

@@ -208,7 +208,7 @@ class SiteIndex(object):
         bulk_add_params.append(doc_info)
         self.seasearch_api.bulk(index_name, bulk_add_params)
 
-    def query_data_by_site(self, index_name, connection_id, start, size):
+    def query_data_by_connection_id(self, index_name, connection_id, start, size):
         dsl = {
             "query": {
                 "bool": {
