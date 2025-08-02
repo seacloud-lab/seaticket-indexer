@@ -284,7 +284,8 @@ class IndexManager:
     def search(self, project_uuid, connection_types, keyword, start=0, size=20):
         result_docs = []
         bulk_search_params = []
-        connection_type_list = connection_types.split(',') if connection_types else []
+        connection_type_list = connection_types.split(',') if connection_types \
+            else [connection_type.value for connection_type in ConnectionType]
 
         for connection_type in connection_type_list:
             if connection_type == ConnectionType.SEAFILE.value:
@@ -296,17 +297,11 @@ class IndexManager:
                 site_search_param = self.site_index.get_search_param(site_index_name, keyword, start, size)
                 bulk_search_params.append(site_search_param)
             elif connection_type == ConnectionType.EMAIL.value:
-                email_index_name = gen_index_name_by_type(project_uuid, ConnectionType.EMAIL.value)
-                email_search_param = self.email_index.get_search_param(email_index_name, keyword, start, size)
-                bulk_search_params.append(email_search_param)
+                pass
             elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                github_issue_index_name = gen_index_name_by_type(project_uuid, ConnectionType.GITHUB_ISSUE.value)
-                github_issue_search_param = self.github_issue_index.get_search_param(github_issue_index_name, keyword, start, size)
-                bulk_search_params.append(github_issue_search_param)
+                pass
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                discourse_forum_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
-                discourse_forum_search_param = self.discourse_forum_index.get_search_param(discourse_forum_index_name, keyword, start, size)
-                bulk_search_params.append(discourse_forum_search_param)
+                pass
 
         query_body = json.dumps({
             'index_queries': bulk_search_params
