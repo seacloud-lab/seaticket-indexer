@@ -12,7 +12,7 @@ def get_all_id_to_site_info_by_site_id(site_index, site_index_name, connection_i
     start = 0
     site_id_to_site_info = {}
     while True:
-        hits, total = site_index.query_data_by_site(site_index_name, connection_id, start, per_size)
+        hits, total = site_index.query_data_by_connection_id(site_index_name, connection_id, start, per_size)
         for hit in hits:
             source = hit['_source']
             url = source['url']

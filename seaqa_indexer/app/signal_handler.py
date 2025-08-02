@@ -18,9 +18,17 @@ def kill_index_task_worker():
     run(cmd)
 
 
+def kill_project_connetion_cleaner():
+    cmd = [
+        'pkill', '-f', 'seaqa_indexer.tasks.project_connection_cleaner'
+    ]
+    run(cmd)
+
+
 def signal_term_handler(signal, frame):
     kill_web_crawler_task_worker()
     kill_index_task_worker()
+    kill_project_connetion_cleaner()
     os._exit(0)
 
 

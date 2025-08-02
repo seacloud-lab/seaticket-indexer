@@ -48,7 +48,7 @@ class IndexTaskWorker(object):
     def clear_worker(self):
         for th in self.worker_list:
             th.join()
-        logger.info("All web crawl handler threads has stopped.")
+        logger.info("All index task threads has stopped.")
 
     def start(self):
         if not self.mq:
@@ -123,7 +123,7 @@ class IndexTaskWorker(object):
             'connection_id': connection_id,
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
-        logger.debug('%s push back task connection_id: %s, to the queue' %
+        logger.info('%s push back task connection_id: %s, to the queue' %
                      (threading.current_thread().name, connection_id))
 
     def cron_update_indexes(self):
