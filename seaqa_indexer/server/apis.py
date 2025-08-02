@@ -1,6 +1,8 @@
 import logging
 import jwt
 import json
+import hmac
+import hashlib
 from functools import wraps
 from flask import request, jsonify, Flask
 
@@ -42,6 +44,19 @@ def auth_required(func):
     return decorated
 
 
+def verify_signature(request, github_secret):
+    signature = request.headers.get('X-Hub-Signature-256')
+    if not signature:
+        return False
+    sha_name, signature = signature.split('=')
+
+    if sha_name != 'sha256':
+        return False
+    mac = hmac.new(github_secret.encode(), msg=request.data, digestmod=hashlib.sha256)
+
+    return hmac.compare_digest(mac.hexdigest(), signature)
+
+
 @application.route('/add-init-crawl-site-task', methods=['GET'])
 @auth_required
 def add_init_crawl_site_task():
@@ -58,6 +73,48 @@ def add_index_seafile_task():
     application.index_manager.add_connection_index_task(connection_id)
 
     return jsonify({'success': True}), 200
+
+
+@application.route('/add-github-issues-index-task', methods=['GET'])
+@auth_required
+def add_github_issues_index_task():
+    issue_index_id = request.args.get('issue_index_id')
+    application.index_manager.add_github_issue_index_task(issue_index_id)
+    return jsonify({'success': True}), 200
+
+
+@application.route('/webhook/github', methods=['POST'])
+def github_webhook():
+    raw_data = request.get_data()
+    payload = json.loads(raw_data)
+
+    try:
+        repo_owner = payload['repository']['owner']['login']
+        repo_name = payload['repository']['name']
+        issue_number = payload['issue']['number']
+    except KeyError as e:
+        raise ValueError(f"Missing expected field in webhook payload: {e}")
+    
+    connection_id = application.index_manager.get_connection_id_by_issue_info(repo_name, repo_owner, issue_number)
+    secret = application.index_manager.get_webhook_secret(connection_id)
+
+    if not verify_signature(request, secret):
+        return jsonify({'error': 'Invalid signature'}), 403
+
+    event = request.headers.get('X-GitHub-Event')
+    if event != 'issues':
+        return jsonify({'msg': f'Ignored event: {event}'}), 200
+
+    action = payload.get('action')
+    logger.info(f"Received webhook for issue #{issue_number}, action: {action}")
+    
+    issue_data = payload.get('issue')
+    if not issue_data:
+        return jsonify({'error': 'No issue payload'}), 400
+    
+    application.index_manager.update_github_issue_by_webhook(connection_id,issue_data, repo_owner, repo_name)
+    
+    return jsonify({'msg': 'Issue event processed'}), 200
 
 
 @application.route('/search', methods=['POST'])
