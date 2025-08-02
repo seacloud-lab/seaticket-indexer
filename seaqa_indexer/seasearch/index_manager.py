@@ -36,7 +36,7 @@ class IndexManager:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id"""
+            ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
         return connection
 
@@ -45,7 +45,7 @@ class IndexManager:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false LIMIT :start, :limit"""
+            ON p.id=pc.project_id WHERE p.deleted=false AND pc.deleted=false LIMIT :start, :limit"""
             connections = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return connections
 
@@ -245,6 +245,35 @@ class IndexManager:
             self.update_seafile_index(connection)
 
         logger.info('finish index project connection: %s, connection_type: %s', connection_id, connection_type)
+
+    def delete_index_by_project(self, project_uuid):
+        # delete seafile index
+        seafile_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
+        self.seafile_index.delete_index_by_index_name(seafile_index_name)
+
+        # delete site index
+        site_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
+        self.site_index.delete_index_by_index_name(site_index_name)
+
+    def delete_index_by_connection(self, project_uuid, connection_id, connection_type):
+        index_name = gen_index_name_by_type(project_uuid, connection_type)
+        index = None
+        if connection_type == ConnectionType.SITE.value:
+            index = self.site_index
+        elif connection_type == ConnectionType.SEAFILE.value:
+            index = self.seafile_index
+        start = 0
+        per_size = 100
+        while True:
+            hits, total = index.query_data_by_connection_id(index_name, connection_id, start, per_size)
+            if not hits:
+                return
+            ids = []
+            for hit in hits:
+                _id = hit['_id']
+                ids.append(_id)
+
+            self.seafile_index.delete_indexes_by_ids(index_name, ids)
 
     def add_connection_index_task(self, connection_id):
         msg_content = {
