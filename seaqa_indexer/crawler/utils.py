@@ -1,11 +1,16 @@
-from urllib.parse import urljoin, urlparse
+import logging
 import os
 import re
 import hashlib
 import json
 import urllib.parse
+
+from sqlalchemy.orm import declarative_base
+
 from seaqa_indexer.config import CRAWL_OUTPUT_DIR
 from seaqa_indexer.crawler.extractor import extract_html
+
+logger = logging.getLogger(__name__)
 
 
 def url_to_filename(url):

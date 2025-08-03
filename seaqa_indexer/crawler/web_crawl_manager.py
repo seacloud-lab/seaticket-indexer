@@ -21,6 +21,7 @@ from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.crawler.utils import get_site_dir
+from seaqa_indexer.utils.constants import ConnectionType
 
 
 logger = logging.getLogger(__name__)
@@ -38,19 +39,19 @@ class WebCrawlManager:
 
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
-    def get_site_by_id(self, site_id):
+    def get_project_connection_by_id(self, pc_id, conn_type='site'):
         with self.db_session() as session:
-            sql = """SELECT pc.id as site_id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid
-             FROM project_connection pc 
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid
+            FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='site' AND pc.id=:site_id"""
-            site = session.execute(text(sql), {'site_id': site_id}).fetchone()
-            return site
+            ON p.id=pc.project_id WHERE p.deleted=false AND pc.type=:conn_type AND pc.id=:pc_id"""
+            connection = session.execute(text(sql), {'pc_id': pc_id, 'conn_type': conn_type}).fetchone()
+            return connection
 
-    def update_site_status(self, site_id, status):
+    def update_status(self, connection_id, status):
         with self.db_session() as session:
-            cmd = """UPDATE project_connection SET status = :status WHERE id = :site_id"""
-            session.execute(text(cmd), {'site_id': site_id, 'status': status})
+            cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
+            session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
             session.commit()
 
     def update_site_status_and_crawl_time(self, site_id, status):
@@ -83,18 +84,18 @@ class WebCrawlManager:
 
     def crawl_site(self, site_id):
         """Start crawler process"""
-        site = self.get_site_by_id(site_id)
+        site = self.get_project_connection_by_id(site_id)
         if not site:
             logger.warning('site: %s not found', site_id)
             return
         if site.status == CrawlStatus.CRAWLING:
             logger.warning('site: %s is crawling', site_id)
             return
-        self.update_site_status(site_id, CrawlStatus.CRAWLING)
+        self.update_status(site_id, CrawlStatus.CRAWLING)
 
         logger.info(f"Start crawling site {site_id}")
 
-        site_id = site.site_id
+        site_id = site.id
         site_config = json.loads(site.config)
         site_url = site_config.get('url')
         project_uuid = str(site.project_uuid)
@@ -103,7 +104,7 @@ class WebCrawlManager:
 
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
-            self.prepare_crawler,
+            self.prepare_site_crawler,
             site_id,
             site_url,
             site_config,
@@ -184,7 +185,7 @@ class WebCrawlManager:
         d.addErrback(lambda failure: self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure)))
         return d
 
-    def prepare_crawler(self, site_id, site_url, site_config, project_uuid):
+    def prepare_site_crawler(self, site_id, site_url, site_config, project_uuid):
         """Prepare crawler parameters, execute in thread pool"""
         sitemap_url = site_config.get('sitemap_url')
 
@@ -237,9 +238,9 @@ class WebCrawlManager:
                     logger.warning('update crawl site failed, site_id: %s, error: %s', site_id, e)
                     self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, e)
 
-    def add_crawl_site_task(self, site_id):
+    def add_crawl_task(self, connection_id):
         msg_content = {
-            'site_id': site_id,
+            'connection_id': connection_id,
         }
         self.mq.lpush('web_crawl_task', json.dumps(msg_content))
 

@@ -7,6 +7,8 @@ from flask import request, jsonify, Flask
 from seaqa_indexer import config
 from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
 
+from seaqa_indexer.utils.constants import ConnectionType
+
 application = Flask(__name__)
 
 logger = logging.getLogger(__name__)
@@ -43,11 +45,17 @@ def auth_required(func):
     return decorated
 
 
-@application.route('/add-init-crawl-site-task', methods=['GET'])
+@application.route('/add-init-crawl-task', methods=['GET'])
 @auth_required
-def add_init_crawl_site_task():
-    site_id = request.args.get('site_id')
-    application.web_crawl_manager.add_crawl_site_task(site_id)
+def add_init_crawl_task():
+    connection_id = request.args.get('connection_id')
+    task_type = request.args.get('type')
+    if task_type == ConnectionType.SITE.value:
+        application.web_crawl_manager.add_crawl_task(connection_id)
+    elif task_type == ConnectionType.DISCOURSE_FORUM.value:
+        application.discourse_sync_manager.add_discourse_sync_task(connection_id)
+    else:
+        return jsonify({'success': False, 'error_msg': f'Unsupported type: {task_type}'}), 400
 
     return jsonify({'success': True}), 200
 
@@ -138,3 +146,31 @@ def search():
     results = application.index_manager.search(project_uuid, connection_types, query, start=0, size=count)
 
     return {'results': results}, 200
+
+
+@application.route('/discourse/webhook/', methods=['POST'])
+@auth_required
+def discourse_webhook():
+    """Handle Discourse webhook callback"""
+    connection_id = request.args.get('connection_id')
+    
+    if not connection_id:
+        return jsonify({'error': 'Missing connection_id'}), 400
+    
+    data = request.get_json(force=True)
+    event_type = request.headers.get('X-Discourse-Event')
+    
+    if not data:
+        return jsonify({'error': 'No payload data'}), 400
+    
+    try:
+        discourse_sync_manager = application.discourse_sync_manager
+        result = discourse_sync_manager.handle_webhook_request(connection_id, data, event_type)
+        
+        if result['success']:
+            return {'status': 'success', 'message': result['message']}, result['status_code']
+        else:
+            return {'status': 'error', 'message': result['error']}, result['status_code']
+    except Exception as e:
+        logger.error(f"Discourse webhook error: {e}")
+        return {'error': 'Internal Server Error'}, 500
