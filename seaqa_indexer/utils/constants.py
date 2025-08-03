@@ -7,6 +7,11 @@ class CrawlStatus:
     COMPLETED = 'completed'
     FAILED = 'failed'
 
+class SyncStatus:
+    PENDING = 'pending'
+    SYNCING = 'syncing'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
 
 class ConnectionType(Enum):
     EMAIL = 'email'
