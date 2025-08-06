@@ -104,6 +104,8 @@ class ProjectConnectionCleaner(object):
             site_dir = get_site_dir(connection_id, project_uuid)
             if os.path.exists(site_dir):
                 shutil.rmtree(site_dir)
+        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+            self.index_manager.delete_issues_from_db(connection_id)
 
         # delete db record
         self.delete_deleted_connection(connection_id)

@@ -124,8 +124,9 @@ class GithubIssuesSyncManager:
 
     def update_github_issues_by_webhook(self,issues_sync_id, issue, repo_owner, repo_name):
         self.save_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
-        new_indexed_at = datetime.datetime.now(datetime.UTC)
-        self.index_manager.finish_index(issues_sync_id, new_indexed_at)
+        new_updated_at = datetime.datetime.now(datetime.UTC)
+        self.add_issues_index_task(issues_sync_id)
+        self.index_manager.finish_index(issues_sync_id,indexed_at=None, updated_at=new_updated_at)
 
     def add_github_issue_index_task(self, issues_sync_id):
         logger.info('add github issue index task: %s', issues_sync_id)
@@ -152,13 +153,14 @@ class GithubIssuesSyncManager:
 
         github_api = GitHubAPI(token, repo_owner, repo_name, issues_sync_id)
         since = old_last_modified.isoformat() + "Z" if old_last_modified else None
-        new_indexed_at = datetime.datetime.now(datetime.UTC)
+        new_updated_at = datetime.datetime.now(datetime.UTC)
         self.update_issues_sync_status(issues_sync_id, CrawlStatus.CRAWLING)
         for issue in github_api.list_all_issues(since=since):
             if 'pull_request' in issue:
                 continue
             self.save_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
-        self.index_manager.finish_index(issues_sync_id, new_indexed_at)
+        self.index_manager.finish_index(issues_sync_id,indexed_at=None, updated_at=new_updated_at)
+        self.add_issues_index_task(issues_sync_id)
         self.update_issues_sync_status(issues_sync_id, CrawlStatus.COMPLETED)
 
     def update_issues_sync_status(self, issues_sync_id, status):
@@ -195,3 +197,9 @@ class GithubIssuesSyncManager:
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='github_issue' LIMIT :start, :limit"""
             project_issues = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return project_issues
+
+    def add_issues_index_task(self, issues_sync_id):
+        msg_content = {
+            'connection_id': issues_sync_id,
+        }
+        self.mq.lpush('index_task', json.dumps(msg_content))
