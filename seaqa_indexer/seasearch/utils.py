@@ -45,6 +45,23 @@ def get_path_to_index_info_by_connection_id(seafile_index, index_name, connectio
             break
     return path_to_index_info
 
+def get_all_id_to_issues_info_by_issues_sync_id(github_issues_index, site_index_name, connection_id):
+    per_size = 1000
+    start = 0
+    issues_sync_id_to_issues_info = {}
+    while True:
+        hits, total = github_issues_index.query_data_by_connection_id(site_index_name, connection_id, start, per_size)
+        for hit in hits:
+            source = hit['_source']
+            url = source['url']
+            key = md5(str(connection_id) + url)
+            issues_sync_id_to_issues_info[key] = source
+
+        start += per_size
+        if len(hits) < per_size:
+            break
+    return issues_sync_id_to_issues_info
+
 
 def get_content_by_download_link(download_url):
     response = requests.get(download_url)
