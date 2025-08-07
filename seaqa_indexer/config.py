@@ -31,6 +31,15 @@ try:
 except ImportError:
     pass
 
+CONF_PATH = os.environ.get('CONF_PATH', '')
+try:
+    if os.path.exists(CONF_PATH):
+        sys.path.insert(0, CONF_PATH)
+    from seaqa_indexer_settings import *
+except ImportError as e:
+    pass
+
+
 JWT_PRIVATE_KEY = os.environ.get('JWT_PRIVATE_KEY', '')
 
 MYSQL_HOST = os.getenv('SEAQA_MYSQL_DB_HOST') or MYSQL_HOST
