@@ -51,7 +51,7 @@ class GithubIssuesSyncTaskWorker(object):
     def clear_worker(self):
         for th in self.worker_list:
             th.join()
-        logger.info("All web crawl handler threads has stopped.")
+        logger.info("All issues sync handler threads has stopped.")
 
     def start(self):
         if not self.mq:

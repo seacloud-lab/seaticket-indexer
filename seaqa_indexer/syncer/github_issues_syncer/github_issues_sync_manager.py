@@ -29,11 +29,11 @@ class GithubIssuesSyncManager:
                 INSERT INTO github_issues (
                     id, repo_owner, repo_name, issue_number, title, body, state,
                     created_at, updated_at, closed_at, labels,
-                    comments, issues_sync_id, author, url
+                    comments, issues_sync_id, author, url, need_index
                 ) VALUES (
                     :id, :repo_owner, :repo_name, :issue_number, :title, :body, :state,
                     :created_at, :updated_at, :closed_at, :labels,
-                    :comments, :issues_sync_id, :author, :url
+                    :comments, :issues_sync_id, :author, :url, :need_index
                 )
                 ON DUPLICATE KEY UPDATE
                     title = VALUES(title),
@@ -44,7 +44,8 @@ class GithubIssuesSyncManager:
                     updated_at = VALUES(updated_at),
                     closed_at = VALUES(closed_at),
                     labels = VALUES(labels),
-                    comments = VALUES(comments)
+                    comments = VALUES(comments),
+                    need_index = 1
             """)
 
             labels = issue.get('labels', [])
@@ -68,7 +69,8 @@ class GithubIssuesSyncManager:
                     ('closed_at') else None,
                 'labels': json.dumps(label_names),
                 'comments': issue.get('comments'),
-                'issues_sync_id': str(issues_sync_id)
+                'issues_sync_id': str(issues_sync_id),
+                'need_index': 1,
             })
             session.commit()
 
@@ -128,8 +130,8 @@ class GithubIssuesSyncManager:
         self.add_issues_index_task(issues_sync_id)
         self.index_manager.finish_index(issues_sync_id,indexed_at=None, updated_at=new_updated_at)
 
-    def add_github_issue_index_task(self, issues_sync_id):
-        logger.info('add github issue index task: %s', issues_sync_id)
+    def add_github_issues_sync_task(self, issues_sync_id):
+        logger.info('add github issues sync task: %s', issues_sync_id)
         msg_content = {
             'issues_sync_id': issues_sync_id,
         }
