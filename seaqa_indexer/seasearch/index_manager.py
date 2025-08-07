@@ -303,6 +303,9 @@ class IndexManager:
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
                 pass
 
+        if not bulk_search_params:
+            return []
+
         query_body = json.dumps({
             'index_queries': bulk_search_params
         })
