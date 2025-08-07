@@ -5,6 +5,7 @@ import hashlib
 import json
 import urllib.parse
 from seaqa_indexer.config import CRAWL_OUTPUT_DIR
+from seaqa_indexer.crawler.extractor import extract_html
 
 
 def url_to_filename(url):
@@ -69,12 +70,7 @@ def spider_parse_item(spider, response):
     title = response.css('title::text').get()
 
     # Extract page body content
-    selector_list = response.xpath('//article//text()')
-    body_content = ''
-    for selector in selector_list:
-        selector_text = selector.get().strip()
-        body_content += selector_text
-
+    body_content = extract_html(url, response.text)
     return {
         'url': url,
         'title': title,
