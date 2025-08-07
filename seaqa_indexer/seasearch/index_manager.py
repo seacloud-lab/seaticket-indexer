@@ -12,7 +12,7 @@ from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_id_to_site_info_by_site_id, \
-    get_path_to_index_info_by_connection_id, get_content_by_download_link, get_all_id_to_issues_info_by_issues_sync_id
+    get_path_to_index_info_by_connection_id, get_content_by_download_link
 from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seahub_api import SeahubAPI, FileNotFoundException
@@ -23,6 +23,7 @@ from seaqa_indexer.app.event_redis import redis_cache
 
 logger = logging.getLogger(__name__)
 
+BATCH_SIZE = 500
 
 class IndexManager:
     def __init__(self):
@@ -65,13 +66,13 @@ class IndexManager:
             session.execute(text(cmd), params)
             session.commit()
 
-    def get_all_issues_from_db(self, issues_sync_id):
+    def get_all_need_index_issues_from_db(self, issues_sync_id):
         with self.db_session() as session:
             sql = """
                    SELECT id, repo_owner, repo_name, issue_number, title, body, state, created_at,
                           updated_at, closed_at, labels, comments, author, url
                    FROM github_issues
-                   WHERE issues_sync_id = :issues_sync_id
+                   WHERE issues_sync_id = :issues_sync_id AND need_index = 1
                """
             rows = session.execute(text(sql), {'issues_sync_id': issues_sync_id}).fetchall()
         return rows
@@ -82,6 +83,13 @@ class IndexManager:
             sql = text("DELETE FROM github_issues WHERE id = :id")
             session.execute(sql, {'id': issues_sync_id})
             session.commit()
+
+    def update_issues_index_status(self, id_issue):
+        with self.db_session() as session:
+            sql = text("UPDATE github_issues SET need_index = 0 WHERE id = :id")
+            session.execute(sql, {'id': id_issue})
+            session.commit()
+
 
     def update_site_index(self, project_connection):
         update_at = project_connection.updated_at
@@ -238,38 +246,35 @@ class IndexManager:
 
         new_indexed_at = datetime.datetime.now(datetime.UTC)
 
-        old_index_map = get_all_id_to_issues_info_by_issues_sync_id(self.github_issues_index, index_name, issues_sync_id)
-        old_index_ids_set = set(old_index_map.keys())
-        new_index_ids_set = set()
+        issues = self.get_all_need_index_issues_from_db(issues_sync_id)
+        total_issues = len(issues)
 
-        issues = self.get_all_issues_from_db(issues_sync_id)
-        for issue in issues:
-            issue_id = issue.id
-            url = issue.url
-            issue_dict = {
-                'id': issue_id,
-                'number': issue.issue_number,
-                'title': issue.title,
-                'body': issue.body,
-                'state': issue.state,
-                'created_at': issue.created_at.isoformat() if issue.created_at else None,
-                'updated_at': issue.updated_at.isoformat() if issue.updated_at else None,
-                'closed_at': issue.closed_at.isoformat() if issue.closed_at else None,
-                'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
-                'comments': issue.comments,
-                'user': {'login': issue.author},
-                'url': issue.url
-            }
+        for start in range(0, total_issues, BATCH_SIZE):
+            end = start + BATCH_SIZE
+            batch = issues[start:end]
+            logger.info(f"Processing batch {start} to {end}")
 
-            new_index_ids_set.add(issue_id)
-            key = md5(str(issues_sync_id) + url)
-            new_index_ids_set.add(key)
-            self.github_issues_index.add_or_update_issue(index_name, issues_sync_id, repo_owner, repo_name, issue_dict)
+            for issue in batch:
+                id_issue = issue.id
+                url = issue.url
+                issue_dict = {
+                    'id': id_issue,
+                    'number': issue.issue_number,
+                    'title': issue.title,
+                    'body': issue.body,
+                    'state': issue.state,
+                    'created_at': issue.created_at.isoformat() if issue.created_at else None,
+                    'updated_at': issue.updated_at.isoformat() if issue.updated_at else None,
+                    'closed_at': issue.closed_at.isoformat() if issue.closed_at else None,
+                    'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
+                    'comments': issue.comments,
+                    'user': {'login': issue.author},
+                    'url': issue.url
+                }
 
-        to_delete = old_index_ids_set - new_index_ids_set
-        ids_to_delete = [old_index_map[k] for k in to_delete]
+                self.github_issues_index.add_or_update_issue(index_name, issues_sync_id, repo_owner, repo_name, issue_dict)
+                self.update_issues_index_status(id_issue)
 
-        self.github_issues_index.delete_indexes_by_ids(index_name, ids_to_delete)
         self.finish_index(issues_sync_id, new_indexed_at, config=config)
 
     def update_indexes(self):
