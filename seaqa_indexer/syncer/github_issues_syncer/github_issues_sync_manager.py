@@ -29,11 +29,11 @@ class GithubIssuesSyncManager:
                 INSERT INTO github_issues (
                     id, repo_owner, repo_name, issue_number, title, body, state,
                     created_at, updated_at, closed_at, labels,
-                    comments, issues_sync_id, author, url, need_index
+                    comments, connection_id, author, url, need_index
                 ) VALUES (
                     :id, :repo_owner, :repo_name, :issue_number, :title, :body, :state,
                     :created_at, :updated_at, :closed_at, :labels,
-                    :comments, :issues_sync_id, :author, :url, :need_index
+                    :comments, :connection_id, :author, :url, :need_index
                 )
                 ON DUPLICATE KEY UPDATE
                     title = VALUES(title),
@@ -69,7 +69,7 @@ class GithubIssuesSyncManager:
                     ('closed_at') else None,
                 'labels': json.dumps(label_names),
                 'comments': issue.get('comments'),
-                'issues_sync_id': str(issues_sync_id),
+                'connection_id': str(issues_sync_id),
                 'need_index': 1,
             })
             session.commit()
@@ -79,8 +79,8 @@ class GithubIssuesSyncManager:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:issues_sync_id AND pc.deleted=false"""
-            connection = session.execute(text(sql), {'issues_sync_id': issues_sync_id}).fetchone()
+            ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
+            connection = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchone()
         return connection
 
     def delete_issues_from_db(self, ids):
@@ -93,7 +93,7 @@ class GithubIssuesSyncManager:
     def get_issues_sync_id_by_issue_info(self, repo_name, repo_owner):
         with self.db_session() as session:
             sql = """
-                SELECT issues_sync_id
+                SELECT connection_id
                 FROM github_issues
                 WHERE repo_owner = :repo_owner
                 AND repo_name = :repo_name
@@ -107,12 +107,12 @@ class GithubIssuesSyncManager:
                 }
             ).fetchone()
 
-        return result.issues_sync_id if result else None
+        return result.connection_id if result else None
 
     def get_webhook_secret(self, issues_sync_id):
         with self.db_session() as session:
-            cmd = "SELECT config FROM project_connection WHERE id = :issues_sync_id"
-            result = session.execute(text(cmd), {'issues_sync_id': issues_sync_id}).fetchone()
+            cmd = "SELECT config FROM project_connection WHERE id = :connection_id"
+            result = session.execute(text(cmd), {'connection_id': issues_sync_id}).fetchone()
             if not result:
                 return None
             config_str = result[0]

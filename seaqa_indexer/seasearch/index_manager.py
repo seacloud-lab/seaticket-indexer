@@ -72,16 +72,16 @@ class IndexManager:
                    SELECT id, repo_owner, repo_name, issue_number, title, body, state, created_at,
                           updated_at, closed_at, labels, comments, author, url
                    FROM github_issues
-                   WHERE issues_sync_id = :issues_sync_id AND need_index = 1
+                   WHERE connection_id = :connection_id AND need_index = 1
                """
-            rows = session.execute(text(sql), {'issues_sync_id': issues_sync_id}).fetchall()
+            rows = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchall()
         return rows
 
 
     def delete_issues_from_db(self,issues_sync_id):
         with self.db_session() as session:
-            sql = text("DELETE FROM github_issues WHERE id = :id")
-            session.execute(sql, {'id': issues_sync_id})
+            sql = text("DELETE FROM github_issues WHERE connection_id = :connection_id")
+            session.execute(sql, {'connection_id': issues_sync_id})
             session.commit()
 
     def update_issues_index_status(self, id_issue):

@@ -31,13 +31,12 @@ class GitHubIssuesIndex(object):
             },
             'title': {
                 'type': 'text',
+                'analyzer': 'gse_standard_analyzer',
                 'fields': {
-                    'ngram': {
-                        'type': 'text',
-                        'index': True,
-                        'analyzer': 'issue_title_ngram_analyzer',
-                    },
-                },
+                    'keyword': {
+                        'type': 'keyword'
+                    }
+                }
             },
             'body': {
                 'type': 'text',
@@ -71,13 +70,6 @@ class GitHubIssuesIndex(object):
     index_settings = {
         'analysis': {
             'analyzer': {
-                'issue_title_ngram_analyzer': {
-                    'type': 'custom',
-                    'tokenizer': 'issue_index_ngram_tokenizer',
-                    'filter': [
-                        'lowercase',
-                    ],
-                },
                 'gse_standard_analyzer': {
                     'type': 'gse_standard',
                     "char_filter": [
@@ -90,17 +82,6 @@ class GitHubIssuesIndex(object):
                     "type": "mapping",
                     "mappings": [
                         "\n =>  "
-                    ]
-                }
-            },
-            'tokenizer': {
-                'issue_index_ngram_tokenizer': {
-                    'type': 'ngram',
-                    'min_gram': 4,
-                    'max_gram': 4,
-                    'token_chars': [
-                        'letter',
-                        'digit'
                     ]
                 }
             }
