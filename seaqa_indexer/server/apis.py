@@ -78,7 +78,7 @@ def add_index_seafile_task():
 @application.route('/add-github-issues-index-task', methods=['GET'])
 @auth_required
 def add_github_issues_index_task():
-    issues_sync_id = request.args.get('issue_index_id')
+    issues_sync_id = request.args.get('issues_sync_id')
     application.github_issues_sync_manager.add_github_issues_sync_task(issues_sync_id)
     return jsonify({'success': True}), 200
 
