@@ -70,7 +70,7 @@ class IndexManager:
         with self.db_session() as session:
             sql = """
                    SELECT id, repo_owner, repo_name, issue_number, title, body, state, created_at,
-                          updated_at, closed_at, labels, comments, author, url
+                          updated_at, closed_at, labels, comments, author, url, deleted
                    FROM github_issues
                    WHERE connection_id = :connection_id AND need_index = 1
                """
@@ -82,6 +82,12 @@ class IndexManager:
         with self.db_session() as session:
             sql = text("DELETE FROM github_issues WHERE connection_id = :connection_id")
             session.execute(sql, {'connection_id': issues_sync_id})
+            session.commit()
+
+    def delete_issue_from_db(self,id_issue):
+        with self.db_session() as session:
+            sql = text("DELETE FROM github_issues WHERE id = :id")
+            session.execute(sql, {'id': id_issue})
             session.commit()
 
     def update_issues_index_status(self, id_issue):
@@ -240,11 +246,12 @@ class IndexManager:
             logger.warning('project connection: %s does not update completed.')
             return
 
-        index_name = gen_index_name_by_type(project_uuid, project_connection.type)
-
-        self.github_issues_index.create_index_if_missing(index_name)
+        issues_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
+        self.github_issues_index.create_index_if_missing(issues_index_name)
 
         new_indexed_at = datetime.datetime.now(datetime.UTC)
+
+        need_cleared_issues_index_set = set()
 
         issues = self.get_all_need_index_issues_from_db(issues_sync_id)
         total_issues = len(issues)
@@ -271,9 +278,16 @@ class IndexManager:
                     'user': {'login': issue.author},
                     'url': issue.url
                 }
+                if issue.deleted == 1:
+                    self.delete_issue_from_db(id_issue)
+                    key = md5(str(issues_sync_id) + url)
+                    need_cleared_issues_index_set.add(key)
+                else:
+                    self.github_issues_index.add_or_update_issue(issues_index_name, issues_sync_id, repo_owner, repo_name, issue_dict)
+                    self.update_issues_index_status(id_issue)
 
-                self.github_issues_index.add_or_update_issue(index_name, issues_sync_id, repo_owner, repo_name, issue_dict)
-                self.update_issues_index_status(id_issue)
+        if need_cleared_issues_index_set:
+            self.github_issues_index.delete_indexes_by_ids(issues_index_name, need_cleared_issues_index_set)
 
         self.finish_index(issues_sync_id, new_indexed_at, config=config)
 

@@ -12,7 +12,6 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
-from seaqa_indexer.seasearch.index_manager import IndexManager
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,6 @@ class GithubIssuesSyncManager:
     def __init__(self):
         self.db_session = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
-        self.index_manager = IndexManager()
 
 
     def save_issues_to_db(self, issues_sync_id, repo_owner, repo_name, issue):
@@ -83,11 +81,26 @@ class GithubIssuesSyncManager:
             connection = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchone()
         return connection
 
-    def delete_issues_from_db(self, ids):
+    def tag_issue_deleted(self, issues_sync_id, repo_owner, repo_name, issue_number):
         with self.db_session() as session:
-            sql = text("DELETE FROM github_issues WHERE id = :id")
-            for id_issue in ids:
-                session.execute(sql, {'id': id_issue})
+            sql = text("""
+                UPDATE github_issues
+                SET deleted = 1
+                WHERE connection_id = :connection_id AND repo_owner = :repo_owner AND issue_number = :issue_number
+            """)
+            session.execute(sql, {
+                'connection_id': issues_sync_id,
+                'repo_owner': repo_owner,
+                'repo_name': repo_name,
+                'issue_number': issue_number
+            })
+            session.commit()
+
+    def finish_sync(self, issues_sync_id, updated_at):
+        with self.db_session() as session:
+            cmd = """UPDATE project_connection SET updated_at=:updated_at WHERE id = :connection_id"""
+            params = {'connection_id': issues_sync_id, 'updated_at': updated_at}
+            session.execute(text(cmd), params)
             session.commit()
 
     def get_issues_sync_id_by_issue_info(self, repo_name, repo_owner):
@@ -124,11 +137,13 @@ class GithubIssuesSyncManager:
 
             return config.get('webhook_secret')
 
-    def update_github_issues_by_webhook(self,issues_sync_id, issue, repo_owner, repo_name):
+    def update_github_issues_by_webhook(self,issues_sync_id, issue, repo_owner, repo_name, issue_number, action):
         self.save_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
+        if action == 'deleted':
+            self.tag_issue_deleted(issues_sync_id, repo_owner, repo_name, issue_number)
         new_updated_at = datetime.datetime.now(datetime.UTC)
         self.add_issues_index_task(issues_sync_id)
-        self.index_manager.finish_index(issues_sync_id,indexed_at=None, updated_at=new_updated_at)
+        self.finish_sync(issues_sync_id, new_updated_at)
 
     def add_github_issues_sync_task(self, issues_sync_id):
         logger.info('add github issues sync task: %s', issues_sync_id)
@@ -139,6 +154,11 @@ class GithubIssuesSyncManager:
 
     def issues_sync(self, issues_sync_id):
         project_connection = self.get_issues_config_by_id(issues_sync_id)
+        issues_sync_status = project_connection.status
+        if issues_sync_status == CrawlStatus.CRAWLING:
+            logger.warning('issues: %s is crawling', issues_sync_id)
+            return
+        self.update_issues_sync_status(issues_sync_id, CrawlStatus.CRAWLING)
         config = decrypt_config(json.loads(project_connection.config))
         server_url = config.get('repository')
         token = config.get('token')
@@ -151,19 +171,28 @@ class GithubIssuesSyncManager:
                 repo_owner, repo_name = parts[0], parts[1]
 
         except Exception as e:
-            logger.error(f"URL format is invalid: {e}")
+            logger.warning(f"URL format is invalid: {e}")
+            return
 
         github_api = GitHubAPI(token, repo_owner, repo_name, issues_sync_id)
         since = old_last_modified.isoformat() + "Z" if old_last_modified else None
         new_updated_at = datetime.datetime.now(datetime.UTC)
-        self.update_issues_sync_status(issues_sync_id, CrawlStatus.CRAWLING)
-        for issue in github_api.list_all_issues(since=since):
+
+        try:
+            list_all_issues = github_api.list_all_issues(since=since)
+        except Exception as e:
+            logger.error(f"get all issues failed: {e}")
+            return
+
+        for issue in list_all_issues:
             if 'pull_request' in issue:
                 continue
             self.save_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
-        self.index_manager.finish_index(issues_sync_id,indexed_at=None, updated_at=new_updated_at)
-        self.add_issues_index_task(issues_sync_id)
+
+        self.finish_sync(issues_sync_id, new_updated_at)
         self.update_issues_sync_status(issues_sync_id, CrawlStatus.COMPLETED)
+        logger.info('Finish github issues sync task: %s', issues_sync_id)
+        self.add_issues_index_task(issues_sync_id)
 
     def update_issues_sync_status(self, issues_sync_id, status):
         with self.db_session() as session:

@@ -111,7 +111,7 @@ def github_webhook():
     if not issues_data:
         return jsonify({'error': 'No issue payload'}), 400
 
-    application.github_issues_sync_manager.update_github_issues_by_webhook(issues_sync_id, issues_data, repo_owner, repo_name)
+    application.github_issues_sync_manager.update_github_issues_by_webhook(issues_sync_id, issues_data, repo_owner, repo_name, issue_number, action)
 
     return jsonify({'msg': 'Issue event processed'}), 200
 

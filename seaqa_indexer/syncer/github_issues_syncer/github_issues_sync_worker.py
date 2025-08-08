@@ -91,7 +91,6 @@ class GithubIssuesSyncTaskWorker(object):
 
     def issues_sync(self, issues_sync_id):
         try:
-            self.issues_sync_manager.update_issues_sync_status(issues_sync_id, CrawlStatus.CRAWLING)
             self.issues_sync_manager.issues_sync(issues_sync_id)
         except Exception as e:
             logger.exception('sync issues: %s failed, error: %s', issues_sync_id, e)
