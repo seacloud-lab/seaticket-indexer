@@ -72,7 +72,7 @@ class GithubIssuesSyncManager:
             })
             session.commit()
 
-    def get_issues_config_by_id(self, issues_sync_id):
+    def get_issues_connection_by_id(self, issues_sync_id):
         with self.db_session() as session:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
@@ -134,8 +134,9 @@ class GithubIssuesSyncManager:
                 return None
 
             config = json.loads(config_str)
+            webhook_secret = decrypt_config(config).get('webhook_secret')
 
-            return config.get('webhook_secret')
+            return webhook_secret
 
     def update_github_issues_by_webhook(self,issues_sync_id, issue, repo_owner, repo_name, issue_number, action):
         self.save_or_update_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
@@ -153,7 +154,7 @@ class GithubIssuesSyncManager:
         self.mq.lpush('issues_sync_task', json.dumps(msg_content))
 
     def issues_sync(self, issues_sync_id):
-        project_connection = self.get_issues_config_by_id(issues_sync_id)
+        project_connection = self.get_issues_connection_by_id(issues_sync_id)
         issues_sync_status = project_connection.status
         if issues_sync_status == CrawlStatus.CRAWLING:
             logger.warning('issues: %s is crawling', issues_sync_id)
