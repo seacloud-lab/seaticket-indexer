@@ -238,7 +238,6 @@ class IndexManager:
     def update_github_issues_index(self, project_connection):
         issues_sync_id = project_connection.id
         config = decrypt_config(json.loads(project_connection.config))
-        old_last_modified = project_connection.updated_at
         project_uuid = project_connection.project_uuid
         repo_owner, repo_name = "", ""
         status = project_connection.status
