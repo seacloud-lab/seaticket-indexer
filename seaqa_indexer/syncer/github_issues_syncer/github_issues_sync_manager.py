@@ -25,11 +25,11 @@ class GithubIssuesSyncManager:
         with self.db_session() as session:
             sql = text("""
                 INSERT INTO github_issues (
-                    id, repo_owner, repo_name, issue_number, title, body, state,
+                    issue_id, repo_owner, repo_name, issue_number, title, body, state,
                     created_at, updated_at, closed_at, labels,
                     comments, connection_id, author, url, need_index
                 ) VALUES (
-                    :id, :repo_owner, :repo_name, :issue_number, :title, :body, :state,
+                    :issue_id, :repo_owner, :repo_name, :issue_number, :title, :body, :state,
                     :created_at, :updated_at, :closed_at, :labels,
                     :comments, :connection_id, :author, :url, :need_index
                 )
@@ -50,7 +50,7 @@ class GithubIssuesSyncManager:
             label_names = [label['name'] for label in labels if 'name' in label]
 
             session.execute(sql, {
-                'id': issue['id'],
+                'issue_id': issue['id'],
                 'repo_owner': repo_owner,
                 'repo_name': repo_name,
                 'issue_number': issue['number'],
@@ -102,25 +102,6 @@ class GithubIssuesSyncManager:
             params = {'connection_id': issues_sync_id, 'updated_at': updated_at,  'status': status}
             session.execute(text(cmd), params)
             session.commit()
-
-    def get_issues_sync_id_by_issue_info(self, repo_name, repo_owner):
-        with self.db_session() as session:
-            sql = """
-                SELECT connection_id
-                FROM github_issues
-                WHERE repo_owner = :repo_owner
-                AND repo_name = :repo_name
-                LIMIT 1
-            """
-            result = session.execute(
-                text(sql),
-                {
-                    'repo_owner': repo_owner,
-                    'repo_name': repo_name,
-                }
-            ).fetchone()
-
-        return result.connection_id if result else None
 
     def get_webhook_secret(self, issues_sync_id):
         with self.db_session() as session:

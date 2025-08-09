@@ -83,10 +83,18 @@ def add_github_issues_index_task():
     return jsonify({'success': True}), 200
 
 
-@application.route('/webhook/github', methods=['POST'])
+@application.route('/webhook/github/', methods=['POST'])
 def github_webhook():
-    raw_data = request.get_data()
-    payload = json.loads(raw_data.decode())
+    issues_sync_id = request.args.get('connection_id')
+
+    if not issues_sync_id:
+        return jsonify({'error': 'Missing connection_id'}), 400
+
+    secret = application.github_issues_sync_manager.get_webhook_secret(issues_sync_id)
+    if not verify_signature(request, secret):
+        return jsonify({'error': 'Invalid signature'}), 403
+
+    payload = request.get_json(force=True)
 
     try:
         repo_owner = payload['repository']['owner']['login']
@@ -94,11 +102,6 @@ def github_webhook():
         issue_number = payload['issue']['number']
     except KeyError as e:
         return jsonify({'error': 'Missing expected field in webhook payload'}), 400
-
-    issues_sync_id = application.github_issues_sync_manager.get_issues_sync_id_by_issue_info(repo_name, repo_owner)
-    secret = application.github_issues_sync_manager.get_webhook_secret(issues_sync_id)
-    if not verify_signature(request, secret):
-        return jsonify({'error': 'Invalid signature'}), 403
 
     event = request.headers.get('X-GitHub-Event')
     if event != 'issues':
