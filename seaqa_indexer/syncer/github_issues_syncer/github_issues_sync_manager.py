@@ -15,13 +15,13 @@ from seaqa_indexer.utils.github_issues_api import GitHubAPI
 
 logger = logging.getLogger(__name__)
 
+
 class GithubIssuesSyncManager:
     def __init__(self):
         self.db_session = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
-
-    def save_issues_to_db(self, issues_sync_id, repo_owner, repo_name, issue):
+    def save_or_update_issues_to_db(self, issues_sync_id, repo_owner, repo_name, issue):
         with self.db_session() as session:
             sql = text("""
                 INSERT INTO github_issues (
@@ -96,10 +96,10 @@ class GithubIssuesSyncManager:
             })
             session.commit()
 
-    def finish_sync(self, issues_sync_id, updated_at):
+    def finish_sync(self, issues_sync_id, updated_at, status):
         with self.db_session() as session:
-            cmd = """UPDATE project_connection SET updated_at=:updated_at WHERE id = :connection_id"""
-            params = {'connection_id': issues_sync_id, 'updated_at': updated_at}
+            cmd = """UPDATE project_connection SET updated_at=:updated_at, status=:status WHERE id = :connection_id"""
+            params = {'connection_id': issues_sync_id, 'updated_at': updated_at,  'status': status}
             session.execute(text(cmd), params)
             session.commit()
 
@@ -138,17 +138,17 @@ class GithubIssuesSyncManager:
             return config.get('webhook_secret')
 
     def update_github_issues_by_webhook(self,issues_sync_id, issue, repo_owner, repo_name, issue_number, action):
-        self.save_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
+        self.save_or_update_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
         if action == 'deleted':
             self.tag_issue_deleted(issues_sync_id, repo_owner, repo_name, issue_number)
         new_updated_at = datetime.datetime.now(datetime.UTC)
         self.add_issues_index_task(issues_sync_id)
-        self.finish_sync(issues_sync_id, new_updated_at)
+        self.finish_sync(issues_sync_id, new_updated_at, CrawlStatus.COMPLETED)
 
-    def add_github_issues_sync_task(self, issues_sync_id):
-        logger.info('add github issues sync task: %s', issues_sync_id)
+    def add_github_issues_sync_task(self, connection_id):
+        logger.info('add github issues sync task: %s', connection_id)
         msg_content = {
-            'issues_sync_id': issues_sync_id,
+            'connection_id': connection_id,
         }
         self.mq.lpush('issues_sync_task', json.dumps(msg_content))
 
@@ -163,34 +163,25 @@ class GithubIssuesSyncManager:
         server_url = config.get('repository')
         token = config.get('token')
         old_last_modified = project_connection.updated_at
-        repo_owner, repo_name = "", ""
         try:
             path = urlparse(server_url).path
             parts = path.strip("/").split("/")
-            if len(parts) >= 3:
-                repo_owner, repo_name = parts[0], parts[1]
-
+            repo_owner, repo_name = parts[0], parts[1]
         except Exception as e:
-            logger.warning(f"URL format is invalid: {e}")
-            return
+            raise Exception("github repository is invalid: %s", e)
 
         github_api = GitHubAPI(token, repo_owner, repo_name, issues_sync_id)
         since = old_last_modified.isoformat() + "Z" if old_last_modified else None
         new_updated_at = datetime.datetime.now(datetime.UTC)
 
-        try:
-            list_all_issues = github_api.list_all_issues(since=since)
-        except Exception as e:
-            logger.error(f"get all issues failed: {e}")
-            return
+        list_all_issues = github_api.list_all_issues(since=since)
 
         for issue in list_all_issues:
             if 'pull_request' in issue:
                 continue
-            self.save_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
+            self.save_or_update_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
 
-        self.finish_sync(issues_sync_id, new_updated_at)
-        self.update_issues_sync_status(issues_sync_id, CrawlStatus.COMPLETED)
+        self.finish_sync(issues_sync_id, new_updated_at, CrawlStatus.COMPLETED)
         logger.info('Finish github issues sync task: %s', issues_sync_id)
         self.add_issues_index_task(issues_sync_id)
 

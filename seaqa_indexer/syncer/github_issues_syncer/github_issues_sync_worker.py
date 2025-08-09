@@ -6,16 +6,9 @@ import threading
 import signal
 from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
 
-# Install the correct reactor before importing any twisted modules
-from scrapy.utils.reactor import install_reactor
-
 from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import GithubIssuesSyncManager
 from seaqa_indexer.utils.constants import CrawlStatus
 
-# Use AsyncioSelectorReactor instead of SelectReactor
-install_reactor('twisted.internet.asyncioreactor.AsyncioSelectorReactor')
-
-from twisted.internet import reactor
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
@@ -39,7 +32,6 @@ class GithubIssuesSyncTaskWorker(object):
         self.sync_issues_interval = 7 * 24 * 60 * 60
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
-        reactor.suggestThreadPoolSize(10)
 
         self.set_signal()
         self.worker_list = []
@@ -61,7 +53,6 @@ class GithubIssuesSyncTaskWorker(object):
             t.start()
 
         threading.Thread(target=self.cron_sync_issues, name='cron_sync_issues_thread', daemon=True).start()
-        threading.Thread(target=reactor.run, name='reactor_thread', daemon=True, kwargs={'installSignalHandlers': False}).start()
 
     def issues_sync_handler(self):
         logger.info('%s starting issues sync work' % self.tname)
@@ -79,7 +70,7 @@ class GithubIssuesSyncTaskWorker(object):
                         if not data:
                             logger.warning('issues_sync_task: invalid.', res)
                         else:
-                            issues_sync_id = data.get('issues_sync_id')
+                            issues_sync_id = data.get('connection_id')
                             self.issues_sync(issues_sync_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
@@ -103,7 +94,6 @@ class GithubIssuesSyncTaskWorker(object):
             if not self.should_stop.is_set():
                 try:
                     self.issues_sync_manager.update_issues_sync()
-                    pass
                 except Exception as e:
                     logger.exception('cron sync issues error: %s', e)
 

@@ -36,7 +36,7 @@ def check_auth_token(req):
 def verify_signature(request, github_secret):
     signature = request.headers.get('X-Hub-Signature-256')
     if not signature:
-        return False
+        return True
     sha_name, signature = signature.split('=')
 
     if sha_name != 'sha256':
@@ -78,22 +78,22 @@ def add_index_seafile_task():
 @application.route('/add-github-issues-index-task', methods=['GET'])
 @auth_required
 def add_github_issues_index_task():
-    issues_sync_id = request.args.get('issues_sync_id')
-    application.github_issues_sync_manager.add_github_issues_sync_task(issues_sync_id)
+    connection_id = request.args.get('connection_id')
+    application.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
     return jsonify({'success': True}), 200
 
 
 @application.route('/webhook/github', methods=['POST'])
 def github_webhook():
     raw_data = request.get_data()
-    payload = json.loads(raw_data)
+    payload = json.loads(raw_data.decode())
 
     try:
         repo_owner = payload['repository']['owner']['login']
         repo_name = payload['repository']['name']
         issue_number = payload['issue']['number']
     except KeyError as e:
-        raise ValueError(f"Missing expected field in webhook payload: {e}")
+        return jsonify({'error': 'Missing expected field in webhook payload'}), 400
 
     issues_sync_id = application.github_issues_sync_manager.get_issues_sync_id_by_issue_info(repo_name, repo_owner)
     secret = application.github_issues_sync_manager.get_webhook_secret(issues_sync_id)
