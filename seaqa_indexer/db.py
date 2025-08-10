@@ -33,7 +33,7 @@ def create_engine_from_env():
         raise RuntimeError('Database configured error')
 
     db_url = "mysql+pymysql://%s:%s@%s:%s/%s?charset=utf8mb4" % (db_user, quote_plus(db_pwd), db_host, db_port, db_name)
-    kwargs = dict(pool_recycle=300, echo=False, echo_pool=False, connect_args={"charset": "utf8mb4"})
+    kwargs = dict(pool_recycle=300, echo=False, echo_pool=False)
 
     engine = create_engine(db_url, **kwargs)
 

@@ -258,7 +258,7 @@ class IndexManager:
         for start in range(0, total_issues, BATCH_SIZE):
             end = start + BATCH_SIZE
             batch = issues[start:end]
-            logger.info(f"Processing batch {start} to {end}")
+            logger.info(f"Processing github issuse index batch {start} to {end}")
 
             for issue in batch:
                 id_issue = issue.id

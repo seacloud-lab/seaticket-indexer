@@ -1,6 +1,8 @@
 import datetime
 import logging
 import json
+import hmac
+import hashlib
 
 from urllib.parse import urlparse
 
@@ -14,6 +16,10 @@ from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 
 logger = logging.getLogger(__name__)
+
+
+class SignatureInvalidException(Exception):
+    pass
 
 
 class GithubIssuesSyncManager:
@@ -119,7 +125,23 @@ class GithubIssuesSyncManager:
 
             return webhook_secret
 
-    def update_github_issues_by_webhook(self,issues_sync_id, issue, repo_owner, repo_name, issue_number, action):
+    def verify_signature(self, signature, msg, github_secret):
+        if not signature:
+            return True
+        sha_name, signature = signature.split('=')
+
+        if sha_name != 'sha256':
+            return False
+        mac = hmac.new(github_secret.encode(), msg=msg, digestmod=hashlib.sha256)
+
+        return hmac.compare_digest(mac.hexdigest(), signature)
+
+    def update_github_issues_by_webhook(self, issues_sync_id, issue, repo_owner, repo_name, issue_number, action, signature, msg):
+        logger.debug(f"Received webhook for issue #{issue_number}, action: {action}")
+        secret = self.get_webhook_secret(issues_sync_id)
+        if not self.verify_signature(signature, msg, secret):
+            raise SignatureInvalidException()
+
         self.save_or_update_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
         if action == 'deleted':
             self.tag_issue_deleted(issues_sync_id, repo_owner, repo_name, issue_number)
@@ -135,6 +157,7 @@ class GithubIssuesSyncManager:
         self.mq.lpush('issues_sync_task', json.dumps(msg_content))
 
     def issues_sync(self, issues_sync_id):
+        print(66666)
         project_connection = self.get_issues_connection_by_id(issues_sync_id)
         issues_sync_status = project_connection.status
         if issues_sync_status == CrawlStatus.CRAWLING:
@@ -156,9 +179,10 @@ class GithubIssuesSyncManager:
         since = old_last_modified.isoformat() + "Z" if old_last_modified else None
         new_updated_at = datetime.datetime.now(datetime.UTC)
 
-        list_all_issues = github_api.list_all_issues(since=since)
+        list_all_issues = github_api.list_all_issues(since=None)
 
         for issue in list_all_issues:
+            print(111)
             if 'pull_request' in issue:
                 continue
             self.save_or_update_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)

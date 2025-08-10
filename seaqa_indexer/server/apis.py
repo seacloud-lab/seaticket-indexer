@@ -1,12 +1,11 @@
 import logging
 import jwt
 import json
-import hmac
-import hashlib
 from functools import wraps
 from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
+from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
 
 application = Flask(__name__)
 
@@ -31,19 +30,6 @@ def check_auth_token(req):
         return False
 
     return True
-
-
-def verify_signature(request, github_secret):
-    signature = request.headers.get('X-Hub-Signature-256')
-    if not signature:
-        return True
-    sha_name, signature = signature.split('=')
-
-    if sha_name != 'sha256':
-        return False
-    mac = hmac.new(github_secret.encode(), msg=request.data, digestmod=hashlib.sha256)
-
-    return hmac.compare_digest(mac.hexdigest(), signature)
 
 
 def auth_required(func):
@@ -90,10 +76,6 @@ def github_webhook():
     if not issues_sync_id:
         return jsonify({'error': 'Missing connection_id'}), 400
 
-    secret = application.github_issues_sync_manager.get_webhook_secret(issues_sync_id)
-    if not verify_signature(request, secret):
-        return jsonify({'error': 'Invalid signature'}), 403
-
     payload = request.get_json(force=True)
 
     try:
@@ -103,18 +85,26 @@ def github_webhook():
     except KeyError as e:
         return jsonify({'error': 'Missing expected field in webhook payload'}), 400
 
+    action = payload.get('action')
+
     event = request.headers.get('X-GitHub-Event')
     if event != 'issues':
         return jsonify({'msg': f'Ignored event: {event}'}), 200
-
-    action = payload.get('action')
-    logger.info(f"Received webhook for issue #{issue_number}, action: {action}")
 
     issues_data = payload.get('issue')
     if not issues_data:
         return jsonify({'error': 'No issue payload'}), 400
 
-    application.github_issues_sync_manager.update_github_issues_by_webhook(issues_sync_id, issues_data, repo_owner, repo_name, issue_number, action)
+    signature = request.headers.get('X-Hub-Signature-256')
+    msg = request.data
+
+    try:
+        application.github_issues_sync_manager.update_github_issues_by_webhook(issues_sync_id, issues_data, repo_owner, repo_name, issue_number, action, signature, msg)
+    except SignatureInvalidException:
+        return jsonify({'error': 'Invalid signature'}), 403
+    except Exception as e:
+        logger.error(e)
+        return jsonify({'error': 'Internal Server Error'}), 500
 
     return jsonify({'msg': 'Issue event processed'}), 200
 
