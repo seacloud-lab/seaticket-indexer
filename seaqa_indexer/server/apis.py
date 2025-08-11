@@ -1,8 +1,6 @@
 import logging
 import jwt
 import json
-import hmac
-import hashlib
 from functools import wraps
 from flask import request, jsonify, Flask
 

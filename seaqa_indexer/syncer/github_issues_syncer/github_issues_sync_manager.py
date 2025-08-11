@@ -22,12 +22,16 @@ class SignatureInvalidException(Exception):
     pass
 
 
+class GithubRepositoryInvalidException(Exception):
+    pass
+
+
 class GithubIssuesSyncManager:
     def __init__(self):
         self.db_session = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
-    def save_or_update_issues_to_db(self, issues_sync_id, issue):
+    def save_or_update_issues_to_db(self, connection_id, issue):
         with self.db_session() as session:
             sql = text("""
                 INSERT INTO github_issues (
@@ -71,21 +75,21 @@ class GithubIssuesSyncManager:
                     ('closed_at') else None,
                 'labels': json.dumps(label_names),
                 'comments': issue.get('comments'),
-                'connection_id': str(issues_sync_id),
+                'connection_id': connection_id,
                 'need_index': 1,
             })
             session.commit()
 
-    def get_issues_connection_by_id(self, issues_sync_id):
+    def get_issues_connection_by_id(self, connection_id):
         with self.db_session() as session:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
-            connection = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchone()
+            connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
         return connection
 
-    def tag_issue_deleted(self, issues_sync_id, issue_id):
+    def tag_issue_deleted(self, connection_id, issue_id):
         with self.db_session() as session:
             sql = text("""
                 UPDATE github_issues
@@ -93,22 +97,22 @@ class GithubIssuesSyncManager:
                 WHERE connection_id = :connection_id AND issue_id = :issue_id
             """)
             session.execute(sql, {
-                'connection_id': issues_sync_id,
+                'connection_id': connection_id,
                 'issue_id': issue_id
             })
             session.commit()
 
-    def finish_sync(self, issues_sync_id, updated_at, status):
+    def finish_sync(self, connection_id, updated_at, status):
         with self.db_session() as session:
             cmd = """UPDATE project_connection SET updated_at=:updated_at, status=:status WHERE id = :connection_id"""
-            params = {'connection_id': issues_sync_id, 'updated_at': updated_at,  'status': status}
+            params = {'connection_id': connection_id, 'updated_at': updated_at,  'status': status}
             session.execute(text(cmd), params)
             session.commit()
 
-    def get_webhook_secret(self, issues_sync_id):
+    def get_webhook_secret(self, connection_id):
         with self.db_session() as session:
             cmd = "SELECT config FROM project_connection WHERE id = :connection_id"
-            result = session.execute(text(cmd), {'connection_id': issues_sync_id}).fetchone()
+            result = session.execute(text(cmd), {'connection_id': connection_id}).fetchone()
             if not result:
                 return None
             config_str = result[0]
@@ -132,18 +136,16 @@ class GithubIssuesSyncManager:
 
         return hmac.compare_digest(mac.hexdigest(), signature)
 
-    def update_github_issues_by_webhook(self,issues_sync_id, issue, issue_id, action, signature, msg):
-        logger.debug(f"Received webhook for issue #{issue_id}, action: {action}")
-        secret = self.get_webhook_secret(issues_sync_id)
+    def update_github_issues_by_webhook(self, connection_id, issue, issue_id, action, signature, msg):
+        logger.info(f"Received webhook for issue #{issue_id}, action: {action}")
+        secret = self.get_webhook_secret(connection_id)
         if not self.verify_signature(signature, msg, secret):
             raise SignatureInvalidException()
 
-        self.save_or_update_issues_to_db(issues_sync_id, issue)
+        self.save_or_update_issues_to_db(connection_id, issue)
         if action == 'deleted':
-            self.tag_issue_deleted(issues_sync_id, issue_id)
-        new_updated_at = datetime.datetime.now(datetime.UTC)
-        self.add_issues_index_task(issues_sync_id)
-        self.finish_sync(issues_sync_id, new_updated_at, CrawlStatus.COMPLETED)
+            self.tag_issue_deleted(connection_id, issue_id)
+        self.add_issues_index_task(connection_id)
 
     def add_github_issues_sync_task(self, connection_id):
         logger.info('add github issues sync task: %s', connection_id)
@@ -162,33 +164,44 @@ class GithubIssuesSyncManager:
         config = decrypt_config(json.loads(project_connection.config))
         server_url = config.get('repository')
         token = config.get('token')
-        old_last_modified = project_connection.updated_at
+        old_updated_at = project_connection.updated_at
         try:
             path = urlparse(server_url).path
             parts = path.strip("/").split("/")
             repo_owner, repo_name = parts[0], parts[1]
         except Exception as e:
-            raise Exception("github repository is invalid: %s", e)
+            raise GithubRepositoryInvalidException("github repository is invalid: %s", e)
 
         github_api = GitHubAPI(token, repo_owner, repo_name, issues_sync_id)
-        since = old_last_modified.isoformat() + "Z" if old_last_modified else None
+        since = old_updated_at.isoformat() + "Z" if old_updated_at else None
         new_updated_at = datetime.datetime.now(datetime.UTC)
 
-        list_all_issues = github_api.list_all_issues(since=None)
+        page = 1
+        per_page = 100  # max 100
+        total_count = 0
+        while True:
+            issues = github_api.list_issues(since=since, state='all', per_page=per_page, page=page)
+            if not issues:
+                break
 
-        for issue in list_all_issues:
-            if 'pull_request' in issue:
-                continue
-            self.save_or_update_issues_to_db(issues_sync_id, issue)
+            for issue in issues:
+                total_count += 1
+                if 'pull_request' in issue:
+                    continue
+                self.save_or_update_issues_to_db(issues_sync_id, issue)
 
+            if len(issues) < per_page:
+                break
+            page += 1
+        logger.info(f"Fetched {total_count} issues from GitHub")
         self.finish_sync(issues_sync_id, new_updated_at, CrawlStatus.COMPLETED)
         logger.info('Finish github issues sync task: %s', issues_sync_id)
         self.add_issues_index_task(issues_sync_id)
 
-    def update_issues_sync_status(self, issues_sync_id, status):
+    def update_issues_sync_status(self, connection_id, status):
         with self.db_session() as session:
             cmd = """UPDATE project_connection SET status = :status WHERE id = :issues_sync_id"""
-            session.execute(text(cmd), {'issues_sync_id': issues_sync_id, 'status': status})
+            session.execute(text(cmd), {'issues_sync_id': connection_id, 'status': status})
             session.commit()
 
     def update_issues_sync(self):
@@ -196,32 +209,32 @@ class GithubIssuesSyncManager:
         start, limit = 0, 1000
         while True:
             try:
-                project_issues = self.get_project_issues_by_page(start, limit)
+                project_connections = self.get_project_connection_by_page(start, limit)
             except Exception as e:
                 logger.error("Error: %s" % e)
                 return
             start += 1000
-            if len(project_issues) == 0:
+            if len(project_connections) == 0:
                 break
-            for issue in project_issues:
-                issues_sync_id = issue.issues_sync_id
+            for project_connection in project_connections:
+                connection_id = project_connection.id
                 try:
-                    self.issues_sync(issues_sync_id)
+                    self.issues_sync(connection_id)
                 except Exception as e:
-                    logger.warning('update issues sync failed, issues_sync_id: %s, error: %s', issues_sync_id, e)
-                    self.update_issues_sync_status(issues_sync_id, CrawlStatus.FAILED)
+                    logger.warning('update issues sync failed, issues_sync_id: %s, error: %s', connection_id, e)
+                    self.update_issues_sync_status(connection_id, CrawlStatus.FAILED)
 
-    def get_project_issues_by_page(self, start, limit):
+    def get_project_connection_by_page(self, start, limit):
         with self.db_session() as session:
-            sql = """SELECT pc.id as issues_sync_id, pc.config, pc.project_id, pc.status, p.uuid
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid
              FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='github_issue' LIMIT :start, :limit"""
             project_issues = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return project_issues
 
-    def add_issues_index_task(self, issues_sync_id):
+    def add_issues_index_task(self, connection_id):
         msg_content = {
-            'connection_id': issues_sync_id,
+            'connection_id': connection_id,
         }
         self.mq.lpush('index_task', json.dumps(msg_content))

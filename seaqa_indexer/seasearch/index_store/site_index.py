@@ -192,9 +192,12 @@ class SiteIndex(object):
     def update_document(self, index_name, connection_id, content, url, etag, title, last_modified):
         self.add_document(index_name, connection_id, content, url, etag, title, last_modified)
 
+    def gen_index_id(self, connection_id, url):
+        return md5(str(connection_id) + url)
+
     def add_document(self, index_name, connection_id, content, url, etag, title, last_modified):
         bulk_add_params = []
-        index_info = {'index': {'_index': index_name, '_id': md5(str(connection_id) + url)}}
+        index_info = {'index': {'_index': index_name, '_id': self.gen_index_id(connection_id, url)}}
         doc_info = {
             'connection_id': connection_id,
             'content': content,
