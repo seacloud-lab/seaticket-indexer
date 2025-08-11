@@ -384,7 +384,7 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
-    def search(self, project_uuid, connection_types, keyword, start=0, size=20):
+    def search(self, project_uuid, connection_types, connection_ids, keyword, start=0, size=20):
         result_docs = []
         bulk_search_params = []
         connection_type_list = connection_types.split(',') if connection_types \
@@ -487,6 +487,10 @@ class IndexManager:
                 result_docs.append(r)
             elif index_name.startswith(ConnectionType.DISCOURSE_FORUM.value):
                 pass
+
+        if connection_ids:
+            connection_id_list = connection_ids.split(',')
+            result_docs = [doc for doc in result_docs if doc['connection_id'] in connection_id_list]
 
         logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
                         project_uuid, result_docs)
