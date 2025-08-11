@@ -2,6 +2,8 @@ import os
 import logging
 import json
 import datetime
+from urllib.parse import urlparse
+
 from sqlalchemy.sql import text
 
 from seaqa_indexer.db import init_db_session_class
@@ -9,19 +11,21 @@ from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_FILE
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
+from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_id_to_site_info_by_site_id, \
     get_path_to_index_info_by_connection_id, get_content_by_download_link
 from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seahub_api import SeahubAPI, FileNotFoundException
-from seaqa_indexer.utils import md5, time_str_to_utc_time, decrypt_config, encrypt_config
+from seaqa_indexer.utils import time_str_to_utc_time, decrypt_config, encrypt_config
 from seaqa_indexer.seasearch.extract import ExtractorFactory
 from seaqa_indexer.app.event_redis import redis_cache
 
 
 logger = logging.getLogger(__name__)
 
+BATCH_SIZE = 500
 
 class IndexManager:
     def __init__(self):
@@ -29,6 +33,7 @@ class IndexManager:
         self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
         self.site_index = SiteIndex(self.seasearch_api)
         self.seafile_index = SeafileIndex(self.seasearch_api)
+        self.github_issues_index = GitHubIssuesIndex(self.seasearch_api)
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def get_project_connection_by_id(self, connection_id):
@@ -61,6 +66,36 @@ class IndexManager:
                 params['config'] = encrypt_config(config)
             cmd += " WHERE id = :connection_id"
             session.execute(text(cmd), params)
+            session.commit()
+
+    def get_all_need_index_issues_from_db(self, issues_sync_id):
+        with self.db_session() as session:
+            sql = """
+                   SELECT id, issue_number, title, body, state, created_at,
+                          updated_at, closed_at, labels, comments, author, url, deleted
+                   FROM github_issues
+                   WHERE connection_id = :connection_id AND need_index = 1
+               """
+            rows = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchall()
+        return rows
+
+
+    def delete_issues_from_db(self,issues_sync_id):
+        with self.db_session() as session:
+            sql = text("DELETE FROM github_issues WHERE connection_id = :connection_id")
+            session.execute(sql, {'connection_id': issues_sync_id})
+            session.commit()
+
+    def delete_issue_from_db(self, issue_id):
+        with self.db_session() as session:
+            sql = text("DELETE FROM github_issues WHERE id = :id")
+            session.execute(sql, {'id': issue_id})
+            session.commit()
+
+    def update_issues_index_status(self, issue_id):
+        with self.db_session() as session:
+            sql = text("UPDATE github_issues SET need_index = 0 WHERE id = :id")
+            session.execute(sql, {'id': issue_id})
             session.commit()
 
     def update_site_index(self, project_connection):
@@ -101,7 +136,7 @@ class IndexManager:
             content = crawled_data.get('content')
             title = crawled_data.get('title')
 
-            key = md5(str(connection_id) + url)
+            key = self.site_index.gen_index_id(connection_id, url)
             new_index_ids_set.add(key)
 
             logger.debug('start to update url: %s', url)
@@ -159,7 +194,7 @@ class IndexManager:
             mtime = dirent.get('mtime')
             size = dirent.get('size')
 
-            key = md5(str(connection_id) + new_repo_id + parent_dir + dirent_name)
+            key = self.seafile_index.gen_index_id(connection_id, new_repo_id, parent_dir, dirent_name)
             new_index_ids_set.add(key)
             index_info = index_id_to_index_info.get(key, {})
 
@@ -201,6 +236,66 @@ class IndexManager:
         config['repo_name'] = new_repo_name
         self.finish_index(connection_id, new_indexed_at, updated_at=new_last_modified, config=config)
 
+    def update_github_issues_index(self, project_connection):
+        issues_sync_id = project_connection.id
+        config = decrypt_config(json.loads(project_connection.config))
+        project_uuid = project_connection.project_uuid
+        server_url = config.get('repository')
+        path = urlparse(server_url).path
+        parts = path.strip("/").split("/")
+        repo_owner, repo_name = parts[0], parts[1]
+        status = project_connection.status
+        if status != CrawlStatus.COMPLETED:
+            logger.warning('project connection: %s does not update completed.')
+            return
+
+        issues_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
+        self.github_issues_index.create_index_if_missing(issues_index_name)
+
+        new_indexed_at = datetime.datetime.now(datetime.UTC)
+
+        need_cleared_issues_index_set = set()
+
+        issues = self.get_all_need_index_issues_from_db(issues_sync_id)
+        total_issues = len(issues)
+
+        for start in range(0, total_issues, BATCH_SIZE):
+            end = start + BATCH_SIZE
+            batch = issues[start:end]
+            logger.info(f"Processing github issuse index batch {start} to {end}")
+
+            for issue in batch:
+                issue_id = issue.id
+                issue_dict = {
+                    'id': issue_id,
+                    'number': issue.issue_number,
+                    'title': issue.title,
+                    'body': issue.body,
+                    'state': issue.state,
+                    'created_at': issue.created_at.isoformat() if issue.created_at else None,
+                    'updated_at': issue.updated_at.isoformat() if issue.updated_at else None,
+                    'closed_at': issue.closed_at.isoformat() if issue.closed_at else None,
+                    'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
+                    'comments': issue.comments,
+                    'user': {'login': issue.author},
+                    'url': issue.url,
+                    'repo_owner': repo_owner,
+                    'repo_name': repo_name,
+                }
+                if issue.deleted == 1:
+                    key = self.github_issues_index.gen_index_id(issues_sync_id, issue_id)
+                    need_cleared_issues_index_set.add(key)
+                else:
+                    self.github_issues_index.add_or_update_issue(issues_index_name, issues_sync_id, issue_dict)
+                    self.update_issues_index_status(issue_id)
+
+        if need_cleared_issues_index_set:
+            self.github_issues_index.delete_indexes_by_ids(issues_index_name, need_cleared_issues_index_set)
+            for issue_id in need_cleared_issues_index_set:
+                self.delete_issue_from_db(issue_id)
+
+        self.finish_index(issues_sync_id, new_indexed_at)
+
     def update_indexes(self):
         start, limit = 0, 1000
         while True:
@@ -219,7 +314,7 @@ class IndexManager:
                 status = project_connection.status
                 updated_at = project_connection.updated_at
                 indexed_at = project_connection.indexed_at
-                if connection_type == ConnectionType.SITE.value:
+                if connection_type == ConnectionType.SITE.value or connection_type == ConnectionType.GITHUB_ISSUE.value:
                     if status != CrawlStatus.COMPLETED:
                         continue
                     elif indexed_at and updated_at and indexed_at > updated_at:
@@ -243,6 +338,8 @@ class IndexManager:
             self.update_site_index(connection)
         elif connection_type == ConnectionType.SEAFILE.value:
             self.update_seafile_index(connection)
+        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+            self.update_github_issues_index(connection)
 
         logger.info('finish index project connection: %s, connection_type: %s', connection_id, connection_type)
 
@@ -255,6 +352,10 @@ class IndexManager:
         site_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
         self.site_index.delete_index_by_index_name(site_index_name)
 
+        #delete issues index
+        issues_index_name = gen_index_name_by_type(project_uuid,ConnectionType.GITHUB_ISSUE.value)
+        self.github_issues_index.delete_index_by_index_name(issues_index_name)
+
     def delete_index_by_connection(self, project_uuid, connection_id, connection_type):
         index_name = gen_index_name_by_type(project_uuid, connection_type)
         index = None
@@ -262,6 +363,8 @@ class IndexManager:
             index = self.site_index
         elif connection_type == ConnectionType.SEAFILE.value:
             index = self.seafile_index
+        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+            index = self.github_issues_index
         start = 0
         per_size = 100
         while True:
@@ -299,7 +402,9 @@ class IndexManager:
             elif connection_type == ConnectionType.EMAIL.value:
                 pass
             elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                pass
+                issues_index_name = gen_index_name_by_type(project_uuid, ConnectionType.GITHUB_ISSUE.value)
+                issues_search_param = self.github_issues_index.get_search_param(issues_index_name, keyword, start, size)
+                bulk_search_params.append(issues_search_param)
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
                 pass
 
@@ -366,7 +471,20 @@ class IndexManager:
             elif index_name.startswith(ConnectionType.EMAIL.value):
                 pass
             elif index_name.startswith(ConnectionType.GITHUB_ISSUE.value):
-                pass
+                r = {
+                    'title': source['title'],
+                    'repo_owner': source['repo_owner'],
+                    'repo_name': source['repo_name'],
+                    'issue_number': source['issue_number'],
+                    'connection_id': source['connection_id'],
+                    'content': source['body'],
+                    'state': source['state'],
+                    'labels': source['labels'],
+                    'score': score,
+                    '_id': _id,
+                    'type': 'github_issue',
+                }
+                result_docs.append(r)
             elif index_name.startswith(ConnectionType.DISCOURSE_FORUM.value):
                 pass
 

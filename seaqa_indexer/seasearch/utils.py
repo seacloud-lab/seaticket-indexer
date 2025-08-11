@@ -1,5 +1,4 @@
 from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX
-from seaqa_indexer.utils import md5
 import requests
 
 
@@ -16,8 +15,8 @@ def get_all_id_to_site_info_by_site_id(site_index, site_index_name, connection_i
         for hit in hits:
             source = hit['_source']
             url = source['url']
-            key = md5(str(connection_id) + url)
-            site_id_to_site_info[key] = source
+            index_id = site_index.gen_index_id(connection_id, url)
+            site_id_to_site_info[index_id] = source
 
         start += per_size
         if len(hits) < per_size:
@@ -37,8 +36,8 @@ def get_path_to_index_info_by_connection_id(seafile_index, index_name, connectio
             repo_id = source['repo_id']
             path = source['path']  # parent_dir
             filename = source['filename']
-            key = md5(str(connection_id) + repo_id + path + filename)
-            path_to_index_info[key] = source
+            index_id = seafile_index.gen_index_id(connection_id, repo_id, path, filename)
+            path_to_index_info[index_id] = source
 
         start += per_size
         if len(hits) < per_size:

@@ -25,9 +25,17 @@ def kill_project_connetion_cleaner():
     run(cmd)
 
 
+def kill_github_issues_sync_worker():
+    cmd = [
+        'pkill', '-f', 'seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_worker'
+    ]
+    run(cmd)
+
+
 def signal_term_handler(signal, frame):
     kill_web_crawler_task_worker()
     kill_index_task_worker()
+    kill_github_issues_sync_worker()
     kill_project_connetion_cleaner()
     os._exit(0)
 
