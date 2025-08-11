@@ -18,7 +18,7 @@ from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_id_to_
 from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seahub_api import SeahubAPI, FileNotFoundException
-from seaqa_indexer.utils import md5, time_str_to_utc_time, decrypt_config, encrypt_config
+from seaqa_indexer.utils import time_str_to_utc_time, decrypt_config, encrypt_config
 from seaqa_indexer.seasearch.extract import ExtractorFactory
 from seaqa_indexer.app.event_redis import redis_cache
 
@@ -86,18 +86,17 @@ class IndexManager:
             session.execute(sql, {'connection_id': issues_sync_id})
             session.commit()
 
-    def delete_issue_from_db(self,id_issue):
+    def delete_issue_from_db(self, issue_id):
         with self.db_session() as session:
             sql = text("DELETE FROM github_issues WHERE id = :id")
-            session.execute(sql, {'id': id_issue})
+            session.execute(sql, {'id': issue_id})
             session.commit()
 
-    def update_issues_index_status(self, id_issue):
+    def update_issues_index_status(self, issue_id):
         with self.db_session() as session:
             sql = text("UPDATE github_issues SET need_index = 0 WHERE id = :id")
-            session.execute(sql, {'id': id_issue})
+            session.execute(sql, {'id': issue_id})
             session.commit()
-
 
     def update_site_index(self, project_connection):
         update_at = project_connection.updated_at
@@ -137,7 +136,7 @@ class IndexManager:
             content = crawled_data.get('content')
             title = crawled_data.get('title')
 
-            key = md5(str(connection_id) + url)
+            key = self.site_index.gen_index_id(connection_id, url)
             new_index_ids_set.add(key)
 
             logger.debug('start to update url: %s', url)
@@ -195,7 +194,7 @@ class IndexManager:
             mtime = dirent.get('mtime')
             size = dirent.get('size')
 
-            key = md5(str(connection_id) + new_repo_id + parent_dir + dirent_name)
+            key = self.seafile_index.gen_index_id(connection_id, new_repo_id, parent_dir, dirent_name)
             new_index_ids_set.add(key)
             index_info = index_id_to_index_info.get(key, {})
 
@@ -266,10 +265,9 @@ class IndexManager:
             logger.info(f"Processing github issuse index batch {start} to {end}")
 
             for issue in batch:
-                id_issue = issue.id
-                url = issue.url
+                issue_id = issue.id
                 issue_dict = {
-                    'id': id_issue,
+                    'id': issue_id,
                     'number': issue.issue_number,
                     'title': issue.title,
                     'body': issue.body,
@@ -280,20 +278,23 @@ class IndexManager:
                     'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
                     'comments': issue.comments,
                     'user': {'login': issue.author},
-                    'url': issue.url
+                    'url': issue.url,
+                    'repo_owner': repo_owner,
+                    'repo_name': repo_name,
                 }
                 if issue.deleted == 1:
-                    self.delete_issue_from_db(id_issue)
-                    key = md5(str(issues_sync_id) + url)
+                    key = self.github_issues_index.gen_index_id(issues_sync_id, issue_id)
                     need_cleared_issues_index_set.add(key)
                 else:
-                    self.github_issues_index.add_or_update_issue(issues_index_name, issues_sync_id, repo_owner, repo_name, issue_dict)
-                    self.update_issues_index_status(id_issue)
+                    self.github_issues_index.add_or_update_issue(issues_index_name, issues_sync_id, issue_dict)
+                    self.update_issues_index_status(issue_id)
 
         if need_cleared_issues_index_set:
             self.github_issues_index.delete_indexes_by_ids(issues_index_name, need_cleared_issues_index_set)
+            for issue_id in need_cleared_issues_index_set:
+                self.delete_issue_from_db(issue_id)
 
-        self.finish_index(issues_sync_id, new_indexed_at, config=config)
+        self.finish_index(issues_sync_id, new_indexed_at)
 
     def update_indexes(self):
         start, limit = 0, 1000
@@ -313,7 +314,7 @@ class IndexManager:
                 status = project_connection.status
                 updated_at = project_connection.updated_at
                 indexed_at = project_connection.indexed_at
-                if connection_type == ConnectionType.SITE.value:
+                if connection_type == ConnectionType.SITE.value or connection_type == ConnectionType.GITHUB_ISSUE.value:
                     if status != CrawlStatus.COMPLETED:
                         continue
                     elif indexed_at and updated_at and indexed_at > updated_at:

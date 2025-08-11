@@ -195,9 +195,12 @@ class SeafileIndex(object):
     def update_document(self, index_name, connection_id, content, repo_id, parent_dir, filename, mtime):
         self.add_document(index_name, connection_id, content, repo_id, parent_dir, filename, mtime)
 
+    def gen_index_id(self, connection_id, repo_id, parent_dir, filename):
+        return md5(str(connection_id) + repo_id + parent_dir + filename)
+
     def add_document(self, index_name, connection_id, content, repo_id, parent_dir, filename, mtime):
         bulk_add_params = []
-        _id = md5(str(connection_id) + repo_id + parent_dir + filename)
+        _id = self.gen_index_id(connection_id, repo_id, parent_dir, filename)
         index_info = {'index': {'_index': index_name, '_id': _id}}
         doc_info = {
             'connection_id': connection_id,

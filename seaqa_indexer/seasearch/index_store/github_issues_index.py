@@ -1,7 +1,6 @@
 import json
 import logging
 from datetime import datetime
-from pickletools import long1
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
@@ -147,15 +146,13 @@ class GitHubIssuesIndex(object):
             'size': size,
             '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'body', 'state', 'labels', 'url'],
             'sort': [
-                {'updated_at': {'order': 'desc'}},
                 '_score'
             ],
             'highlight': {
                 'pre_tags': ['<mark>'],
                 'post_tags': ['</mark>'],
                 'fields': {
-                    'body': {},
-                    'title': {}
+                    'body': {}
                 }
             }
         }
@@ -186,7 +183,6 @@ class GitHubIssuesIndex(object):
 
         for hit in hits:
             source = hit.get('_source')
-            highlight = hit.get('highlight', {})
             issue = {
                 'repo_owner': source.get('repo_owner'),
                 'repo_name': source.get('repo_name'),
@@ -198,20 +194,16 @@ class GitHubIssuesIndex(object):
                 'labels': source.get('labels', []),
                 'score': hit.get('_score'),
                 '_id': hit.get('_id'),
-                'highlight': {
-                    'title': highlight.get('title', [source.get('title')])[0],
-                    'body': highlight.get('body', [source.get('body')[:500]])[0]
-                }
             }
             issues.append(issue)
 
         logger.debug(f"GitHub issue search: {keyword} in {project_uuid}, found {len(issues)} results")
         return issues
 
-    def add_or_update_issue(self, index_name, connection_id, repo_owner, repo_name, issue_data):
-        _id = md5(f"{connection_id}_{repo_owner}_{repo_name}_{issue_data['id']}")
+    def add_or_update_issue(self, index_name, connection_id, issue_data):
+        _id = self.gen_index_id(connection_id, issue_data['id'])
 
-        def convert_time(t):
+        def convert_time_to_millisecond_timestamp(t):
             if not t:
                 return None
             try:
@@ -230,8 +222,8 @@ class GitHubIssuesIndex(object):
 
         doc = {
             'connection_id': connection_id,
-            'repo_owner': repo_owner,
-            'repo_name': repo_name,
+            'repo_owner': issue_data['repo_owner'],
+            'repo_name': issue_data['repo_name'],
             'issue_id': issue_data['id'],
             'issue_number': issue_data['number'],
             'title': issue_data['title'],
@@ -240,9 +232,9 @@ class GitHubIssuesIndex(object):
             'body': issue_data['body'] or '',
             'state': issue_data['state'],
             'labels': [label['name'] for label in issue_data.get('labels', [])],
-            'created_at': convert_time(issue_data['created_at']),
-            'updated_at': convert_time(issue_data['updated_at']),
-            'closed_at': convert_time(issue_data.get('closed_at')),
+            'created_at': convert_time_to_millisecond_timestamp(issue_data['created_at']),
+            'updated_at': convert_time_to_millisecond_timestamp(issue_data['updated_at']),
+            'closed_at': convert_time_to_millisecond_timestamp(issue_data.get('closed_at')),
             'comments_count': issue_data['comments']
         }
 
@@ -252,13 +244,14 @@ class GitHubIssuesIndex(object):
         ]
 
         self.seasearch_api.bulk(index_name, bulk_ops)
-        logger.debug(f"Indexed issue: {repo_owner}/{repo_name}#{issue_data['number']}")
 
-    def delete_issue(self, index_name, connection_id, repo_owner, repo_name, issue_id):
-        _id = md5(f"{connection_id}_{repo_owner}_{repo_name}_{issue_id}")
+    def gen_index_id(self, connection_id, issue_id):
+        return md5(f"{connection_id}{issue_id}")
+
+    def delete_issue(self, index_name, connection_id, issue_id):
+        _id = self.gen_index_id(connection_id, issue_id)
         delete_op = [{'delete': {'_index': index_name, '_id': _id}}]
         self.seasearch_api.bulk(index_name, delete_op)
-        logger.info(f"Deleted issue: {repo_owner}/{repo_name}#{issue_id}")
 
     def query_data_by_connection_id(self, index_name, connection_id, start, size):
         dsl = {
