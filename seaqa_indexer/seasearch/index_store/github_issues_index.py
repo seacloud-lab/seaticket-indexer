@@ -215,18 +215,11 @@ class GitHubIssuesIndex(object):
             if not t:
                 return None
             try:
-                return int(datetime.fromisoformat(t).timestamp() * 1000)
+                dt = datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ")
+                return int(dt.timestamp() * 1000)
             except ValueError:
-                try:
-                    dt = datetime.strptime(t, "%Y-%m-%dT%H:%M:%S")
-                    return int(dt.timestamp() * 1000)
-                except ValueError:
-                    try:
-                        dt = datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ")
-                        return int(dt.timestamp() * 1000)
-                    except ValueError:
-                        logger.warning(f"Failed to parse the time {t}")
-                        return None
+                logger.warning(f"Failed to parse the time {t}")
+                return None
 
         doc = {
             'connection_id': connection_id,
