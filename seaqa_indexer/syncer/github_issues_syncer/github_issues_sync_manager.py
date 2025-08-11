@@ -27,15 +27,15 @@ class GithubIssuesSyncManager:
         self.db_session = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
-    def save_or_update_issues_to_db(self, issues_sync_id, repo_owner, repo_name, issue):
+    def save_or_update_issues_to_db(self, issues_sync_id, issue):
         with self.db_session() as session:
             sql = text("""
                 INSERT INTO github_issues (
-                    issue_id, repo_owner, repo_name, issue_number, title, body, state,
+                    issue_id, issue_number, title, body, state,
                     created_at, updated_at, closed_at, labels,
                     comments, connection_id, author, url, need_index
                 ) VALUES (
-                    :issue_id, :repo_owner, :repo_name, :issue_number, :title, :body, :state,
+                    :issue_id, :issue_number, :title, :body, :state,
                     :created_at, :updated_at, :closed_at, :labels,
                     :comments, :connection_id, :author, :url, :need_index
                 )
@@ -57,8 +57,6 @@ class GithubIssuesSyncManager:
 
             session.execute(sql, {
                 'issue_id': issue['id'],
-                'repo_owner': repo_owner,
-                'repo_name': repo_name,
                 'issue_number': issue['number'],
                 'title': issue.get('title'),
                 'author': issue.get('user', {}).get('login', ''),
@@ -87,18 +85,16 @@ class GithubIssuesSyncManager:
             connection = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchone()
         return connection
 
-    def tag_issue_deleted(self, issues_sync_id, repo_owner, repo_name, issue_number):
+    def tag_issue_deleted(self, issues_sync_id, issue_id):
         with self.db_session() as session:
             sql = text("""
                 UPDATE github_issues
                 SET deleted = 1
-                WHERE connection_id = :connection_id AND repo_owner = :repo_owner AND issue_number = :issue_number
+                WHERE connection_id = :connection_id AND issue_id = :issue_id
             """)
             session.execute(sql, {
                 'connection_id': issues_sync_id,
-                'repo_owner': repo_owner,
-                'repo_name': repo_name,
-                'issue_number': issue_number
+                'issue_id': issue_id
             })
             session.commit()
 
@@ -136,15 +132,15 @@ class GithubIssuesSyncManager:
 
         return hmac.compare_digest(mac.hexdigest(), signature)
 
-    def update_github_issues_by_webhook(self, issues_sync_id, issue, repo_owner, repo_name, issue_number, action, signature, msg):
-        logger.debug(f"Received webhook for issue #{issue_number}, action: {action}")
+    def update_github_issues_by_webhook(self,issues_sync_id, issue, issue_id, action, signature, msg):
+        logger.debug(f"Received webhook for issue #{issue_id}, action: {action}")
         secret = self.get_webhook_secret(issues_sync_id)
         if not self.verify_signature(signature, msg, secret):
             raise SignatureInvalidException()
 
-        self.save_or_update_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
+        self.save_or_update_issues_to_db(issues_sync_id, issue)
         if action == 'deleted':
-            self.tag_issue_deleted(issues_sync_id, repo_owner, repo_name, issue_number)
+            self.tag_issue_deleted(issues_sync_id, issue_id)
         new_updated_at = datetime.datetime.now(datetime.UTC)
         self.add_issues_index_task(issues_sync_id)
         self.finish_sync(issues_sync_id, new_updated_at, CrawlStatus.COMPLETED)
@@ -157,7 +153,6 @@ class GithubIssuesSyncManager:
         self.mq.lpush('issues_sync_task', json.dumps(msg_content))
 
     def issues_sync(self, issues_sync_id):
-        print(66666)
         project_connection = self.get_issues_connection_by_id(issues_sync_id)
         issues_sync_status = project_connection.status
         if issues_sync_status == CrawlStatus.CRAWLING:
@@ -182,10 +177,9 @@ class GithubIssuesSyncManager:
         list_all_issues = github_api.list_all_issues(since=None)
 
         for issue in list_all_issues:
-            print(111)
             if 'pull_request' in issue:
                 continue
-            self.save_or_update_issues_to_db(issues_sync_id, repo_owner, repo_name, issue)
+            self.save_or_update_issues_to_db(issues_sync_id, issue)
 
         self.finish_sync(issues_sync_id, new_updated_at, CrawlStatus.COMPLETED)
         logger.info('Finish github issues sync task: %s', issues_sync_id)

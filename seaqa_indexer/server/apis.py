@@ -1,6 +1,8 @@
 import logging
 import jwt
 import json
+import hmac
+import hashlib
 from functools import wraps
 from flask import request, jsonify, Flask
 
@@ -79,9 +81,7 @@ def github_webhook():
     payload = request.get_json(force=True)
 
     try:
-        repo_owner = payload['repository']['owner']['login']
-        repo_name = payload['repository']['name']
-        issue_number = payload['issue']['number']
+        issue_id = payload['issue']['id']
     except KeyError as e:
         return jsonify({'error': 'Missing expected field in webhook payload'}), 400
 
@@ -99,7 +99,7 @@ def github_webhook():
     msg = request.data
 
     try:
-        application.github_issues_sync_manager.update_github_issues_by_webhook(issues_sync_id, issues_data, repo_owner, repo_name, issue_number, action, signature, msg)
+        application.github_issues_sync_manager.update_github_issues_by_webhook(issues_sync_id, issues_data, issue_id, action, signature, msg)
     except SignatureInvalidException:
         return jsonify({'error': 'Invalid signature'}), 403
     except Exception as e:

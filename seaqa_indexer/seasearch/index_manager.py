@@ -2,6 +2,8 @@ import os
 import logging
 import json
 import datetime
+from urllib.parse import urlparse
+
 from sqlalchemy.sql import text
 
 from seaqa_indexer.db import init_db_session_class
@@ -69,7 +71,7 @@ class IndexManager:
     def get_all_need_index_issues_from_db(self, issues_sync_id):
         with self.db_session() as session:
             sql = """
-                   SELECT id, repo_owner, repo_name, issue_number, title, body, state, created_at,
+                   SELECT id, issue_number, title, body, state, created_at,
                           updated_at, closed_at, labels, comments, author, url, deleted
                    FROM github_issues
                    WHERE connection_id = :connection_id AND need_index = 1
@@ -239,7 +241,10 @@ class IndexManager:
         issues_sync_id = project_connection.id
         config = decrypt_config(json.loads(project_connection.config))
         project_uuid = project_connection.project_uuid
-        repo_owner, repo_name = "", ""
+        server_url = config.get('repository')
+        path = urlparse(server_url).path
+        parts = path.strip("/").split("/")
+        repo_owner, repo_name = parts[0], parts[1]
         status = project_connection.status
         if status != CrawlStatus.COMPLETED:
             logger.warning('project connection: %s does not update completed.')
