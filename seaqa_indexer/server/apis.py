@@ -5,6 +5,7 @@ from functools import wraps
 from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
+from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
 
 application = Flask(__name__)
 
@@ -58,6 +59,52 @@ def add_index_seafile_task():
     application.index_manager.add_connection_index_task(connection_id)
 
     return jsonify({'success': True}), 200
+
+
+@application.route('/add-github-issues-index-task', methods=['GET'])
+@auth_required
+def add_github_issues_index_task():
+    connection_id = request.args.get('connection_id')
+    application.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
+    return jsonify({'success': True}), 200
+
+
+@application.route('/webhook/github/', methods=['POST'])
+def github_webhook():
+    issues_sync_id = request.args.get('connection_id')
+
+    if not issues_sync_id:
+        return jsonify({'error': 'Missing connection_id'}), 400
+
+    payload = request.get_json(force=True)
+
+    try:
+        issue_id = payload['issue']['id']
+    except KeyError as e:
+        return jsonify({'error': 'Missing expected field in webhook payload'}), 400
+
+    action = payload.get('action')
+
+    event = request.headers.get('X-GitHub-Event')
+    if event != 'issues':
+        return jsonify({'msg': f'Ignored event: {event}'}), 200
+
+    issues_data = payload.get('issue')
+    if not issues_data:
+        return jsonify({'error': 'No issue payload'}), 400
+
+    signature = request.headers.get('X-Hub-Signature-256')
+    msg = request.data
+
+    try:
+        application.github_issues_sync_manager.update_github_issues_by_webhook(issues_sync_id, issues_data, issue_id, action, signature, msg)
+    except SignatureInvalidException:
+        return jsonify({'error': 'Invalid signature'}), 403
+    except Exception as e:
+        logger.error(e)
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+    return jsonify({'msg': 'Issue event processed'}), 200
 
 
 @application.route('/search', methods=['POST'])
