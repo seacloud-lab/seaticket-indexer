@@ -103,9 +103,10 @@ def time_difference_to_midnight():
 
 
 def time_str_to_utc_time(time_str):
+    if time_str.endswith('Z'):
+        time_str = time_str[:-1] + '+00:00'
     dt = datetime.fromisoformat(time_str)
-    utc_time = dt.astimezone(timezone.utc)
-    return utc_time
+    return dt.astimezone(timezone.utc)
 
 
 def decrypt_config(config):

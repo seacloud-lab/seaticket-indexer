@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import CrawlStatus
-from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
@@ -30,49 +30,103 @@ class InvalidPayloadException(DiscourseException):
 class WebhookEventProcessingException(DiscourseException):
     pass
 
-
-def parse_discourse_date(date_str):
-    if not date_str:
-        return None
-    try:
-        # Handle UTC time format
-        if date_str.endswith('Z'):
-            date_str = date_str[:-1] + '+00:00'
-        dt = datetime.datetime.fromisoformat(date_str)
-        if dt.tzinfo is not None:
-            dt = dt.utctimetuple()
-            dt = datetime.datetime(*dt[:6])
-        return dt
-    except (ValueError, TypeError) as e:
-        logger.warning(f"Failed to parse date string '{date_str}': {e}")
-        return None
-
 class DiscourseSyncManager:
     def __init__(self):
         self.db_session = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def process_webhook_event(self, forum, topic_id, event_type, data):
-        try:
-            success = False
-            if event_type in ['topic_created', 'topic_recovered', 'topic_edited', 'post_created', 'post_edited', 'post_recovered']:
-                success = self._handle_database_update(forum, topic_id, data, event_type)
-            elif event_type in ['topic_destroyed', 'post_destroyed']:
-                success = self._handle_database_delete(forum, topic_id, data, event_type)
-            else:
-                logger.warning(f"Unknown event type: {event_type}")
-                success = True
+        if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
+            self._handle_topic_update(forum, topic_id, data)
+            logger.debug(f"Successfully processed {event_type} for topic {topic_id}")
+        elif event_type in ['post_created', 'post_edited', 'post_recovered']:
+            self._handle_post_update(forum, topic_id, data)
+            logger.debug(f"Successfully processed {event_type} for topic {topic_id}")
+        elif event_type == 'topic_destroyed':
+            self._handle_topic_delete(forum, topic_id)
+            logger.debug(f"Successfully processed {event_type} for topic {topic_id}")
+        elif event_type == 'post_destroyed':
+            self._handle_post_delete(forum, topic_id, data)
+            logger.debug(f"Successfully processed {event_type} for topic {topic_id}")
+        else:
+            logger.warning(f"Unknown event type: {event_type}")
 
-            if success:
-                logger.info(f"Successfully processed {event_type} for topic {topic_id}")
-            else:
-                logger.error(f"Failed to process {event_type} for topic {topic_id}")
+    def _handle_topic_update(self, forum, topic_id, data):
+        topic_data = data.get('topic', {})
+        if not topic_data:
+            logger.warning(f"No topic data found for topic update")
+            return
 
-            return success
+        existing_topic = self.check_existing_topic(topic_id, forum.id)
 
-        except Exception as e:
-            logger.exception(f"Error processing webhook event: {str(e)}")
-            return False
+        if existing_topic:
+            update_data = {
+                'title': topic_data.get('title'),
+                'slug': topic_data.get('slug'),
+                'views': topic_data.get('views', 0),
+                'category_id': topic_data.get('category_id'),
+                'updated_at': time_str_to_utc_time(topic_data.get('updated_at')) or datetime.datetime.now(datetime.UTC)
+            }
+            self.update_topic(update_data, topic_id, forum.id)
+            logger.debug(f"Updated existing topic {topic_id}")
+        else:
+            insert_data = {
+                'topic_id': topic_id,
+                'title': topic_data.get('title', ''),
+                'slug': topic_data.get('slug', ''),
+                'views': topic_data.get('views', 0),
+                'category_id': topic_data.get('category_id'),
+                'connection_id': forum.id,
+                'created_at': datetime.datetime.now(datetime.UTC),
+                'updated_at': datetime.datetime.now(datetime.UTC),
+                'bumped_at': time_str_to_utc_time(topic_data.get('bumped_at')) or datetime.datetime.now(datetime.UTC)
+            }
+            self.insert_topic(insert_data, forum.id)
+            logger.debug(f"Created new topic {topic_id}")
+
+    def _handle_post_update(self, forum, topic_id, data):
+        post_data = data.get('post', {})
+        if not post_data:
+            logger.warning(f"No post data found for post update")
+            return
+
+        post_number = post_data.get('post_number')
+        if not post_number:
+            logger.warning(f"No post_number found for post update")
+            return
+
+        existing_post = self.check_existing_post(topic_id, post_number, forum.id)
+
+        if existing_post:
+            update_data = {
+                'content': post_data.get('cooked', ''),
+                'author': post_data.get('username', ''),
+                'updated_at': time_str_to_utc_time(post_data.get('updated_at')) or datetime.datetime.now(datetime.UTC)
+            }
+            self.update_post(update_data, topic_id, post_number, forum.id)
+            logger.debug(f"Updated existing post {post_number} in topic {topic_id}")
+        else:
+            insert_data = {
+                'topic_id': topic_id,
+                'post_number': post_number,
+                'content': post_data.get('cooked', ''),
+                'author': post_data.get('username', ''),
+                'created_at': time_str_to_utc_time(post_data.get('created_at')) or datetime.datetime.now(datetime.UTC),
+                'updated_at': time_str_to_utc_time(post_data.get('updated_at')) or datetime.datetime.now(datetime.UTC)
+            }
+            self.insert_reply(insert_data, forum.id)
+            logger.debug(f"Created new post {post_number} in topic {topic_id}")
+
+    def _handle_topic_delete(self, forum, topic_id):
+        self.delete_topic_and_replies(topic_id, forum.id)
+        logger.info(f"Deleted topic {topic_id} and all its replies")
+
+    def _handle_post_delete(self, forum, topic_id, data):
+        post_data = data.get('post', {})
+        post_number = post_data.get('post_number')
+        if post_number:
+            self.delete_post(topic_id, post_number, forum.id)
+            logger.info(f"Deleted post {post_number} in topic {topic_id}")
 
     def get_project_connection_by_id(self, pc_id, conn_type='discourse_forum'):
         with self.db_session() as session:
@@ -334,12 +388,16 @@ class DiscourseSyncManager:
 
         return True
 
+    def fetch_discourse_topic(self, forum_url, topic_id, headers):
+        url = f"{forum_url}/t/{topic_id}.json"
+        logger.debug(f"Fetching topic detail from {url}")
+        response = requests.get(url, headers=headers, timeout=30)
+        return response
+
     def fetch_discourse_topic_posts(self, forum_url, topic_id, headers):
         """Fetch detailed topic content including all posts"""
         try:
-            url = f"{forum_url}/t/{topic_id}.json"
-            logger.debug(f"Fetching topic detail from {url}")
-            response = requests.get(url, headers=headers, timeout=30)
+            response = self.fetch_discourse_topic(forum_url, topic_id, headers)
             response.raise_for_status()
 
             topic_data = response.json()
@@ -376,88 +434,6 @@ class DiscourseSyncManager:
         except Exception as e:
             logger.error(f"Error parsing topic {topic_id}: {str(e)}")
             return None
-
-    def _handle_database_update(self, forum, topic_id, data, event_type):
-        if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
-            topic_data = data.get('topic', {})
-            if not topic_data:
-                logger.warning(f"No topic data found for event {event_type}")
-                return False
-
-            existing_topic = self.check_existing_topic(topic_id, forum.id)
-
-            if existing_topic:
-                update_data = {
-                    'title': topic_data.get('title'),
-                    'slug': topic_data.get('slug'),
-                    'views': topic_data.get('views', 0),
-                    'category_id': topic_data.get('category_id'),
-                    'updated_at': parse_discourse_date(topic_data.get('updated_at')) or datetime.datetime.utcnow()
-                }
-                self.update_topic(update_data, topic_id, forum.id)
-                logger.debug(f"Updated existing topic {topic_id}")
-            else:
-                insert_data = {
-                    'topic_id': topic_id,
-                    'title': topic_data.get('title', ''),
-                    'slug': topic_data.get('slug', ''),
-                    'views': topic_data.get('views', 0),
-                    'category_id': topic_data.get('category_id'),
-                    'connection_id': forum.id,
-                    'created_at': parse_discourse_date(topic_data.get('created_at')) or datetime.datetime.utcnow(),
-                    'updated_at': parse_discourse_date(topic_data.get('updated_at')) or datetime.datetime.utcnow(),
-                    'bumped_at': parse_discourse_date(topic_data.get('bumped_at')) or datetime.datetime.utcnow()
-                }
-                self.insert_topic(insert_data, forum.id)
-                logger.debug(f"Created new topic {topic_id}")
-
-        elif event_type in ['post_created', 'post_edited', 'post_recovered']:
-            post_data = data.get('post', {})
-            if not post_data:
-                logger.warning(f"No post data found for event {event_type}")
-                return False
-
-            post_number = post_data.get('post_number')
-            if not post_number:
-                logger.warning(f"No post_number found for event {event_type}")
-                return False
-
-            existing_post = self.check_existing_post(topic_id, post_number, forum.id)
-
-            if existing_post:
-                update_data = {
-                    'content': post_data.get('cooked', ''),
-                    'author': post_data.get('username', ''),
-                    'updated_at': parse_discourse_date(post_data.get('updated_at')) or datetime.datetime.utcnow()
-                }
-                self.update_post(update_data, topic_id, post_number, forum.id)
-                logger.debug(f"Updated existing post {post_number} in topic {topic_id}")
-            else:
-                insert_data = {
-                    'topic_id': topic_id,
-                    'post_number': post_number,
-                    'content': post_data.get('cooked', ''),
-                    'author': post_data.get('username', ''),
-                    'created_at': parse_discourse_date(post_data.get('created_at')) or datetime.datetime.utcnow(),
-                    'updated_at': parse_discourse_date(post_data.get('updated_at')) or datetime.datetime.utcnow()
-                }
-                self.insert_reply(insert_data, forum.id)
-                logger.debug(f"Created new post {post_number} in topic {topic_id}")
-
-        return True
-
-    def _handle_database_delete(self, forum, topic_id, data, event_type):
-        if event_type == 'topic_destroyed':
-            self.delete_topic_and_replies(topic_id, forum.id)
-            logger.info(f"Deleted topic {topic_id} and all its replies")
-
-        elif event_type == 'post_destroyed':
-            post_data = data.get('post', {})
-            post_number = post_data.get('post_number')
-            if post_number:
-                self.delete_post(topic_id, post_number, forum.id)
-                logger.info(f"Deleted post {post_number} in topic {topic_id}")
-        return True
 
     def handle_webhook_request(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
@@ -509,6 +485,15 @@ class DiscourseSyncManager:
         """Process a batch of topics, returns True if sync should stop"""
         for topic_data in topics:
             try:
+                # Check topic_id validity
+                topic_id = topic_data.get('id')
+                if not topic_id:
+                    continue
+
+                # Check if we should stop syncing based on timestamp
+                if self._should_stop_sync(topic_data, sync_context):
+                    return True
+
                 should_stop = self._process_single_topic(
                     topic_data, sync_context, forum_url, headers, connection_id
                 )
@@ -525,35 +510,22 @@ class DiscourseSyncManager:
     def _process_single_topic(self, topic_data, sync_context, forum_url, headers, connection_id):
         """Process a single topic, returns True if sync should stop"""
         topic_id = topic_data.get('id')
-        if not topic_id:
-            return False
-
-        # Check if we should stop syncing based on timestamp
-        if self._should_stop_sync(topic_data, sync_context):
-            return True
-
-        existing_topic = self.check_existing_topic(topic_id, connection_id)
-
+        
         # Handle different sync scenarios
         if sync_context['is_initial_sync']:
-            if existing_topic:
-                logger.debug(f"Topic {topic_id} already exists, skipping.")
-                return False
+            # Create new topic with posts
+            self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
+            return False
         else:
-            if existing_topic:
-                self._update_existing_topic(topic_data, topic_id, connection_id)
-                return False
-
-        # Create new topic with posts
-        self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
-        return False
+            self._update_existing_topic(topic_data, topic_id, connection_id)
+            return False
 
     def _should_stop_sync(self, topic_data, sync_context):
         """Check if sync should stop based on topic timestamp"""
         if sync_context['is_initial_sync'] or not sync_context['latest_local_updated_at']:
             return False
 
-        topic_bumped_at = parse_discourse_date(topic_data.get('bumped_at'))
+        topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
         if topic_bumped_at and topic_bumped_at <= sync_context['latest_local_updated_at']:
             # Skip pinned topics
             if topic_data.get('pinned'):
@@ -567,7 +539,7 @@ class DiscourseSyncManager:
 
     def _update_existing_topic(self, topic_data, topic_id, connection_id):
         """Update existing topic's bumped_at timestamp"""
-        topic_bumped_at = parse_discourse_date(topic_data.get('bumped_at'))
+        topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
         self.update_topic_bumped_at(topic_id, connection_id, topic_bumped_at)
         logger.debug(f"Successfully updated topic {topic_id}")
 
@@ -595,7 +567,7 @@ class DiscourseSyncManager:
             'category_id': topic_data.get('category_id'),
             'created_at': datetime.datetime.now(datetime.UTC),
             'updated_at': datetime.datetime.now(datetime.UTC),
-            'bumped_at': parse_discourse_date(topic_data.get('bumped_at')) or datetime.datetime.now(datetime.UTC)
+            'bumped_at': time_str_to_utc_time(topic_data.get('bumped_at')) or datetime.datetime.now(datetime.UTC)
         }
         self.insert_topic(topic_insert_data, connection_id)
         logger.debug(f"Successfully saved topic {topic_id}")
