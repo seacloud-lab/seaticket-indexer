@@ -21,7 +21,6 @@ from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.crawler.utils import get_site_dir
-from seaqa_indexer.utils.constants import ConnectionType
 
 
 logger = logging.getLogger(__name__)
@@ -48,7 +47,7 @@ class WebCrawlManager:
             connection = session.execute(text(sql), {'pc_id': pc_id, 'conn_type': conn_type}).fetchone()
             return connection
 
-    def update_status(self, connection_id, status):
+    def update_site_status(self, connection_id, status):
         with self.db_session() as session:
             cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
             session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
@@ -91,7 +90,7 @@ class WebCrawlManager:
         if site.status == CrawlStatus.CRAWLING:
             logger.warning('site: %s is crawling', site_id)
             return
-        self.update_status(site_id, CrawlStatus.CRAWLING)
+        self.update_site_status(site_id, CrawlStatus.CRAWLING)
 
         logger.info(f"Start crawling site {site_id}")
 
