@@ -390,20 +390,22 @@ class IndexManager:
         connection_type_list = connection_types.split(',') if connection_types \
             else [connection_type.value for connection_type in ConnectionType]
 
+        connection_id_list = connection_ids.split(',') if connection_ids else None
+
         for connection_type in connection_type_list:
             if connection_type == ConnectionType.SEAFILE.value:
                 seafile_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
-                seafile_search_param = self.seafile_index.get_search_param(seafile_index_name, keyword, start, size)
+                seafile_search_param = self.seafile_index.get_search_param(seafile_index_name, keyword, start, size, connection_id_list)
                 bulk_search_params.append(seafile_search_param)
             elif connection_type == ConnectionType.SITE.value:
                 site_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
-                site_search_param = self.site_index.get_search_param(site_index_name, keyword, start, size)
+                site_search_param = self.site_index.get_search_param(site_index_name, keyword, start, size, connection_id_list)
                 bulk_search_params.append(site_search_param)
             elif connection_type == ConnectionType.EMAIL.value:
                 pass
             elif connection_type == ConnectionType.GITHUB_ISSUE.value:
                 issues_index_name = gen_index_name_by_type(project_uuid, ConnectionType.GITHUB_ISSUE.value)
-                issues_search_param = self.github_issues_index.get_search_param(issues_index_name, keyword, start, size)
+                issues_search_param = self.github_issues_index.get_search_param(issues_index_name, keyword, start, size, connection_id_list)
                 bulk_search_params.append(issues_search_param)
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
                 pass
@@ -487,10 +489,6 @@ class IndexManager:
                 result_docs.append(r)
             elif index_name.startswith(ConnectionType.DISCOURSE_FORUM.value):
                 pass
-
-        if connection_ids:
-            connection_id_list = connection_ids.split(',')
-            result_docs = [doc for doc in result_docs if doc['connection_id'] in connection_id_list]
 
         logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
                         project_uuid, result_docs)
