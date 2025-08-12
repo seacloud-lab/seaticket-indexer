@@ -126,8 +126,6 @@ class DiscourseSyncTaskWorker(object):
         try:
             while not self.should_stop.is_set():
                 try:
-                    # The element is a json string, like
-                    # '{"connection_id": 1, "type": "discourse_forum"}'
                     element = self.mq.brpop('discourse_sync_task', timeout=30)
                     if element is not None:
                         key, value = element

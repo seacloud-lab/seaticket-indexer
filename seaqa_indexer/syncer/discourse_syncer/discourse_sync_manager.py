@@ -7,12 +7,28 @@ import datetime
 from sqlalchemy import text
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import SyncStatus
+from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
 logger = logging.getLogger(__name__)
+
+
+class DiscourseException(Exception):
+    pass
+
+
+class ForumNotFoundException(DiscourseException):
+    pass
+
+
+class InvalidPayloadException(DiscourseException):
+    pass
+
+
+class WebhookEventProcessingException(DiscourseException):
+    pass
 
 
 def parse_discourse_date(date_str):
@@ -38,7 +54,6 @@ class DiscourseSyncManager:
 
     def process_webhook_event(self, forum, topic_id, event_type, data):
         try:
-
             success = False
             if event_type in ['topic_created', 'topic_recovered', 'topic_edited', 'post_created', 'post_edited', 'post_recovered']:
                 success = self._handle_database_update(forum, topic_id, data, event_type)
@@ -177,7 +192,7 @@ class DiscourseSyncManager:
     def check_existing_post(self, topic_id, post_number, connection_id):
         """Check if a post already exists"""
         with self.db_session() as session:
-            sql =  """SELECT id FROM discourse_replies 
+            sql = """SELECT id FROM discourse_replies 
                       WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
             return session.execute(text(sql), {
                 'topic_id': topic_id,
@@ -235,26 +250,29 @@ class DiscourseSyncManager:
 
     def sync_discourse(self, connection_id):
         """Start syncing Discourse forum"""
-        discourse_connection = self.get_project_connection_by_id(connection_id, conn_type='discourse_forum')
-        if not discourse_connection:
-            logger.warning('discourse forum: %s not found', connection_id)
-            return
-        if discourse_connection.status == SyncStatus.SYNCING:
-            logger.warning('discourse forum: %s is syncing', connection_id)
-            return
-        self.update_status(connection_id, SyncStatus.SYNCING)
-        logger.info(f"Start syncing Discourse forum {connection_id}")
-        config = json.loads(discourse_connection.config)
-        config = decrypt_config(config)
-        df_url = config['url']
-        df_api_key = config['api_key']
-        df_api_username = config['api_username']
+        try:
+            discourse_connection = self.get_project_connection_by_id(connection_id, conn_type='discourse_forum')
+            if not discourse_connection:
+                logger.warning('discourse forum: %s not found', connection_id)
+                return
+            if discourse_connection.status == CrawlStatus.COMPLETED:
+                logger.warning('discourse forum: %s is syncing', connection_id)
+                return
+            self.update_status(connection_id, CrawlStatus.COMPLETED)
+            logger.info(f"Start syncing Discourse forum {connection_id}")
+            config = json.loads(discourse_connection.config)
+            config = decrypt_config(config)
+            df_url = config['url']
+            df_api_key = config['api_key']
+            df_api_username = config['api_username']
 
-        self.sync_discourse_latest_topics(df_url, df_api_key, df_api_username, connection_id)
+            self.sync_discourse_latest_topics(df_url, df_api_key, df_api_username, connection_id)
+        except Exception as e:
+            logger.exception(f"Error syncing discourse forum {connection_id}: {str(e)}")
+            self.update_status(connection_id, CrawlStatus.FAILED)
 
     def update_discourse_forums(self):
         """Check if all discourse forums need to be updated"""
-
         start, limit = 0, 1000
         while True:
             try:
@@ -273,7 +291,7 @@ class DiscourseSyncManager:
                     logger.debug('Successfully queued discourse forum sync task: %s', connection_id)
                 except Exception as e:
                     logger.warning('Queue discourse forum sync task failed, connection_id: %s, error: %s', connection_id, e)
-                    self.update_status(connection_id, SyncStatus.FAILED)
+                    self.update_status(connection_id, CrawlStatus.FAILED)
 
     def add_discourse_sync_task(self, connection_id):
         msg_content = {
@@ -287,34 +305,33 @@ class DiscourseSyncManager:
             logger.debug(f"Fetching page {page} from {url}")
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
-            
+
             data = response.json()
             topics = data.get("topic_list", {}).get("topics", [])
             return topics
         except Exception as e:
             logger.error(f"Failed to fetch topics from page {page}: {e}")
             return []
-    
+
     def sync_discourse_latest_topics(self, forum_url, api_key, api_username, connection_id):
         """Sync latest topics from Discourse forum"""
         headers = self._build_api_headers(api_key, api_username)
-        
         sync_context = self._prepare_sync_context(connection_id)
-        
+
         page = 0
         while True:
             topics = self.fetch_latest_topics_page(forum_url, headers, page)
-            
+
             if not topics:
                 logger.debug(f"No more topics found on page {page}")
                 break
-                
+
             should_stop = self._process_topics_batch(topics, sync_context, forum_url, headers, connection_id)
             if should_stop:
                 break
-                
+
             page += 1
-            
+
         return True
 
     def fetch_discourse_topic_posts(self, forum_url, topic_id, headers):
@@ -361,155 +378,113 @@ class DiscourseSyncManager:
             return None
 
     def _handle_database_update(self, forum, topic_id, data, event_type):
-        try:
-            if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
-                topic_data = data.get('topic', {})
-                if not topic_data:
-                    logger.warning(f"No topic data found for event {event_type}")
-                    return False
+        if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
+            topic_data = data.get('topic', {})
+            if not topic_data:
+                logger.warning(f"No topic data found for event {event_type}")
+                return False
 
-                existing_topic = self.check_existing_topic(topic_id, forum.id)
+            existing_topic = self.check_existing_topic(topic_id, forum.id)
 
-                if existing_topic:
-                    update_data = {
-                        'title': topic_data.get('title'),
-                        'slug': topic_data.get('slug'),
-                        'views': topic_data.get('views', 0),
-                        'category_id': topic_data.get('category_id'),
-                        'updated_at': parse_discourse_date(topic_data.get('updated_at')) or datetime.datetime.utcnow()
-                    }
-                    self.update_topic(update_data, topic_id, forum.id)
-                    logger.info(f"Updated existing topic {topic_id}")
-                else:
-                    insert_data = {
-                        'topic_id': topic_id,
-                        'title': topic_data.get('title', ''),
-                        'slug': topic_data.get('slug', ''),
-                        'views': topic_data.get('views', 0),
-                        'category_id': topic_data.get('category_id'),
-                        'connection_id': forum.id,
-                        'created_at': parse_discourse_date(topic_data.get('created_at')) or datetime.datetime.utcnow(),
-                        'updated_at': parse_discourse_date(topic_data.get('updated_at')) or datetime.datetime.utcnow(),
-                        'bumped_at': parse_discourse_date(topic_data.get('bumped_at')) or datetime.datetime.utcnow()
-                    }
-                    self.insert_topic(insert_data, forum.id)
-                    logger.info(f"Created new topic {topic_id}")
+            if existing_topic:
+                update_data = {
+                    'title': topic_data.get('title'),
+                    'slug': topic_data.get('slug'),
+                    'views': topic_data.get('views', 0),
+                    'category_id': topic_data.get('category_id'),
+                    'updated_at': parse_discourse_date(topic_data.get('updated_at')) or datetime.datetime.utcnow()
+                }
+                self.update_topic(update_data, topic_id, forum.id)
+                logger.debug(f"Updated existing topic {topic_id}")
+            else:
+                insert_data = {
+                    'topic_id': topic_id,
+                    'title': topic_data.get('title', ''),
+                    'slug': topic_data.get('slug', ''),
+                    'views': topic_data.get('views', 0),
+                    'category_id': topic_data.get('category_id'),
+                    'connection_id': forum.id,
+                    'created_at': parse_discourse_date(topic_data.get('created_at')) or datetime.datetime.utcnow(),
+                    'updated_at': parse_discourse_date(topic_data.get('updated_at')) or datetime.datetime.utcnow(),
+                    'bumped_at': parse_discourse_date(topic_data.get('bumped_at')) or datetime.datetime.utcnow()
+                }
+                self.insert_topic(insert_data, forum.id)
+                logger.debug(f"Created new topic {topic_id}")
 
-            elif event_type in ['post_created', 'post_edited', 'post_recovered']:
-                post_data = data.get('post', {})
-                if not post_data:
-                    logger.warning(f"No post data found for event {event_type}")
-                    return False
+        elif event_type in ['post_created', 'post_edited', 'post_recovered']:
+            post_data = data.get('post', {})
+            if not post_data:
+                logger.warning(f"No post data found for event {event_type}")
+                return False
 
-                post_number = post_data.get('post_number')
-                if not post_number:
-                    logger.warning(f"No post_number found for event {event_type}")
-                    return False
+            post_number = post_data.get('post_number')
+            if not post_number:
+                logger.warning(f"No post_number found for event {event_type}")
+                return False
 
-                existing_post = self.check_existing_post(topic_id, post_number, forum.id)
+            existing_post = self.check_existing_post(topic_id, post_number, forum.id)
 
-                if existing_post:
-                    update_data = {
-                        'content': post_data.get('cooked', ''),
-                        'author': post_data.get('username', ''),
-                        'updated_at': parse_discourse_date(post_data.get('updated_at')) or datetime.datetime.utcnow()
-                    }
-                    self.update_post(update_data, topic_id, post_number, forum.id)
-                    logger.info(f"Updated existing post {post_number} in topic {topic_id}")
-                else:
-                    insert_data = {
-                        'topic_id': topic_id,
-                        'post_number': post_number,
-                        'content': post_data.get('cooked', ''),
-                        'author': post_data.get('username', ''),
-                        'created_at': parse_discourse_date(post_data.get('created_at')) or datetime.datetime.utcnow(),
-                        'updated_at': parse_discourse_date(post_data.get('updated_at')) or datetime.datetime.utcnow()
-                    }
-                    self.insert_reply(insert_data, forum.id)
-                    logger.info(f"Created new post {post_number} in topic {topic_id}")
+            if existing_post:
+                update_data = {
+                    'content': post_data.get('cooked', ''),
+                    'author': post_data.get('username', ''),
+                    'updated_at': parse_discourse_date(post_data.get('updated_at')) or datetime.datetime.utcnow()
+                }
+                self.update_post(update_data, topic_id, post_number, forum.id)
+                logger.debug(f"Updated existing post {post_number} in topic {topic_id}")
+            else:
+                insert_data = {
+                    'topic_id': topic_id,
+                    'post_number': post_number,
+                    'content': post_data.get('cooked', ''),
+                    'author': post_data.get('username', ''),
+                    'created_at': parse_discourse_date(post_data.get('created_at')) or datetime.datetime.utcnow(),
+                    'updated_at': parse_discourse_date(post_data.get('updated_at')) or datetime.datetime.utcnow()
+                }
+                self.insert_reply(insert_data, forum.id)
+                logger.debug(f"Created new post {post_number} in topic {topic_id}")
 
-            return True
-
-        except Exception as e:
-            logger.exception(f"Error updating database for event {event_type}: {str(e)}")
-            return False
+        return True
 
     def _handle_database_delete(self, forum, topic_id, data, event_type):
-        try:
-            if event_type == 'topic_destroyed':
-                self.delete_topic_and_replies(topic_id, forum.id)
-                logger.info(f"Deleted topic {topic_id} and all its replies")
+        if event_type == 'topic_destroyed':
+            self.delete_topic_and_replies(topic_id, forum.id)
+            logger.info(f"Deleted topic {topic_id} and all its replies")
 
-            elif event_type == 'post_destroyed':
-                post_data = data.get('post', {})
-                post_number = post_data.get('post_number')
-                if post_number:
-                    self.delete_post(topic_id, post_number, forum.id)
-                    logger.info(f"Deleted post {post_number} in topic {topic_id}")
-            return True
-        except Exception as e:
-            logger.exception(f"Error deleting from database for event {event_type}: {str(e)}")
-            return False
+        elif event_type == 'post_destroyed':
+            post_data = data.get('post', {})
+            post_number = post_data.get('post_number')
+            if post_number:
+                self.delete_post(topic_id, post_number, forum.id)
+                logger.info(f"Deleted post {post_number} in topic {topic_id}")
+        return True
 
     def handle_webhook_request(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
-        try:
-            # Find forum by connection_id
-            forum = self.get_forum_by_connection_id(connection_id)
-            if not forum:
-                return {
-                    'success': False,
-                    'error': f'Forum not found for connection_id {connection_id}',
-                    'status_code': 404
-                }
-            
-            # Validate request data
-            if not request_data:
-                return {
-                    'success': False,
-                    'error': 'No data received',
-                    'status_code': 400
-                }
-            
-            if not event_type:
-                return {
-                    'success': False,
-                    'error': 'Event type not specified',
-                    'status_code': 400
-                }
-            
-            # Extract topic_id
-            topic_id = request_data.get('topic', {}).get('id')
-            if not topic_id:
-                return {
-                    'success': False,
-                    'error': 'Topic ID not found in request data',
-                    'status_code': 400
-                }
-            
-            # Process the webhook event
-            success = self.process_webhook_event(forum, topic_id, event_type, request_data)
-            
-            if success:
-                return {
-                    'success': True,
-                    'message': f'Successfully processed {event_type} for topic {topic_id}',
-                    'status_code': 200
-                }
-            else:
-                return {
-                    'success': False,
-                    'error': f'Failed to process {event_type} for topic {topic_id}',
-                    'status_code': 500
-                }
-                
-        except Exception as e:
-            logger.exception(f"Error handling webhook request: {str(e)}")
-            return {
-                'success': False,
-                'error': f'Internal server error: {str(e)}',
-                'status_code': 500
-            }
+        forum = self.get_forum_by_connection_id(connection_id)
+        if not forum:
+            raise ForumNotFoundException(f'Forum not found for connection_id {connection_id}')
+
+        if not request_data:
+            raise InvalidPayloadException('No data received')
+
+        if not event_type:
+            raise InvalidPayloadException('Event type not specified')
+
+        topic_id = request_data.get('topic', {}).get('id')
+        if not topic_id:
+            raise InvalidPayloadException('Topic ID not found in request data')
+
+        success = self.process_webhook_event(forum, topic_id, event_type, request_data)
+
+        if not success:
+            raise WebhookEventProcessingException(f'Failed to process {event_type} for topic {topic_id}')
+
+        return {
+            'success': True,
+            'message': f'Successfully processed {event_type} for topic {topic_id}',
+            'status_code': 200,
+        }
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
@@ -518,48 +493,47 @@ class DiscourseSyncManager:
             "Api-Username": api_username
         }
 
-    def _prepare_sync_context(self, connection_id, db_session):
+    def _prepare_sync_context(self, connection_id):
         """Prepare synchronization context"""
-        latest_local_updated_at = self.get_latest_updated_at(connection_id, db_session)
+        latest_local_updated_at = self.get_latest_updated_at(connection_id)
         is_initial_sync = latest_local_updated_at is None
-        
+
         logger.debug(f"Starting sync (initial_sync: {is_initial_sync})")
-        
+
         return {
             'latest_local_updated_at': latest_local_updated_at,
             'is_initial_sync': is_initial_sync
         }
 
-    def _process_topics_batch(self, topics, sync_context, forum_url, headers, connection_id, db_session):
+    def _process_topics_batch(self, topics, sync_context, forum_url, headers, connection_id):
         """Process a batch of topics, returns True if sync should stop"""
         for topic_data in topics:
             try:
                 should_stop = self._process_single_topic(
-                    topic_data, sync_context, forum_url, headers, connection_id, db_session
+                    topic_data, sync_context, forum_url, headers, connection_id
                 )
                 if should_stop:
                     return True
-                    
+
                 time.sleep(0.05)
             except Exception as e:
-                db_session.rollback()
                 logger.error(f"Error processing topic {topic_data.get('id', 'unknown')}: {str(e)}")
                 continue
-                
-            return False
 
-    def _process_single_topic(self, topic_data, sync_context, forum_url, headers, connection_id, db_session):
+        return False
+
+    def _process_single_topic(self, topic_data, sync_context, forum_url, headers, connection_id):
         """Process a single topic, returns True if sync should stop"""
         topic_id = topic_data.get('id')
         if not topic_id:
             return False
-            
+
         # Check if we should stop syncing based on timestamp
         if self._should_stop_sync(topic_data, sync_context):
             return True
-            
-        existing_topic = self.check_existing_topic(topic_id, connection_id, db_session)
-        
+
+        existing_topic = self.check_existing_topic(topic_id, connection_id)
+
         # Handle different sync scenarios
         if sync_context['is_initial_sync']:
             if existing_topic:
@@ -567,93 +541,75 @@ class DiscourseSyncManager:
                 return False
         else:
             if existing_topic:
-                self._update_existing_topic(topic_data, topic_id, connection_id, db_session)
+                self._update_existing_topic(topic_data, topic_id, connection_id)
                 return False
-                
+
         # Create new topic with posts
-        self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id, db_session)
+        self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
         return False
 
     def _should_stop_sync(self, topic_data, sync_context):
         """Check if sync should stop based on topic timestamp"""
         if sync_context['is_initial_sync'] or not sync_context['latest_local_updated_at']:
             return False
-            
+
         topic_bumped_at = parse_discourse_date(topic_data.get('bumped_at'))
         if topic_bumped_at and topic_bumped_at <= sync_context['latest_local_updated_at']:
             # Skip pinned topics
             if topic_data.get('pinned'):
                 logger.debug(f"Topic {topic_data.get('id')} is pinned, continuing sync.")
                 return False
-                
+
             logger.debug(f"Found topic with bumped_at ({topic_bumped_at}) <= latest local updated_at ({sync_context['latest_local_updated_at']}), stopping sync")
             return True
-            
+
         return False
 
-    def _update_existing_topic(self, topic_data, topic_id, connection_id, db_session):
+    def _update_existing_topic(self, topic_data, topic_id, connection_id):
         """Update existing topic's bumped_at timestamp"""
-        try:
-            topic_bumped_at = parse_discourse_date(topic_data.get('bumped_at'))
-            self.update_topic_bumped_at(topic_id, connection_id, topic_bumped_at, db_session)
-            db_session.commit()
-            logger.debug(f"Successfully updated topic {topic_id}")
-        except Exception as e:
-            db_session.rollback()
-            logger.error(f"Error updating topic {topic_id}: {str(e)}")
+        topic_bumped_at = parse_discourse_date(topic_data.get('bumped_at'))
+        self.update_topic_bumped_at(topic_id, connection_id, topic_bumped_at)
+        logger.debug(f"Successfully updated topic {topic_id}")
 
-    def _create_topic_with_posts(self, topic_data, topic_id, forum_url, headers, connection_id, db_session):
+    def _create_topic_with_posts(self, topic_data, topic_id, forum_url, headers, connection_id):
         """Create new topic and its posts"""
         # Fetch topic posts
         topic_posts_data = self.fetch_discourse_topic_posts(forum_url, topic_id, headers)
         if not topic_posts_data:
             logger.warning(f"Failed to fetch posts for topic {topic_id}")
             return
-            
+
         # Create topic
-        self._insert_topic_data(topic_data, topic_id, connection_id, db_session)
-        
+        self._insert_topic_data(topic_data, topic_id, connection_id)
+
         # Create posts
-        self._insert_topic_posts(topic_posts_data, topic_id, connection_id, db_session)
+        self._insert_topic_posts(topic_posts_data, topic_id, connection_id)
 
-    def _insert_topic_data(self, topic_data, topic_id, connection_id, db_session):
+    def _insert_topic_data(self, topic_data, topic_id, connection_id):
         """Insert topic data into database"""
-        try:
-            topic_insert_data = {
-                'topic_id': topic_id,
-                'title': topic_data.get('title'),
-                'slug': topic_data.get('slug'),
-                'views': topic_data.get('views', 0),
-                'category_id': topic_data.get('category_id'),
-                'created_at': datetime.datetime.now(datetime.UTC),
-                'updated_at': datetime.datetime.now(datetime.UTC),
-                'bumped_at': parse_discourse_date(topic_data.get('bumped_at')) or datetime.datetime.now(datetime.UTC)
-            }
-            self.insert_topic(topic_insert_data, connection_id, db_session)
-            db_session.commit()
-            logger.debug(f"Successfully saved topic {topic_id}")
-        except Exception as e:
-            db_session.rollback()
-            logger.error(f"Error saving topic {topic_id}: {str(e)}")
-            raise
+        topic_insert_data = {
+            'topic_id': topic_id,
+            'title': topic_data.get('title'),
+            'slug': topic_data.get('slug'),
+            'views': topic_data.get('views', 0),
+            'category_id': topic_data.get('category_id'),
+            'created_at': datetime.datetime.now(datetime.UTC),
+            'updated_at': datetime.datetime.now(datetime.UTC),
+            'bumped_at': parse_discourse_date(topic_data.get('bumped_at')) or datetime.datetime.now(datetime.UTC)
+        }
+        self.insert_topic(topic_insert_data, connection_id)
+        logger.debug(f"Successfully saved topic {topic_id}")
 
-    def _insert_topic_posts(self, topic_posts_data, topic_id, connection_id, db_session):
+    def _insert_topic_posts(self, topic_posts_data, topic_id, connection_id):
         """Insert topic posts into database"""
-        try:
-            for post in topic_posts_data.get('posts', []):
-                reply_data = {
-                    'topic_id': topic_id,
-                    'post_number': post.get('post_number'),
-                    'content': post.get('cooked'),
-                    'author': post.get('username'),
-                    'created_at': datetime.datetime.now(datetime.UTC),
-                    'updated_at': datetime.datetime.now(datetime.UTC)
-                }
-                self.insert_reply(reply_data, connection_id, db_session)
-                
-            db_session.commit()
-            logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
-        except Exception as e:
-            db_session.rollback()
-            logger.error(f"Error saving replies for topic {topic_id}: {str(e)}")
-            raise
+        for post in topic_posts_data.get('posts', []):
+            reply_data = {
+                'topic_id': topic_id,
+                'post_number': post.get('post_number'),
+                'content': post.get('cooked'),
+                'author': post.get('username'),
+                'created_at': datetime.datetime.now(datetime.UTC),
+                'updated_at': datetime.datetime.now(datetime.UTC)
+            }
+            self.insert_reply(reply_data, connection_id)
+        logger.debug(f"Successfully processed and saved topic {topic_id} with replies")

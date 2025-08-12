@@ -6,11 +6,12 @@ from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
 from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
-
+from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException, \
+    InvalidPayloadException, WebhookEventProcessingException
 from seaqa_indexer.utils.constants import ConnectionType
 
-application = Flask(__name__)
 
+application = Flask(__name__)
 logger = logging.getLogger(__name__)
 
 
@@ -165,13 +166,16 @@ def discourse_webhook():
         return jsonify({'error': 'No payload data'}), 400
     
     try:
-        discourse_sync_manager = application.discourse_sync_manager
-        result = discourse_sync_manager.handle_webhook_request(connection_id, data, event_type)
-        
-        if result['success']:
-            return {'status': 'success', 'message': result['message']}, result['status_code']
-        else:
-            return {'status': 'error', 'message': result['error']}, result['status_code']
+        application.discourse_sync_manager.handle_webhook_request(connection_id, data, event_type)
+    except ForumNotFoundException as e:
+        return {'error': str(e)}, 404
+    except InvalidPayloadException as e:
+        return {'error': str(e)}, 400
+    except WebhookEventProcessingException as e:
+        logger.error(f"Discourse webhook error: {e}")
+        return {'error': str(e)}, 500
     except Exception as e:
         logger.error(f"Discourse webhook error: {e}")
         return {'error': 'Internal Server Error'}, 500
+
+    return {'msg': 'Discourse event processed'}, 200
