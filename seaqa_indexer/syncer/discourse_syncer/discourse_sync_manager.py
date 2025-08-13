@@ -372,22 +372,20 @@ class DiscourseSyncManager:
             'latest_local_updated_at': latest_local_updated_at,
             'is_initial_sync': is_initial_sync
         }
-
+    
         page = 0
         while True:
             topics = self.fetch_latest_topics_page(forum_url, headers, page)
-
+    
             if not topics:
                 logger.debug(f"No more topics found on page {page}")
                 break
-
+    
             should_stop = self._process_topics_batch(topics, sync_context, forum_url, headers, connection_id)
             if should_stop:
                 break
-
+    
             page += 1
-
-        return True
 
     def fetch_discourse_topic(self, forum_url, topic_id, headers):
         url = f"{forum_url}/t/{topic_id}.json"
@@ -441,16 +439,13 @@ class DiscourseSyncManager:
         forum = self.get_forum_by_connection_id(connection_id)
         if not forum:
             raise ForumNotFoundException(f'Forum not found for connection_id {connection_id}')
-  
+      
         if not event_type:
             raise InvalidPayloadException('Event type not specified')
 
         topic_id = request_data.get('topic', {}).get('id')
 
-        success = self.process_webhook_event(forum, topic_id, event_type, request_data)
-
-        if not success:
-            raise WebhookEventProcessingException(f'Failed to process {event_type} for topic {topic_id}')
+        self.process_webhook_event(forum, topic_id, event_type, request_data)
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
@@ -463,16 +458,13 @@ class DiscourseSyncManager:
         """Process a batch of topics, returns True if sync should stop"""
         for topic_data in topics:
             try:
-
                 # Check if we should stop syncing based on timestamp
                 if self._should_stop_sync(topic_data, sync_context):
                     return True
 
-                should_stop = self._process_single_topic(
+                self._process_single_topic(
                     topic_data, sync_context, forum_url, headers, connection_id
                 )
-                if should_stop:
-                    return True
 
                 time.sleep(0.05)
             except Exception as e:
@@ -482,17 +474,15 @@ class DiscourseSyncManager:
         return False
 
     def _process_single_topic(self, topic_data, sync_context, forum_url, headers, connection_id):
-        """Process a single topic, returns True if sync should stop"""
+        """Process a single topic"""
         topic_id = topic_data.get('id')
         
         # Handle different sync scenarios
         if sync_context['is_initial_sync']:
             # Create new topic with posts
             self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
-            return False
         else:
             self._update_existing_topic(topic_data, topic_id, connection_id)
-            return False
 
     def _should_stop_sync(self, topic_data, sync_context):
         """Check if sync should stop based on topic timestamp"""
