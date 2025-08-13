@@ -11,7 +11,7 @@ from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import DiscourseSyncManager
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import CrawlStatus
 
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,11 @@ class DiscourseSyncTaskWorker(object):
                 logger.info('%s start discourse sync connection: %s' % (self.tname, connection_id))
                 lock_key = self._get_discourse_lock_key(connection_id)
                 self.locked_keys.add(lock_key)
-                self.discourse_sync_manager.sync_discourse(connection_id)
+                try:
+                    self.discourse_sync_manager.sync_discourse(connection_id)
+                except Exception as e:
+                    logger.error('%s discourse sync connection %s error: %s' % (self.tname, connection_id, e))
+                    self.discourse_sync_manager.update_status(connection_id, CrawlStatus.COMPLETED)
                 try:
                     self.locked_keys.remove(lock_key)
                 except KeyError:
