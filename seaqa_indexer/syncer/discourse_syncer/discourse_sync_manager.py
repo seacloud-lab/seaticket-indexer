@@ -38,16 +38,12 @@ class DiscourseSyncManager:
     def process_webhook_event(self, forum, topic_id, event_type, data):
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
             self._handle_topic_update(forum, topic_id, data)
-            logger.debug(f"Successfully processed {event_type} for topic {topic_id}")
         elif event_type in ['post_created', 'post_edited', 'post_recovered']:
             self._handle_post_update(forum, topic_id, data)
-            logger.debug(f"Successfully processed {event_type} for topic {topic_id}")
         elif event_type == 'topic_destroyed':
             self._handle_topic_delete(forum, topic_id)
-            logger.debug(f"Successfully processed {event_type} for topic {topic_id}")
         elif event_type == 'post_destroyed':
             self._handle_post_delete(forum, topic_id, data)
-            logger.debug(f"Successfully processed {event_type} for topic {topic_id}")
         else:
             logger.warning(f"Unknown event type: {event_type}")
 
@@ -370,7 +366,12 @@ class DiscourseSyncManager:
     def sync_discourse_latest_topics(self, forum_url, api_key, api_username, connection_id):
         """Sync latest topics from Discourse forum"""
         headers = self._build_api_headers(api_key, api_username)
-        sync_context = self._prepare_sync_context(connection_id)
+        latest_local_updated_at = self.get_latest_updated_at(connection_id)
+        is_initial_sync = latest_local_updated_at is None
+        sync_context = {
+            'latest_local_updated_at': latest_local_updated_at,
+            'is_initial_sync': is_initial_sync
+        }
 
         page = 0
         while True:
@@ -440,27 +441,16 @@ class DiscourseSyncManager:
         forum = self.get_forum_by_connection_id(connection_id)
         if not forum:
             raise ForumNotFoundException(f'Forum not found for connection_id {connection_id}')
-
-        if not request_data:
-            raise InvalidPayloadException('No data received')
-
+  
         if not event_type:
             raise InvalidPayloadException('Event type not specified')
 
         topic_id = request_data.get('topic', {}).get('id')
-        if not topic_id:
-            raise InvalidPayloadException('Topic ID not found in request data')
 
         success = self.process_webhook_event(forum, topic_id, event_type, request_data)
 
         if not success:
             raise WebhookEventProcessingException(f'Failed to process {event_type} for topic {topic_id}')
-
-        return {
-            'success': True,
-            'message': f'Successfully processed {event_type} for topic {topic_id}',
-            'status_code': 200,
-        }
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
@@ -469,26 +459,10 @@ class DiscourseSyncManager:
             "Api-Username": api_username
         }
 
-    def _prepare_sync_context(self, connection_id):
-        """Prepare synchronization context"""
-        latest_local_updated_at = self.get_latest_updated_at(connection_id)
-        is_initial_sync = latest_local_updated_at is None
-
-        logger.debug(f"Starting sync (initial_sync: {is_initial_sync})")
-
-        return {
-            'latest_local_updated_at': latest_local_updated_at,
-            'is_initial_sync': is_initial_sync
-        }
-
     def _process_topics_batch(self, topics, sync_context, forum_url, headers, connection_id):
         """Process a batch of topics, returns True if sync should stop"""
         for topic_data in topics:
             try:
-                # Check topic_id validity
-                topic_id = topic_data.get('id')
-                if not topic_id:
-                    continue
 
                 # Check if we should stop syncing based on timestamp
                 if self._should_stop_sync(topic_data, sync_context):
