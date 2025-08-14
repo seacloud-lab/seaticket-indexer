@@ -38,19 +38,19 @@ class WebCrawlManager:
 
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
-    def get_project_connection_by_id(self, pc_id, conn_type='site'):
+    def get_site_by_id(self, site_id):
         with self.db_session() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid
-            FROM project_connection pc 
+            sql = """SELECT pc.id as site_id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid
+             FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false AND pc.type=:conn_type AND pc.id=:pc_id"""
-            connection = session.execute(text(sql), {'pc_id': pc_id, 'conn_type': conn_type}).fetchone()
-            return connection
+            ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='site' AND pc.id=:site_id"""
+            site = session.execute(text(sql), {'site_id': site_id}).fetchone()
+            return site
 
-    def update_site_status(self, connection_id, status):
+    def update_site_status(self, site_id, status):
         with self.db_session() as session:
-            cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
-            session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
+            cmd = """UPDATE project_connection SET status = :status WHERE id = :site_id"""
+            session.execute(text(cmd), {'site_id': site_id, 'status': status})
             session.commit()
 
     def update_site_status_and_crawl_time(self, site_id, status):
@@ -83,7 +83,7 @@ class WebCrawlManager:
 
     def crawl_site(self, site_id):
         """Start crawler process"""
-        site = self.get_project_connection_by_id(site_id)
+        site = self.get_site_by_id(site_id)
         if not site:
             logger.warning('site: %s not found', site_id)
             return
