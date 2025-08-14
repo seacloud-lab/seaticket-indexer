@@ -129,10 +129,21 @@ class SiteIndex(object):
             query_map['bool']['filter'] = []
         return query_map
 
-    def get_search_param(self, project_uuid, keyword, start, size, search_title_only=False):
+    def _add_connection_id_filter(self, query_map, connection_ids):
+        if connection_ids is None:
+            return query_map
+
+        query_map = self._ensure_filter_exists(query_map)
+
+        if isinstance(connection_ids, list):
+            query_map['bool']['filter'].append({'terms': {'connection_id': connection_ids}})
+        return query_map
+
+    def get_search_param(self, project_uuid, keyword, start, size, connection_ids=None, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
+        query_map = self._add_connection_id_filter(query_map, connection_ids)
 
         data = {
             'query': query_map,
