@@ -347,9 +347,31 @@ class DiscourseSyncManager:
             if not topics:
                 logger.debug(f"No more topics found on page {page}")
                 break
-    
-            should_stop, batch_latest_bumped_at = self._process_topics_batch(topics, sync_context, forum_url, headers, connection_id)
 
+            should_stop, batch_latest_bumped_at = self._process_topics_batch(topics, sync_context, forum_url, headers, connection_id)
+            batch_latest_bumped_at = None
+            for topic_data in topics:
+                topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
+                if topic_bumped_at:
+                    if not batch_latest_bumped_at or topic_bumped_at > batch_latest_bumped_at:
+                        batch_latest_bumped_at = topic_bumped_at
+                # Check if we should stop syncing based on timestamp
+                if self._should_stop_sync(topic_data, sync_context):
+                    should_stop = True
+                    break
+                else:
+                    should_stop = False
+
+                topic_id = topic_data.get('id')
+                
+                # Handle different sync scenarios
+                if sync_context['is_initial_sync']:
+                    # Create new topic with posts
+                    self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
+                else:
+                    self._update_existing_topic(topic_data, topic_id, connection_id, forum_url, headers)
+
+                time.sleep(0.05)
             if batch_latest_bumped_at:
                 if not latest_bumped_at or batch_latest_bumped_at > latest_bumped_at:
                     latest_bumped_at = batch_latest_bumped_at
@@ -433,24 +455,18 @@ class DiscourseSyncManager:
             if self._should_stop_sync(topic_data, sync_context):
                 return True, batch_latest_bumped_at
 
-            self._process_single_topic(
-                topic_data, sync_context, forum_url, headers, connection_id
-            )
+            topic_id = topic_data.get('id')
+            
+            # Handle different sync scenarios
+            if sync_context['is_initial_sync']:
+                # Create new topic with posts
+                self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
+            else:
+                self._update_existing_topic(topic_data, topic_id, connection_id, forum_url, headers)
 
             time.sleep(0.05)
 
         return False, batch_latest_bumped_at
-
-    def _process_single_topic(self, topic_data, sync_context, forum_url, headers, connection_id):
-        """Process a single topic"""
-        topic_id = topic_data.get('id')
-        
-        # Handle different sync scenarios
-        if sync_context['is_initial_sync']:
-            # Create new topic with posts
-            self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
-        else:
-            self._update_existing_topic(topic_data, topic_id, connection_id)
 
     def _should_stop_sync(self, topic_data, sync_context):
         """Check if sync should stop based on topic timestamp"""
@@ -469,11 +485,15 @@ class DiscourseSyncManager:
 
         return False
 
-    def _update_existing_topic(self, topic_data, topic_id, connection_id):
-        """Update existing topic's bumped_at timestamp"""
-        topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
-        self.update_topic_bumped_at(topic_id, connection_id, topic_bumped_at)
-        logger.debug(f"Successfully updated topic {topic_id}")
+    def _update_existing_topic(self, topic_data, topic_id, connection_id, forum_url, headers):
+        """Deletes and recreates an existing topic and its posts to ensure content is up-to-date."""
+        # Delete existing topic and its replies
+        self.delete_topic_and_replies(topic_id, connection_id)
+        logger.debug(f"Successfully deleted topic {topic_id} and its replies for updating.")
+
+        # Create new topic with posts
+        self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
+        logger.debug(f"Successfully recreated topic {topic_id} with posts.")
 
     def _create_topic_with_posts(self, topic_data, topic_id, forum_url, headers, connection_id):
         """Create new topic and its posts"""
