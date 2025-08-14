@@ -94,7 +94,7 @@ class WebCrawlManager:
 
         logger.info(f"Start crawling site {site_id}")
 
-        site_id = site.id
+        site_id = site.site_id
         site_config = json.loads(site.config)
         site_url = site_config.get('url')
         project_uuid = str(site.project_uuid)
@@ -103,7 +103,7 @@ class WebCrawlManager:
 
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
-            self.prepare_site_crawler,
+            self.prepare_crawler,
             site_id,
             site_url,
             site_config,
@@ -184,7 +184,7 @@ class WebCrawlManager:
         d.addErrback(lambda failure: self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure)))
         return d
 
-    def prepare_site_crawler(self, site_id, site_url, site_config, project_uuid):
+    def prepare_crawler(self, site_id, site_url, site_config, project_uuid):
         """Prepare crawler parameters, execute in thread pool"""
         sitemap_url = site_config.get('sitemap_url')
 
@@ -237,9 +237,9 @@ class WebCrawlManager:
                     logger.warning('update crawl site failed, site_id: %s, error: %s', site_id, e)
                     self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, e)
 
-    def add_crawl_task(self, connection_id):
+    def add_crawl_site_task(self, site_id):
         msg_content = {
-            'connection_id': connection_id,
+            'site_id': site_id,
         }
         self.mq.lpush('web_crawl_task', json.dumps(msg_content))
 

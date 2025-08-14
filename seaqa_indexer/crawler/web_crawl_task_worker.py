@@ -18,7 +18,6 @@ from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import CrawlStatus
 
 
@@ -76,13 +75,9 @@ class WebCrawlTaskWorker(object):
                         if not data:
                             logger.warning('web_crawl_task: invalid.', res)
                             continue
-
-                        connection_id = data.get('connection_id')
-                        try:
-                            self.web_crawl_manager.crawl_site(connection_id)
-                        except Exception as e:
-                            logger.exception('Crawl task failed for connection %s  Error: %s', connection_id, e)
-                            self.web_crawl_manager.update_site_status(connection_id, CrawlStatus.FAILED)    
+                        else:
+                            site_id = data.get('site_id')
+                            self.crawl_site(site_id) 
 
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
@@ -91,6 +86,13 @@ class WebCrawlTaskWorker(object):
             logger.error(e, exc_info=True)
             # prevent case that redis break at program running.
             time.sleep(0.3)
+
+    def crawl_site(self, site_id):
+        try:
+            self.web_crawl_manager.crawl_site(site_id)
+        except Exception as e:
+            logger.exception('crawl site: %s failed, error: %s', site_id, e)
+            self.web_crawl_manager.update_site_status(site_id, CrawlStatus.FAILED)
 
     def cron_crawl_web_sites(self):
         logger.info('Start to crawl web sites timer, interval = %s sec', self.update_indexes_interval)
