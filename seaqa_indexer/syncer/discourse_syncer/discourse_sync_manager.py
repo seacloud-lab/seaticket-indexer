@@ -39,20 +39,16 @@ class DiscourseSyncManager:
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
             self._handle_topic_update(forum, topic_id, data)
         elif event_type in ['post_created', 'post_edited', 'post_recovered']:
-            self._handle_post_update(forum, topic_id, data)
+            self._handle_reply_update(forum, topic_id, data)
         elif event_type == 'topic_destroyed':
-            self._handle_topic_delete(forum, topic_id)
+            self.delete_topic_and_replies(topic_id, forum.id)
         elif event_type == 'post_destroyed':
-            self._handle_post_delete(forum, topic_id, data)
+            self._handle_reply_delete(forum, topic_id, data)
         else:
             logger.warning(f"Unknown event type: {event_type}")
 
     def _handle_topic_update(self, forum, topic_id, data):
         topic_data = data.get('topic', {})
-        if not topic_data:
-            logger.warning(f"No topic data found for topic update")
-            return
-
         existing_topic = self.check_existing_topic(topic_id, forum.id)
 
         title = topic_data.get('title')
@@ -68,37 +64,26 @@ class DiscourseSyncManager:
             self.insert_topic(topic_id, title, slug, views, category_id, forum.id, bumped_at)
             logger.debug(f"Created new topic {topic_id}")
 
-    def _handle_post_update(self, forum, topic_id, data):
-        post_data = data.get('post', {})
-        if not post_data:
-            logger.warning(f"No post data found for post update")
-            return
+    def _handle_reply_update(self, forum, topic_id, data):
+        reply_data = data.get('post', {})
+        post_number = reply_data.get('post_number')
 
-        post_number = post_data.get('post_number')
-        if not post_number:
-            logger.warning(f"No post_number found for post update")
-            return
-
-        existing_post = self.check_existing_post(topic_id, post_number, forum.id)
-        content = post_data.get('cooked', '')
-        author = post_data.get('username', '')
-        if existing_post:
-            self.update_post(content, author, topic_id, post_number, forum.id)
-            logger.debug(f"Updated existing post {post_number} in topic {topic_id}")
+        existing_reply = self.check_existing_reply(topic_id, post_number, forum.id)
+        content = reply_data.get('cooked', '')
+        author = reply_data.get('username', '')
+        if existing_reply:
+            self.update_reply(content, author, topic_id, post_number, forum.id)
+            logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
         else:
             self.insert_reply(topic_id, post_number, content, author, forum.id)
-            logger.debug(f"Created new post {post_number} in topic {topic_id}")
+            logger.debug(f"Created new reply {post_number} in topic {topic_id}")
 
-    def _handle_topic_delete(self, forum, topic_id):
-        self.delete_topic_and_replies(topic_id, forum.id)
-        logger.info(f"Deleted topic {topic_id} and all its replies")
-
-    def _handle_post_delete(self, forum, topic_id, data):
-        post_data = data.get('post', {})
-        post_number = post_data.get('post_number')
+    def _handle_reply_delete(self, forum, topic_id, data):
+        reply_data = data.get('post', {})
+        post_number = reply_data.get('post_number')
         if post_number:
-            self.delete_post(topic_id, post_number, forum.id)
-            logger.info(f"Deleted post {post_number} in topic {topic_id}")
+            self.delete_reply(topic_id, post_number, forum.id)
+            logger.info(f"Deleted reply {post_number} in topic {topic_id}")
 
     def get_project_connection_by_id(self, pc_id, conn_type='discourse_forum'):
         with self.db_session() as session:
@@ -221,8 +206,8 @@ class DiscourseSyncManager:
             })
             session.commit()
 
-    def check_existing_post(self, topic_id, post_number, connection_id):
-        """Check if a post already exists"""
+    def check_existing_reply(self, topic_id, post_number, connection_id):
+        """Check if a reply already exists"""
         with self.db_session() as session:
             sql = """SELECT id FROM discourse_replies 
                       WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
@@ -232,8 +217,8 @@ class DiscourseSyncManager:
                 'connection_id': connection_id
             }).fetchone()
 
-    def update_post(self, content, author, topic_id, post_number, connection_id):
-        """Update an existing post"""
+    def update_reply(self, content, author, topic_id, post_number, connection_id):
+        """Update an existing reply"""
         with self.db_session() as session:
             sql = """UPDATE discourse_replies 
                        SET content = :content, author = :author 
@@ -267,8 +252,8 @@ class DiscourseSyncManager:
             })
             session.commit()
 
-    def delete_post(self, topic_id, post_number, connection_id):
-        """Delete a specific post"""
+    def delete_reply(self, topic_id, post_number, connection_id):
+        """Delete a specific reply"""
         with self.db_session() as session:
             sql = """DELETE FROM discourse_replies 
             WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
@@ -347,8 +332,6 @@ class DiscourseSyncManager:
             if not topics:
                 logger.debug(f"No more topics found on page {page}")
                 break
-
-            should_stop, batch_latest_bumped_at = self._process_topics_batch(topics, sync_context, forum_url, headers, connection_id)
             batch_latest_bumped_at = None
             for topic_data in topics:
                 topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
@@ -366,8 +349,8 @@ class DiscourseSyncManager:
                 
                 # Handle different sync scenarios
                 if sync_context['is_initial_sync']:
-                    # Create new topic with posts
-                    self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
+                    # Create new topic with replies
+                    self._create_topic_with_replies(topic_data, topic_id, forum_url, headers, connection_id)
                 else:
                     self._update_existing_topic(topic_data, topic_id, connection_id, forum_url, headers)
 
@@ -389,20 +372,20 @@ class DiscourseSyncManager:
         response = requests.get(url, headers=headers, timeout=30)
         return response
 
-    def fetch_discourse_topic_posts(self, forum_url, topic_id, headers):
-        """Fetch detailed topic content including all posts"""
+    def fetch_discourse_topic_replies(self, forum_url, topic_id, headers):
+        """Fetch detailed topic content including all replies"""
         response = self.fetch_discourse_topic(forum_url, topic_id, headers)
         response.raise_for_status()
 
         topic_data = response.json()
-        posts = []
-        post_stream = topic_data.get('post_stream', {})
+        replies = []
+        reply_stream = topic_data.get('post_stream', {})
 
-        for post in post_stream.get('posts', []):
-            # Only process regular posts (post_type=1), ignore system posts (post_type=4)
-            if post.get('post_type') != 1:
+        for reply in reply_stream.get('posts', []):
+            # Only process regular replies (post_type=1), ignore system replies (post_type=4)
+            if reply.get('post_type') != 1:
                 continue
-            post_info = {
+            reply_info = {
                 'id': post.get('id'),
                 'post_number': post.get('post_number'),
                 'username': post.get('username'),
@@ -416,10 +399,10 @@ class DiscourseSyncManager:
                 'topic_id': post.get('topic_id'),
                 'user_id': post.get('user_id')
             }
-            posts.append(post_info)
+            replies.append(reply_info)
 
         return {
-            'posts': posts,
+            'replies': replies,
         }
 
     def handle_webhook_request(self, connection_id, request_data, event_type):
@@ -443,31 +426,6 @@ class DiscourseSyncManager:
             "Api-Username": api_username
         }
 
-    def _process_topics_batch(self, topics, sync_context, forum_url, headers, connection_id):
-        """Process a batch of topics, returns True if sync should stop"""
-        batch_latest_bumped_at = None
-        for topic_data in topics:
-            topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
-            if topic_bumped_at:
-                if not batch_latest_bumped_at or topic_bumped_at > batch_latest_bumped_at:
-                    batch_latest_bumped_at = topic_bumped_at
-            # Check if we should stop syncing based on timestamp
-            if self._should_stop_sync(topic_data, sync_context):
-                return True, batch_latest_bumped_at
-
-            topic_id = topic_data.get('id')
-            
-            # Handle different sync scenarios
-            if sync_context['is_initial_sync']:
-                # Create new topic with posts
-                self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
-            else:
-                self._update_existing_topic(topic_data, topic_id, connection_id, forum_url, headers)
-
-            time.sleep(0.05)
-
-        return False, batch_latest_bumped_at
-
     def _should_stop_sync(self, topic_data, sync_context):
         """Check if sync should stop based on topic timestamp"""
         if sync_context['is_initial_sync'] or not sync_context['latest_local_updated_at']:
@@ -486,28 +444,28 @@ class DiscourseSyncManager:
         return False
 
     def _update_existing_topic(self, topic_data, topic_id, connection_id, forum_url, headers):
-        """Deletes and recreates an existing topic and its posts to ensure content is up-to-date."""
+        """Deletes and recreates an existing topic and its replies to ensure content is up-to-date."""
         # Delete existing topic and its replies
         self.delete_topic_and_replies(topic_id, connection_id)
         logger.debug(f"Successfully deleted topic {topic_id} and its replies for updating.")
 
-        # Create new topic with posts
-        self._create_topic_with_posts(topic_data, topic_id, forum_url, headers, connection_id)
-        logger.debug(f"Successfully recreated topic {topic_id} with posts.")
+        # Create new topic with replies
+        self._create_topic_with_replies(topic_data, topic_id, forum_url, headers, connection_id)
+        logger.debug(f"Successfully recreated topic {topic_id} with replies.")
 
-    def _create_topic_with_posts(self, topic_data, topic_id, forum_url, headers, connection_id):
-        """Create new topic and its posts"""
+    def _create_topic_with_replies(self, topic_data, topic_id, forum_url, headers, connection_id):
+        """Create new topic and its replies"""
         # Fetch topic posts
-        topic_posts_data = self.fetch_discourse_topic_posts(forum_url, topic_id, headers)
-        if not topic_posts_data:
-            logger.warning(f"Failed to fetch posts for topic {topic_id}")
+        topic_replies_data = self.fetch_discourse_topic_replies(forum_url, topic_id, headers)
+        if not topic_replies_data:
+            logger.warning(f"Failed to fetch replies for topic {topic_id}")
             return
 
         # Create topic
         self._insert_topic_data(topic_data, topic_id, connection_id)
 
-        # Create posts
-        self._insert_topic_posts(topic_posts_data, topic_id, connection_id)
+        # Create replies
+        self._insert_topic_replies(topic_replies_data, topic_id, connection_id)
 
     def _insert_topic_data(self, topic_data, topic_id, connection_id):
         """Insert topic data into database"""
@@ -520,12 +478,12 @@ class DiscourseSyncManager:
         self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at)
         logger.debug(f"Successfully saved topic {topic_id}")
 
-    def _insert_topic_posts(self, topic_posts_data, topic_id, connection_id):
-        """Insert topic posts into database"""
-        for post in topic_posts_data.get('posts', []):
-            post_number = post.get('post_number')
-            content = post.get('cooked')
-            author = post.get('username')
+    def _insert_topic_replies(self, topic_replies_data, topic_id, connection_id):
+        """Insert topic replies into database"""
+        for reply in topic_replies_data.get('replies', []):
+            post_number = reply.get('post_number')
+            content = reply.get('cooked')
+            author = reply.get('username')
             
             self.insert_reply(topic_id, post_number, content, author, connection_id)
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
