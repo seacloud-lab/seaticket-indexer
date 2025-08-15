@@ -74,11 +74,9 @@ class WebCrawlTaskWorker(object):
 
                         if not data:
                             logger.warning('web_crawl_task: invalid.', res)
-                            continue
                         else:
                             site_id = data.get('site_id')
-                            self.crawl_site(site_id) 
-
+                            self.crawl_site(site_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
