@@ -1,4 +1,3 @@
-from urllib.parse import urljoin, urlparse
 import os
 import re
 import hashlib

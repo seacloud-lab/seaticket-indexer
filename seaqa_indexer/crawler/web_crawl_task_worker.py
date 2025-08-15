@@ -18,7 +18,6 @@ from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import CrawlStatus
 
 
@@ -30,7 +29,6 @@ class WebCrawlTaskWorker(object):
     """
 
     def __init__(self):
-        self.db_session = init_db_session_class()
         self.web_crawl_manager = WebCrawlManager()
         self.should_stop = threading.Event()
         self.worker_num = 3
