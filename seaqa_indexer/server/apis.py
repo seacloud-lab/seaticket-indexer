@@ -6,8 +6,7 @@ from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
 from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
-from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException, \
-    InvalidPayloadException, WebhookEventProcessingException
+from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException
 from seaqa_indexer.utils.constants import ConnectionType
 
 
@@ -154,25 +153,23 @@ def search():
 def discourse_webhook():
     """Handle Discourse webhook callback"""
     connection_id = request.args.get('connection_id')
-    
+
     if not connection_id:
         return jsonify({'error': 'Missing connection_id'}), 400
-    
+
     data = request.get_json(force=True)
     event_type = request.headers.get('X-Discourse-Event')
-    
+
     if not data:
         return jsonify({'error': 'No payload data'}), 400
-    
+
+    if not event_type:
+        return jsonify({'error': 'event_type invalid'}), 400
+
     try:
-        application.discourse_sync_manager.handle_webhook_request(connection_id, data, event_type)
-    except ForumNotFoundException as e:
-        return {'error': str(e)}, 404
-    except InvalidPayloadException as e:
-        return {'error': str(e)}, 400
-    except WebhookEventProcessingException as e:
-        logger.error(f"Discourse webhook error: {e}")
-        return {'error': str(e)}, 500
+        application.discourse_sync_manager.handle_webhook(connection_id, data, event_type)
+    except ForumNotFoundException:
+        return {'error': 'Forum not found'}, 404
     except Exception as e:
         logger.error(f"Discourse webhook error: {e}")
         return {'error': 'Internal Server Error'}, 500
