@@ -24,21 +24,21 @@ class DiscourseSyncManager:
         self.db_session = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
-    def _handle_topic_update(self, forum, topic_id, data):
+    def _handle_topic_update(self, connection_id, topic_id, data):
         topic_data = data.get('topic', {})
-        existing_topic = self.check_existing_topic(topic_id, forum.id)
+        existing_topic = self.check_existing_topic(topic_id, connection_id)
 
         title = topic_data.get('title')
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
         if existing_topic:
-            self.update_topic(title, slug, views, category_id, topic_id, forum.id)
+            self.update_topic(title, slug, views, category_id, topic_id, connection_id)
             logger.debug(f"Updated existing topic {topic_id}")
         else:
-            bumped_at = time_str_to_utc_time(topic_data.get('bumped_at')) or datetime.datetime.now(datetime.UTC)
+            bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
 
-            self.insert_topic(topic_id, title, slug, views, category_id, forum.id, bumped_at)
+            self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at)
             logger.debug(f"Created new topic {topic_id}")
 
     def _handle_reply_update(self, forum, topic_id, data):
@@ -55,27 +55,21 @@ class DiscourseSyncManager:
             self.insert_reply(topic_id, post_number, content, author, forum.id)
             logger.debug(f"Created new reply {post_number} in topic {topic_id}")
 
-    def _handle_reply_delete(self, forum, topic_id, data):
+    def _handle_reply_delete(self, connection_id, topic_id, data):
         reply_data = data.get('post', {})
         post_number = reply_data.get('post_number')
         if post_number:
-            self.delete_reply(topic_id, post_number, forum.id)
+            self.delete_reply(topic_id, post_number, connection_id)
             logger.info(f"Deleted reply {post_number} in topic {topic_id}")
 
     def get_project_connection_by_id(self, pc_id, conn_type='discourse_forum'):
         with self.db_session() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.updated_at
             FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.type=:conn_type AND pc.id=:pc_id"""
             connection = session.execute(text(sql), {'pc_id': pc_id, 'conn_type': conn_type}).fetchone()
             return connection
-
-    def get_forum_by_connection_id(self, forum_id):
-        with self.db_session() as session:
-            sql = "SELECT * FROM project_connection WHERE id = :forum_id AND type = 'discourse_forum'"
-            forum = session.execute(text(sql), {'forum_id': forum_id}).fetchone()
-            return forum
 
     def update_status(self, connection_id, status):
         with self.db_session() as session:
@@ -98,25 +92,12 @@ class DiscourseSyncManager:
     def get_project_connections_by_page(self, start, limit):
         """Get discourse forums by page"""
         with self.db_session() as session:
-            sql = """SELECT pc.id as connection_id, pc.config, pc.project_id, pc.status, p.uuid
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid
             FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.type='discourse_forum' LIMIT :start, :limit"""
             forums = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return forums
-
-    def get_project_connection_updated_at(self, connection_id):
-        """Get the latest updated_at timestamp for a connection"""
-        with self.db_session() as session:
-            sql = """SELECT updated_at FROM project_connection
-                     WHERE id = :connection_id"""
-            result = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-            if result and result[0]:
-                dt = result[0]
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)
-                return dt
-            return None
 
     def check_existing_topic(self, topic_id, connection_id):
         """Check if a topic already exists"""
@@ -124,20 +105,6 @@ class DiscourseSyncManager:
             sql = """SELECT id FROM discourse_topics 
                       WHERE topic_id = :topic_id AND connection_id = :connection_id"""
             return session.execute(text(sql), {'topic_id': topic_id, 'connection_id': connection_id}).fetchone()
-
-    def update_topic_bumped_at(self, topic_id, connection_id, bumped_at):
-        """Update topic's bumped_at timestamp"""
-        with self.db_session() as session:
-            sql = """UPDATE discourse_topics 
-                       SET bumped_at = :bumped_at 
-                       WHERE topic_id = :topic_id AND connection_id = :connection_id"""
-
-            session.execute(text(sql), {
-                'bumped_at': bumped_at or datetime.datetime.now(datetime.UTC),
-                'topic_id': topic_id,
-                'connection_id': connection_id
-            })
-            session.commit()
 
     def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, bumped_at):
         """Insert a new topic"""
@@ -257,15 +224,19 @@ class DiscourseSyncManager:
             return
         self.update_status(connection_id, CrawlStatus.CRAWLING)
         logger.info(f"Start syncing Discourse forum {connection_id}")
+
         config = json.loads(discourse_connection.config)
         config = decrypt_config(config)
-        df_url = config['url']
-        df_api_key = config['api_key']
-        df_api_username = config['api_username']
+        discourse_url = config['url']
+        discourse_api_key = config['api_key']
+        discourse_api_username = config['api_username']
+        updated_at = discourse_connection.updated_at
+        headers = self._build_api_headers(discourse_api_key, discourse_api_username)
 
-        latest_bumped_at = self.sync_discourse_latest_topics(df_url, df_api_key, df_api_username, connection_id)
+        latest_bumped_at = self.sync_discourse_latest_topics(discourse_url, headers, connection_id, updated_at)
         if latest_bumped_at:
             self.update_connection_updated_at(connection_id, latest_bumped_at)
+        logger.info(f"finish syncing Discourse forum {connection_id}")
 
     def update_discourse_forums(self):
         """Check if all discourse forums need to be updated"""
@@ -276,7 +247,7 @@ class DiscourseSyncManager:
             if len(project_connections) == 0:
                 break
             for project_connection in project_connections:
-                self.add_discourse_sync_task(project_connection.connection_id)
+                self.add_discourse_sync_task(project_connection.id)
 
     def add_discourse_sync_task(self, connection_id):
         msg_content = {
@@ -294,14 +265,15 @@ class DiscourseSyncManager:
         topics = data.get("topic_list", {}).get("topics", [])
         return topics
 
-    def sync_discourse_latest_topics(self, forum_url, api_key, api_username, connection_id):
+    def sync_discourse_latest_topics(self, forum_url, headers, connection_id, updated_at):
         """Sync latest topics from Discourse forum"""
-        headers = self._build_api_headers(api_key, api_username)
-        last_updated_at = self.get_project_connection_updated_at(connection_id)
-
+        last_updated_at = updated_at
         page = 0
         latest_bumped_at = None
         should_stop = False
+
+        if last_updated_at:
+            last_updated_at = time_str_to_utc_time(str(last_updated_at))
         while True:
             topics = self.fetch_latest_topics_page(forum_url, headers, page)
 
@@ -309,50 +281,47 @@ class DiscourseSyncManager:
                 break
             for topic_data in topics:
                 topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
-                # Check if we should stop syncing based on timestamp
-                if topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
+                if last_updated_at and topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
                     should_stop = True
                     break
-                if topic_bumped_at <= last_updated_at and topic_data.get('pinned'):
-                    # if pinned, not need update latest_bumped_at
-                    pass
-                else:
-                    if not latest_bumped_at:
-                        # latest_bumped_at update one time is the last time
-                        latest_bumped_at = topic_bumped_at
+                if not latest_bumped_at or latest_bumped_at < topic_bumped_at:
+                    latest_bumped_at = topic_bumped_at
 
                 topic_id = topic_data.get('id')
 
                 # Handle different sync scenarios
                 if not last_updated_at:
-                    # Create new topic with replies
-                    self._create_topic_with_replies(topic_data, topic_id, forum_url, headers, connection_id)
+                    # means first sync discourse
+                    self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
                 else:
-                    self._update_existing_topic(topic_data, topic_id, connection_id, forum_url, headers)
+                    self._update_existing_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers)
+
+                time.sleep(0.05)
 
             if should_stop:
                 break
-
             page += 1
 
         return latest_bumped_at if latest_bumped_at else last_updated_at
 
     def fetch_discourse_topic(self, forum_url, topic_id, headers):
+        if forum_url.endswith('/'):
+            forum_url = forum_url.rstrip('/')
         url = f"{forum_url}/t/{topic_id}.json"
-        logger.debug(f"Fetching topic detail from {url}")
+        logger.info(f"Fetching topic detail from {url}")
         response = requests.get(url, headers=headers, timeout=30)
         return response
 
-    def fetch_discourse_topic_replies(self, forum_url, topic_id, headers):
+    def get_discourse_topic_replies(self, forum_url, topic_id, headers):
         """Fetch detailed topic content including all replies"""
         response = self.fetch_discourse_topic(forum_url, topic_id, headers)
         response.raise_for_status()
 
         topic_data = response.json()
         replies = []
-        reply_stream = topic_data.get('post_stream', {})
+        posts = topic_data.get('post_stream', {}).get('posts', [])
 
-        for post in reply_stream.get('posts', []):
+        for post in posts:
             # Only process regular replies (post_type=1), ignore system replies (post_type=4)
             if post.get('post_type') != 1:
                 continue
@@ -378,23 +347,21 @@ class DiscourseSyncManager:
 
     def handle_webhook(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
-        forum = self.get_forum_by_connection_id(connection_id)
-        if not forum:
+        project_connection = self.get_project_connection_by_id(connection_id)
+        if not project_connection:
             raise ForumNotFoundException()
 
         topic_id = request_data.get('topic', {}).get('id')
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
-            self._handle_topic_update(forum, topic_id, request_data)
+            self._handle_topic_update(connection_id, topic_id, request_data)
         elif event_type in ['post_created', 'post_edited', 'post_recovered']:
-            self._handle_reply_update(forum, topic_id, request_data)
+            self._handle_reply_update(connection_id, topic_id, request_data)
         elif event_type == 'topic_destroyed':
-            self.delete_topic_and_replies(topic_id, forum.id)
+            self.delete_topic_and_replies(topic_id, connection_id)
         elif event_type == 'post_destroyed':
-            self._handle_reply_delete(forum, topic_id, request_data)
+            self._handle_reply_delete(connection_id, topic_id, request_data)
         else:
             logger.warning(f"Unknown event type: {event_type}")
-
-        self.update_connection_updated_at(connection_id, time_str_to_utc_time(request_data.get('updated_at')))
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
@@ -403,22 +370,22 @@ class DiscourseSyncManager:
             "Api-Username": api_username
         }
 
-    def _update_existing_topic(self, topic_data, topic_id, connection_id, forum_url, headers):
+    def _update_existing_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers):
         """Deletes and recreates an existing topic and its replies to ensure content is up-to-date."""
         # Delete existing topic and its replies
         self.delete_topic_and_replies(topic_id, connection_id)
         logger.debug(f"Successfully deleted topic {topic_id} and its replies for updating.")
 
         # Create new topic with replies
-        self._create_topic_with_replies(topic_data, topic_id, forum_url, headers, connection_id)
+        self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
         logger.debug(f"Successfully recreated topic {topic_id} with replies.")
 
-    def _create_topic_with_replies(self, topic_data, topic_id, forum_url, headers, connection_id):
+    def _create_topic_and_replies(self, topic_data, topic_id, forum_url, headers, connection_id):
         """Create new topic and its replies"""
         # Fetch topic posts
-        topic_replies_data = self.fetch_discourse_topic_replies(forum_url, topic_id, headers)
+        topic_replies_data = self.get_discourse_topic_replies(forum_url, topic_id, headers)
         if not topic_replies_data:
-            logger.warning(f"Failed to fetch replies for topic {topic_id}")
+            logger.info(f"fetch 0 replies for topic {topic_id}")
             return
 
         # Create topic
@@ -433,10 +400,9 @@ class DiscourseSyncManager:
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
-        bumped_at = time_str_to_utc_time(topic_data.get('bumped_at')) or datetime.datetime.now(datetime.UTC)
+        bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
 
         self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at)
-        logger.debug(f"Successfully saved topic {topic_id}")
 
     def _insert_topic_replies(self, topic_replies_data, topic_id, connection_id):
         """Insert topic replies into database"""

@@ -3,7 +3,6 @@ import re
 import hashlib
 import json
 import urllib.parse
-
 from seaqa_indexer.config import CRAWL_OUTPUT_DIR
 from seaqa_indexer.crawler.extractor import extract_html
 

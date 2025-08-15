@@ -27,7 +27,7 @@ class DiscourseSyncTaskWorker(object):
         self.should_stop = threading.Event()
         self.worker_num = 3
         self.update_discourse_interval = 7 * 24 * 60 * 60
-        
+
         self.LOCK_TIMEOUT = 1800  # 30 minutes
         self.REFRESH_INTERVAL = 600  # 10 minutes
         self.locked_keys = set()
@@ -36,10 +36,10 @@ class DiscourseSyncTaskWorker(object):
 
         self.set_signal()
         self.worker_list = []
-    
+
     def _get_discourse_lock_key(self, connection_id):
         return 'discourse_' + str(connection_id)
-    
+
     def work_task_handler(self, connection_id):
         # Python cannot kill threads, so stop it generate more locked key.
         if not self.should_stop.is_set():
@@ -53,8 +53,8 @@ class DiscourseSyncTaskWorker(object):
                 try:
                     self.discourse_sync_manager.sync_discourse(connection_id)
                 except Exception as e:
-                    logger.error('%s discourse sync connection %s error: %s' % (self.tname, connection_id, e))
-                    self.discourse_sync_manager.update_status(connection_id, CrawlStatus.COMPLETED)
+                    logger.exception('%s discourse sync connection %s error: %s' % (self.tname, connection_id, e))
+                    self.discourse_sync_manager.update_status(connection_id, CrawlStatus.FAILED)
                 try:
                     self.locked_keys.remove(lock_key)
                 except KeyError:
@@ -65,7 +65,7 @@ class DiscourseSyncTaskWorker(object):
             else:
                 # the connection is updated by other thread, push back to the queue
                 self.add_to_undo_task(connection_id)
-    
+
     def add_to_undo_task(self, connection_id):
         """Push task back to the end of the queue.
         """
@@ -78,7 +78,7 @@ class DiscourseSyncTaskWorker(object):
         self.mq.lpush('discourse_sync_task', json.dumps(msg_content))
         logger.debug('%s push back task connection_id: %s, to the queue' %
                      (threading.current_thread().name, connection_id))
-    
+
     def clear(self):
         if not self.mq:
             return

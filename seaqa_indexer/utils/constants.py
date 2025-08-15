@@ -7,6 +7,7 @@ class CrawlStatus:
     COMPLETED = 'completed'
     FAILED = 'failed'
 
+
 class ConnectionType(Enum):
     EMAIL = 'email'
     GITHUB_ISSUE = 'github_issue'
