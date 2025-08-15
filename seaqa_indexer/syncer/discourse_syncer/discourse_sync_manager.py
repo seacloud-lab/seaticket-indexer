@@ -111,7 +111,12 @@ class DiscourseSyncManager:
             sql = """SELECT updated_at FROM project_connection
                      WHERE id = :connection_id"""
             result = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-            return result[0] if result else None
+            if result and result[0]:
+                dt = result[0]
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                return dt
+            return None
 
     def check_existing_topic(self, topic_id, connection_id):
         """Check if a topic already exists"""
@@ -305,10 +310,10 @@ class DiscourseSyncManager:
             for topic_data in topics:
                 topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
                 # Check if we should stop syncing based on timestamp
-                if topic_bumped_at and topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
+                if topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
                     should_stop = True
                     break
-                if topic_bumped_at and topic_bumped_at <= last_updated_at and topic_data.get('pinned'):
+                if topic_bumped_at <= last_updated_at and topic_data.get('pinned'):
                     # if pinned, not need update latest_bumped_at
                     pass
                 else:
