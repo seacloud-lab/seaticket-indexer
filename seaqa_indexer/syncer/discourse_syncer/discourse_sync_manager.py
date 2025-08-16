@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import CrawlStatus
-from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time
+from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time, need_update_connection_status
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
@@ -213,29 +213,87 @@ class DiscourseSyncManager:
             })
             session.commit()
 
-    def sync_discourse(self, connection_id):
-        """Start syncing Discourse forum"""
-        discourse_connection = self.get_project_connection_by_id(connection_id, conn_type='discourse_forum')
-        if not discourse_connection:
-            logger.warning('discourse forum: %s not found', connection_id)
-            return
-        if discourse_connection.status == CrawlStatus.CRAWLING:
-            logger.warning('discourse forum: %s is syncing', connection_id)
-            return
-        self.update_status(connection_id, CrawlStatus.CRAWLING)
-        logger.info(f"Start syncing Discourse forum {connection_id}")
+    def finish_sync(self, connection_id, updated_at, connection_status, sync_count):
+        total_count = self.get_discourse_forum_count(connection_id)
+        connection_status['total_records'] = total_count
+        connection_status['last_sync_count'] = sync_count
+        connection_status['last_sync_status'] = CrawlStatus.COMPLETED
+        self.update_status_and_time(connection_id, json.dumps(connection_status), updated_at)
 
-        config = json.loads(discourse_connection.config)
+    def get_discourse_forum_count(self, connection_id):
+        with self.db_session() as session:
+            sql = """SELECT count(*) FROM discourse_topics WHERE connection_id=:connection_id"""
+            connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
+        return connection
+
+    def update_status_and_time(self, connection_id, status, updated_at):
+        with self.db_session() as session:
+            cmd = """UPDATE project_connection SET updated_at=:updated_at, status=:status WHERE id = :connection_id"""
+            params = {'connection_id': connection_id, 'updated_at': updated_at, 'status': status}
+            session.execute(text(cmd), params)
+            session.commit()
+
+    def sync_discourse(self, project_connection):
+        """Start syncing Discourse forum"""
+        logger.info(f"Start crawling site {project_connection.id}")
+
+        connection_id = project_connection.id
+        connection_status = json.loads(project_connection.status)
+        last_sync_status = connection_status.get('last_sync_status')
+        last_sync_status['last_sync_status'] = CrawlStatus.CRAWLING
+
+        self.update_status(connection_id, json.dumps(last_sync_status))
+        config = json.loads(project_connection.config)
         config = decrypt_config(config)
-        discourse_url = config['url']
+        forum_url = config['url']
         discourse_api_key = config['api_key']
         discourse_api_username = config['api_username']
-        updated_at = discourse_connection.updated_at
+        last_updated_at = project_connection.updated_at
         headers = self._build_api_headers(discourse_api_key, discourse_api_username)
 
-        latest_bumped_at = self.sync_discourse_latest_topics(discourse_url, headers, connection_id, updated_at)
+        page = 0
+        latest_bumped_at = None
+        should_stop = False
+        sync_count = 0
+
+        if last_updated_at:
+            last_updated_at = time_str_to_utc_time(str(last_updated_at))
+        while True:
+            topics = self.fetch_latest_topics_page(forum_url, headers, page)
+
+            if not topics:
+                break
+            for topic_data in topics:
+                topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
+                if last_updated_at and topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
+                    should_stop = True
+                    break
+                if not latest_bumped_at or latest_bumped_at < topic_bumped_at:
+                    latest_bumped_at = topic_bumped_at
+
+                topic_id = topic_data.get('id')
+
+                # Handle different sync scenarios
+                if not last_updated_at:
+                    # means first sync discourse
+                    self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
+                else:
+                    self._update_existing_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers)
+
+                sync_count += 1
+                if need_update_connection_status(sync_count):
+                    connection_status['last_sync_count'] = sync_count
+                    self.update_status(connection_id, json.dumps(connection_status))
+                time.sleep(0.05)
+
+            if should_stop:
+                break
+            page += 1
+
         if latest_bumped_at:
             self.update_connection_updated_at(connection_id, latest_bumped_at)
+        updated_at = latest_bumped_at if latest_bumped_at else last_updated_at
+        self.finish_sync(connection_id, updated_at, connection_status, sync_count)
         logger.info(f"finish syncing Discourse forum {connection_id}")
 
     def update_discourse_forums(self):
@@ -264,45 +322,6 @@ class DiscourseSyncManager:
         data = response.json()
         topics = data.get("topic_list", {}).get("topics", [])
         return topics
-
-    def sync_discourse_latest_topics(self, forum_url, headers, connection_id, updated_at):
-        """Sync latest topics from Discourse forum"""
-        last_updated_at = updated_at
-        page = 0
-        latest_bumped_at = None
-        should_stop = False
-
-        if last_updated_at:
-            last_updated_at = time_str_to_utc_time(str(last_updated_at))
-        while True:
-            topics = self.fetch_latest_topics_page(forum_url, headers, page)
-
-            if not topics:
-                break
-            for topic_data in topics:
-                topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
-                if last_updated_at and topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
-                    should_stop = True
-                    break
-                if not latest_bumped_at or latest_bumped_at < topic_bumped_at:
-                    latest_bumped_at = topic_bumped_at
-
-                topic_id = topic_data.get('id')
-
-                # Handle different sync scenarios
-                if not last_updated_at:
-                    # means first sync discourse
-                    self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
-                else:
-                    self._update_existing_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers)
-
-                time.sleep(0.05)
-
-            if should_stop:
-                break
-            page += 1
-
-        return latest_bumped_at if latest_bumped_at else last_updated_at
 
     def fetch_discourse_topic(self, forum_url, topic_id, headers):
         if forum_url.endswith('/'):

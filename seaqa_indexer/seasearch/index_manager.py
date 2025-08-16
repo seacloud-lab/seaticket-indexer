@@ -7,7 +7,8 @@ from urllib.parse import urlparse
 from sqlalchemy.sql import text
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_FILE_SIZE_LIMIT, REPO_NAME_CACHE_TIME_OUT
+from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_FILE_SIZE_LIMIT, REPO_NAME_CACHE_TIME_OUT, \
+    IndexStatus
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
@@ -18,14 +19,13 @@ from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_id_to_
 from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seahub_api import SeahubAPI, FileNotFoundException
-from seaqa_indexer.utils import time_str_to_utc_time, decrypt_config, encrypt_config
+from seaqa_indexer.utils import time_str_to_utc_time, decrypt_config, encrypt_config, need_update_connection_status
 from seaqa_indexer.seasearch.extract import ExtractorFactory
 from seaqa_indexer.app.event_redis import redis_cache
 
 
 logger = logging.getLogger(__name__)
 
-BATCH_SIZE = 500
 
 class IndexManager:
     def __init__(self):
@@ -54,10 +54,10 @@ class IndexManager:
             connections = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return connections
 
-    def finish_index(self, connection_id, indexed_at, updated_at=None, config=None):
+    def finish_index(self, connection_id, indexed_at, connection_status, updated_at=None, config=None):
         with self.db_session() as session:
-            cmd = """UPDATE project_connection SET indexed_at=:indexed_at"""
-            params = {'connection_id': connection_id, 'indexed_at': indexed_at}
+            cmd = """UPDATE project_connection SET indexed_at=:indexed_at, status=:connection_status"""
+            params = {'connection_id': connection_id, 'indexed_at': indexed_at, 'connection_status': json.dumps(connection_status)}
             if updated_at:
                 cmd += ", updated_at=:updated_at"
                 params['updated_at'] = updated_at
@@ -79,13 +79,6 @@ class IndexManager:
             rows = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchall()
         return rows
 
-
-    def delete_issues_from_db(self,issues_sync_id):
-        with self.db_session() as session:
-            sql = text("DELETE FROM github_issues WHERE connection_id = :connection_id")
-            session.execute(sql, {'connection_id': issues_sync_id})
-            session.commit()
-
     def delete_issue_from_db(self, issue_id):
         with self.db_session() as session:
             sql = text("DELETE FROM github_issues WHERE id = :id")
@@ -98,11 +91,18 @@ class IndexManager:
             session.execute(sql, {'id': issue_id})
             session.commit()
 
+    def update_connection_status(self, connection_id, status):
+        with self.db_session() as session:
+            cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
+            session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
+            session.commit()
+
     def update_site_index(self, project_connection):
         update_at = project_connection.updated_at
         indexed_at = project_connection.indexed_at
-        status = project_connection.status
-        if status != CrawlStatus.COMPLETED:
+        connection_status = json.loads(project_connection.status)
+
+        if connection_status.get('last_sync_status') != CrawlStatus.COMPLETED:
             logger.warning('project connection: %s does not update completed.')
             return
 
@@ -115,6 +115,9 @@ class IndexManager:
         project_uuid = project_connection.project_uuid
         new_indexed_at = datetime.datetime.now(datetime.UTC)
 
+        connection_status['last_index_status'] = IndexStatus.INDEXING
+        self.update_connection_status(connection_id, json.dumps(connection_status))
+
         site_dir = get_site_dir(connection_id, project_uuid)
         crawled_site_files = [f for f in os.listdir(site_dir)]
         site_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
@@ -124,6 +127,7 @@ class IndexManager:
         old_index_ids_set = set(index_id_to_site_info.keys())
         new_index_ids_set = set()
 
+        index_count = 0
         for filename in crawled_site_files:
             filepath = os.path.join(site_dir, filename)
 
@@ -149,12 +153,17 @@ class IndexManager:
                         (last_modified and indexed_site_info.get('last_modified') == last_modified):
                     continue
                 self.site_index.update_document(site_index_name, connection_id, content, url, etag, title, last_modified)
-
+            index_count += 1
+            if need_update_connection_status(index_count):
+                connection_status['last_indexed_count'] = index_count
+                self.update_connection_status(connection_id, json.dumps(connection_status))
         # clear deleted site crawled url
         need_cleared_site_id_set = old_index_ids_set - new_index_ids_set
         self.site_index.delete_indexes_by_ids(site_index_name, need_cleared_site_id_set)
 
-        self.finish_index(connection_id, new_indexed_at)
+        connection_status['last_indexed_count'] = index_count
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        self.finish_index(connection_id, new_indexed_at, connection_status)
 
     def update_seafile_index(self, project_connection):
         connection_id = project_connection.id
@@ -164,6 +173,7 @@ class IndexManager:
         old_repo_id = config.get('repo_id')
         old_last_modified = project_connection.updated_at
         project_uuid = project_connection.project_uuid
+        connection_status = json.loads(project_connection.status)
 
         seahub_api = SeahubAPI(server_url, api_token)
         repo_info = seahub_api.get_repo_info()
@@ -178,6 +188,9 @@ class IndexManager:
             logger.info('connection: %s, repo: %s does not change, skip this update', connection_id, new_repo_id)
             return
 
+        connection_status['last_index_status'] = IndexStatus.INDEXING
+        self.update_connection_status(connection_id, json.dumps(connection_status))
+
         seafile_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
         self.seafile_index.create_index_if_missing(seafile_index_name)
         new_indexed_at = datetime.datetime.now(datetime.UTC)
@@ -186,9 +199,10 @@ class IndexManager:
         old_index_ids_set = set(index_id_to_index_info.keys())
         new_index_ids_set = set()
 
-        repo_items = seahub_api.list_items_in_dir('/', 'f')
-
-        for dirent in repo_items.get('dirent_list'):
+        item_info = seahub_api.list_items_in_dir('/', 'f')
+        index_count = 0
+        dirent_list = item_info.get('dirent_list')
+        for dirent in dirent_list:
             parent_dir = dirent.get('parent_dir')
             dirent_name = dirent.get('name')
             mtime = dirent.get('mtime')
@@ -227,74 +241,86 @@ class IndexManager:
                 content = get_content_by_download_link(download_link)
                 content = extractor.extract(connection_id, new_repo_id, content, file_path)
             self.seafile_index.update_document(seafile_index_name, connection_id, content, new_repo_id, parent_dir, dirent_name, timestamp_mtime)
-
+            index_count += 1
+            if need_update_connection_status(index_count):
+                connection_status['last_indexed_count'] = index_count
+                self.update_connection_status(connection_id, json.dumps(connection_status))
         # clear deleted site crawled url
         need_cleared_seafile_index_set = old_index_ids_set - new_index_ids_set
         self.seafile_index.delete_indexes_by_ids(seafile_index_name, need_cleared_seafile_index_set)
 
         config['repo_id'] = new_repo_id
         config['repo_name'] = new_repo_name
-        self.finish_index(connection_id, new_indexed_at, updated_at=new_last_modified, config=config)
+        connection_status['last_indexed_count'] = index_count
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        connection_status['total_records'] = len(dirent_list)
+        self.finish_index(connection_id, new_indexed_at, connection_status, updated_at=new_last_modified, config=config)
 
     def update_github_issues_index(self, project_connection):
-        issues_sync_id = project_connection.id
+        connection_id = project_connection.id
         config = decrypt_config(json.loads(project_connection.config))
         project_uuid = project_connection.project_uuid
         server_url = config.get('repository')
         path = urlparse(server_url).path
         parts = path.strip("/").split("/")
         repo_owner, repo_name = parts[0], parts[1]
-        status = project_connection.status
-        if status != CrawlStatus.COMPLETED:
+        connection_status = json.loads(project_connection.status)
+
+        if connection_status.get('last_sync_status') != CrawlStatus.COMPLETED:
             logger.warning('project connection: %s does not update completed.')
             return
+
+        connection_status['last_index_status'] = IndexStatus.INDEXING
+        self.update_connection_status(connection_id, json.dumps(connection_status))
 
         issues_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
         self.github_issues_index.create_index_if_missing(issues_index_name)
 
         new_indexed_at = datetime.datetime.now(datetime.UTC)
-
         need_cleared_issues_index_set = set()
 
-        issues = self.get_all_need_index_issues_from_db(issues_sync_id)
-        total_issues = len(issues)
+        issues = self.get_all_need_index_issues_from_db(connection_id)
+        index_count = 0
 
-        for start in range(0, total_issues, BATCH_SIZE):
-            end = start + BATCH_SIZE
-            batch = issues[start:end]
-            logger.info(f"Processing github issuse index batch {start} to {end}")
+        for issue in issues:
+            issue_id = issue.id
+            issue_dict = {
+                'id': issue_id,
+                'number': issue.issue_number,
+                'title': issue.title,
+                'body': issue.body,
+                'state': issue.state,
+                'created_at': issue.created_at.isoformat() if issue.created_at else None,
+                'updated_at': issue.updated_at.isoformat() if issue.updated_at else None,
+                'closed_at': issue.closed_at.isoformat() if issue.closed_at else None,
+                'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
+                'comments': issue.comments,
+                'user': {'login': issue.author},
+                'url': issue.url,
+                'repo_owner': repo_owner,
+                'repo_name': repo_name,
+            }
+            if issue.deleted == 1:
+                key = self.github_issues_index.gen_index_id(connection_id, issue_id)
+                need_cleared_issues_index_set.add(key)
+            else:
+                self.github_issues_index.add_or_update_issue(issues_index_name, connection_id, issue_dict)
+                self.update_issues_index_status(issue_id)
+                index_count += 1
 
-            for issue in batch:
-                issue_id = issue.id
-                issue_dict = {
-                    'id': issue_id,
-                    'number': issue.issue_number,
-                    'title': issue.title,
-                    'body': issue.body,
-                    'state': issue.state,
-                    'created_at': issue.created_at.isoformat() if issue.created_at else None,
-                    'updated_at': issue.updated_at.isoformat() if issue.updated_at else None,
-                    'closed_at': issue.closed_at.isoformat() if issue.closed_at else None,
-                    'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
-                    'comments': issue.comments,
-                    'user': {'login': issue.author},
-                    'url': issue.url,
-                    'repo_owner': repo_owner,
-                    'repo_name': repo_name,
-                }
-                if issue.deleted == 1:
-                    key = self.github_issues_index.gen_index_id(issues_sync_id, issue_id)
-                    need_cleared_issues_index_set.add(key)
-                else:
-                    self.github_issues_index.add_or_update_issue(issues_index_name, issues_sync_id, issue_dict)
-                    self.update_issues_index_status(issue_id)
+            if need_update_connection_status(index_count):
+                connection_status['last_indexed_count'] = index_count
+                self.update_connection_status(connection_id, json.dumps(connection_status))
 
         if need_cleared_issues_index_set:
             self.github_issues_index.delete_indexes_by_ids(issues_index_name, need_cleared_issues_index_set)
             for issue_id in need_cleared_issues_index_set:
                 self.delete_issue_from_db(issue_id)
 
-        self.finish_index(issues_sync_id, new_indexed_at)
+        connection_status['last_indexed_count'] = index_count
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+
+        self.finish_index(connection_id, new_indexed_at, connection_status)
 
     def update_indexes(self):
         start, limit = 0, 1000
@@ -333,13 +359,19 @@ class IndexManager:
             return
 
         connection_type = connection.type
+        connection_status = json.loads(connection.status)
 
-        if connection_type == ConnectionType.SITE.value:
-            self.update_site_index(connection)
-        elif connection_type == ConnectionType.SEAFILE.value:
-            self.update_seafile_index(connection)
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            self.update_github_issues_index(connection)
+        try:
+            if connection_type == ConnectionType.SITE.value:
+                self.update_site_index(connection)
+            elif connection_type == ConnectionType.SEAFILE.value:
+                self.update_seafile_index(connection)
+            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                self.update_github_issues_index(connection)
+        except Exception as e:
+            logger.exception('connection: %s update index failed, error: %s', connection_id, e)
+            connection_status['last_index_status'] = IndexStatus.FAILED
+            self.update_connection_status(connection_id, json.dumps(connection_status))
 
         logger.info('finish index project connection: %s, connection_type: %s', connection_id, connection_type)
 

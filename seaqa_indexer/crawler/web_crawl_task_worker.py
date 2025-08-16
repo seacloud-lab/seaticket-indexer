@@ -86,11 +86,21 @@ class WebCrawlTaskWorker(object):
             time.sleep(0.3)
 
     def crawl_site(self, site_id):
+        project_connection = self.web_crawl_manager.get_site_by_id(site_id)
+        if not project_connection:
+            logger.warning('site: %s not found', site_id)
+            return
+        site_status = json.loads(project_connection.status)
+        last_sync_status = site_status.get('site_status')
+        if last_sync_status == CrawlStatus.CRAWLING:
+            logger.warning('site: %s is crawling', site_id)
+            return
         try:
-            self.web_crawl_manager.crawl_site(site_id)
+            self.web_crawl_manager.crawl_site(project_connection)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', site_id, e)
-            self.web_crawl_manager.update_site_status(site_id, CrawlStatus.FAILED)
+            site_status['last_sync_status'] = CrawlStatus.FAILED
+            self.web_crawl_manager.update_connection_status(site_id, json.dumps(site_status))
 
     def cron_crawl_web_sites(self):
         logger.info('Start to crawl web sites timer, interval = %s sec', self.update_indexes_interval)

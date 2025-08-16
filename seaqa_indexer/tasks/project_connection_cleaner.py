@@ -84,6 +84,12 @@ class ProjectConnectionCleaner(object):
             session.execute(text(sql), {'connection_id': connection_id})
             session.commit()
 
+    def delete_issues_from_db(self, connection_id):
+        with self.db_session() as session:
+            sql = text("DELETE FROM github_issues WHERE connection_id = :connection_id")
+            session.execute(sql, {'connection_id': connection_id})
+            session.commit()
+
     def clear_deleted_project(self, project_uuid):
         # delete project index
         self.index_manager.delete_index_by_project(project_uuid)
@@ -105,7 +111,7 @@ class ProjectConnectionCleaner(object):
             if os.path.exists(site_dir):
                 shutil.rmtree(site_dir)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            self.index_manager.delete_issues_from_db(connection_id)
+            self.delete_issues_from_db(connection_id)
 
         # delete db record
         self.delete_deleted_connection(connection_id)

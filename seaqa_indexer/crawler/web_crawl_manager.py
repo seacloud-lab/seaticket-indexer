@@ -47,17 +47,18 @@ class WebCrawlManager:
             site = session.execute(text(sql), {'site_id': site_id}).fetchone()
             return site
 
-    def update_site_status(self, site_id, status):
+    def update_connection_status(self, site_id, status, is_update_time=False):
         with self.db_session() as session:
-            cmd = """UPDATE project_connection SET status = :status WHERE id = :site_id"""
-            session.execute(text(cmd), {'site_id': site_id, 'status': status})
-            session.commit()
+            cmd = """UPDATE project_connection SET status = :status"""
+            params = {'site_id': site_id, 'status': status}
+            if is_update_time:
+                updated_at = datetime.datetime.now(datetime.UTC)
+                cmd += ", updated_at=:updated_at"
+                params['updated_at'] = updated_at
 
-    def update_site_status_and_crawl_time(self, site_id, status):
-        updated_at = datetime.datetime.now(datetime.UTC)
-        with self.db_session() as session:
-            cmd = """UPDATE project_connection SET status = :status, updated_at=:updated_at WHERE id = :site_id"""
-            session.execute(text(cmd), {'site_id': site_id, 'status': status, 'updated_at': updated_at})
+            cmd += " WHERE id = :site_id"
+
+            session.execute(text(cmd), params)
             session.commit()
 
     def get_project_by_id(self, project_id):
@@ -81,20 +82,14 @@ class WebCrawlManager:
             sites = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
             return sites
 
-    def crawl_site(self, site_id):
+    def crawl_site(self, site):
         """Start crawler process"""
-        site = self.get_site_by_id(site_id)
-        if not site:
-            logger.warning('site: %s not found', site_id)
-            return
-        if site.status == CrawlStatus.CRAWLING:
-            logger.warning('site: %s is crawling', site_id)
-            return
-        self.update_site_status(site_id, CrawlStatus.CRAWLING)
-
-        logger.info(f"Start crawling site {site_id}")
-
+        logger.info(f"Start crawling site {site.site_id}")
         site_id = site.site_id
+        connection_status = json.loads(site.status)
+        connection_status['last_sync_status'] = CrawlStatus.CRAWLING
+        self.update_connection_status(site_id, json.dumps(connection_status))
+
         site_config = json.loads(site.config)
         site_url = site_config.get('url')
         project_uuid = str(site.project_uuid)
@@ -107,11 +102,12 @@ class WebCrawlManager:
             site_id,
             site_url,
             site_config,
-            project_uuid
+            project_uuid,
+            connection_status
         )
 
         d.addCallback(self.start_crawl)
-        d.addErrback(self.deal_prepare_crawler_error, site_id, site_url)
+        d.addErrback(self.deal_prepare_crawler_error, site_id, site_url, connection_status)
 
     def get_sitemap_url(self, url):
         """Try to get site's sitemap URL"""
@@ -162,6 +158,7 @@ class WebCrawlManager:
         site_url = crawler_params['site_url']
         sitemap_url = crawler_params['sitemap_url']
         project_uuid = crawler_params['project_uuid']
+        connection_status = crawler_params['connection_status']
 
         # Create crawler instance
         if sitemap_url:
@@ -170,7 +167,9 @@ class WebCrawlManager:
                 site_url,
                 project_uuid,
                 site_id,
-                sitemap_url
+                sitemap_url,
+                connection_status,
+                self.update_connection_status
             )
         else:
             d = self.runner.crawl(
@@ -178,13 +177,15 @@ class WebCrawlManager:
                 site_url=site_url,
                 project_uuid=project_uuid,
                 site_id=site_id,
+                connection_status=connection_status,
+                update_connection_status=self.update_connection_status
             )
 
-        d.addCallback(lambda _: self.finish_crawl_site(site_id, site_url, CrawlStatus.COMPLETED))
-        d.addErrback(lambda failure: self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure)))
+        d.addCallback(lambda _: self.add_site_index_task(site_id))
+        d.addErrback(lambda failure: self.failed_crawl_site(site_id, site_url, connection_status, str(failure)))
         return d
 
-    def prepare_crawler(self, site_id, site_url, site_config, project_uuid):
+    def prepare_crawler(self, site_id, site_url, site_config, project_uuid, connection_status):
         """Prepare crawler parameters, execute in thread pool"""
         sitemap_url = site_config.get('sitemap_url')
 
@@ -198,22 +199,19 @@ class WebCrawlManager:
             'site_id': site_id,
             'site_url': site_url,
             'sitemap_url': sitemap_url,
-            'project_uuid': project_uuid
+            'project_uuid': project_uuid,
+            'connection_status': connection_status,
         }
 
-    def deal_prepare_crawler_error(self, failure, site_id, site_url):
-        self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, str(failure))
+    def deal_prepare_crawler_error(self, failure, site_id, site_url, connection_status):
+        connection_status['last_sync_status'] = CrawlStatus.FAILED
+        self.failed_crawl_site(site_id, site_url, connection_status, str(failure))
         return failure
 
-    def finish_crawl_site(self, site_id, site_url, status, error_msg=None):
-        if status == CrawlStatus.FAILED:
-            logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
-            self.update_site_status(site_id, CrawlStatus.FAILED)
-            return
-
-        self.update_site_status_and_crawl_time(site_id, CrawlStatus.COMPLETED)
-        self.add_site_index_task(site_id)
-        logger.info('finish crawl site: %s', site_id)
+    def failed_crawl_site(self, site_id, site_url, connection_status, error_msg):
+        connection_status['last_sync_status'] = CrawlStatus.FAILED
+        self.update_connection_status(site_id, json.dumps(connection_status))
+        logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
 
     def update_sites_indexes(self):
         """Check if all sites need to be updated"""
@@ -228,14 +226,14 @@ class WebCrawlManager:
             if len(project_sites) == 0:
                 break
             for site in project_sites:
-                site_config = json.loads(site.config)
-                site_url = site_config.get('url')
                 site_id = site.site_id
                 try:
-                    self.crawl_site(site_id)
+                    self.add_crawl_site_task(site_id)
                 except Exception as e:
                     logger.warning('update crawl site failed, site_id: %s, error: %s', site_id, e)
-                    self.finish_crawl_site(site_id, site_url, CrawlStatus.FAILED, e)
+                    connection_status = json.loads(site.status)
+                    connection_status['last_sync_status'] = CrawlStatus.FAILED
+                    self.update_connection_status(site_id, json.dumps(connection_status))
 
     def add_crawl_site_task(self, site_id):
         msg_content = {

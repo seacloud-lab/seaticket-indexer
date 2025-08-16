@@ -257,11 +257,6 @@ class GitHubIssuesIndex(object):
     def gen_index_id(self, connection_id, issue_id):
         return md5(f"{connection_id}{issue_id}")
 
-    def delete_issue(self, index_name, connection_id, issue_id):
-        _id = self.gen_index_id(connection_id, issue_id)
-        delete_op = [{'delete': {'_index': index_name, '_id': _id}}]
-        self.seasearch_api.bulk(index_name, delete_op)
-
     def query_data_by_connection_id(self, index_name, connection_id, start, size):
         dsl = {
             "query": {
@@ -277,10 +272,10 @@ class GitHubIssuesIndex(object):
             "sort": ["@url"],
         }
 
-        hits, total = self._normal_search(index_name, dsl)
+        hits, total = self.normal_search(index_name, dsl)
         return hits, total
 
-    def _normal_search(self, index_name, dsl):
+    def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
         total = doc_item['hits']['total']['value']
         return doc_item['hits']['hits'], total
