@@ -11,6 +11,7 @@ from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+from seaqa_indexer.seasearch.index_manager import IndexManager
 
 logger = logging.getLogger(__name__)
 
@@ -143,8 +144,15 @@ class DiscourseSyncManager:
         """Insert a new topic"""
         with self.db_session() as session:
             sql = """INSERT INTO discourse_topics 
-                     (topic_id, title, slug, views, category_id, connection_id, bumped_at) 
-                     VALUES (:topic_id, :title, :slug, :views, :category_id, :connection_id, :bumped_at)"""
+                     (topic_id, title, slug, views, category_id, connection_id, bumped_at, need_index) 
+                     VALUES (:topic_id, :title, :slug, :views, :category_id, :connection_id, :bumped_at, :need_index)
+                     ON DUPLICATE KEY UPDATE
+                         title = VALUES(title),
+                         slug = VALUES(slug),
+                         views = VALUES(views),
+                         category_id = VALUES(category_id),
+                         bumped_at = VALUES(bumped_at),
+                         need_index = 1"""
             session.execute(text(sql), {
                 'topic_id': topic_id,
                 'title': title,
@@ -152,7 +160,8 @@ class DiscourseSyncManager:
                 'views': views,
                 'category_id': category_id,
                 'connection_id': connection_id,
-                'bumped_at': bumped_at
+                'bumped_at': bumped_at,
+                'need_index': 1
             })
             session.commit()
 
@@ -160,14 +169,19 @@ class DiscourseSyncManager:
         """Insert a new reply"""
         with self.db_session() as session:
             sql = """INSERT INTO discourse_replies 
-                     (topic_id, post_number, content, author, connection_id) 
-                     VALUES (:topic_id, :post_number, :content, :author, :connection_id)"""
+                     (topic_id, post_number, content, author, connection_id, need_index) 
+                     VALUES (:topic_id, :post_number, :content, :author, :connection_id, :need_index)
+                     ON DUPLICATE KEY UPDATE
+                         content = VALUES(content),
+                         author = VALUES(author),
+                         need_index = 1"""
             session.execute(text(sql), {
                 'topic_id': topic_id,
                 'post_number': post_number,
                 'content': content,
                 'author': author,
                 'connection_id': connection_id,
+                'need_index': 1
             })
             session.commit()
 
@@ -266,6 +280,7 @@ class DiscourseSyncManager:
         latest_bumped_at = self.sync_discourse_latest_topics(df_url, df_api_key, df_api_username, connection_id)
         if latest_bumped_at:
             self.update_connection_updated_at(connection_id, latest_bumped_at)
+        self.add_discourse_index_task(connection_id)
 
     def update_discourse_forums(self):
         """Check if all discourse forums need to be updated"""
@@ -395,6 +410,7 @@ class DiscourseSyncManager:
             logger.warning(f"Unknown event type: {event_type}")
 
         self.update_connection_updated_at(connection_id, time_str_to_utc_time(request_data.get('updated_at')))
+        self.add_discourse_index_task(connection_id)
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
@@ -447,3 +463,9 @@ class DiscourseSyncManager:
 
             self.insert_reply(topic_id, post_number, content, author, connection_id)
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
+
+    def add_discourse_index_task(self, connection_id):
+        msg_content = {
+            'connection_id': connection_id,
+        }
+        self.mq.lpush('index_task', json.dumps(msg_content))

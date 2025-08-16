@@ -12,6 +12,7 @@ from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, RED
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
+from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type, get_all_id_to_site_info_by_site_id, \
     get_path_to_index_info_by_connection_id, get_content_by_download_link
@@ -34,6 +35,7 @@ class IndexManager:
         self.site_index = SiteIndex(self.seasearch_api)
         self.seafile_index = SeafileIndex(self.seasearch_api)
         self.github_issues_index = GitHubIssuesIndex(self.seasearch_api)
+        self.discourse_index = DiscourseIndex(self.seasearch_api)
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def get_project_connection_by_id(self, connection_id):
@@ -340,6 +342,8 @@ class IndexManager:
             self.update_seafile_index(connection)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             self.update_github_issues_index(connection)
+        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+            self.update_discourse_index(connection)
 
         logger.info('finish index project connection: %s, connection_type: %s', connection_id, connection_type)
 
@@ -384,6 +388,20 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
+    def update_discourse_index(self, project_connection):
+        connection_id = project_connection.id
+        project_uuid = project_connection.project_uuid
+        config = decrypt_config(json.loads(project_connection.config))
+        forum_url = config.get('url', '')
+        
+        discourse_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
+        self.discourse_index.create_index_if_missing(discourse_index_name)
+        
+        # Read discourse data from the database and build an index
+        self._index_discourse_topics_and_replies(discourse_index_name, connection_id, forum_url)
+        
+        logger.info(f'Updated discourse index for connection {connection_id}')
+
     def search(self, project_uuid, connection_types, keyword, start=0, size=20):
         result_docs = []
         bulk_search_params = []
@@ -406,7 +424,9 @@ class IndexManager:
                 issues_search_param = self.github_issues_index.get_search_param(issues_index_name, keyword, start, size)
                 bulk_search_params.append(issues_search_param)
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                pass
+                discourse_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
+                discourse_search_param = self.discourse_index.get_search_param(discourse_index_name, keyword, start, size)
+                bulk_search_params.append(discourse_search_param)
 
         if not bulk_search_params:
             return []
@@ -486,9 +506,104 @@ class IndexManager:
                 }
                 result_docs.append(r)
             elif index_name.startswith(ConnectionType.DISCOURSE_FORUM.value):
-                pass
+                r = {
+                    'title': source['title'],
+                    'topic_id': source['topic_id'],
+                    'connection_id': source['connection_id'],
+                    'content': source['body'],
+                    'category_id': source.get('category_id'),
+                    'url': source['url'],
+                    'score': score,
+                    '_id': _id,
+                    'type': 'discourse_forum',
+                }
+                result_docs.append(r)
 
         logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
                         project_uuid, result_docs)
 
         return result_docs
+
+
+    def get_all_need_index_topics_from_db(self, connection_id):
+        with self.db_session() as session:
+            sql = """
+                   SELECT topic_id, title, slug, views, category_id, bumped_at
+                   FROM discourse_topics
+                   WHERE connection_id = :connection_id AND need_index = 1
+               """
+            rows = session.execute(text(sql), {'connection_id': connection_id}).fetchall()
+        return rows
+    
+    def get_all_need_index_replies_from_db(self, connection_id):
+        with self.db_session() as session:
+            sql = """
+                   SELECT topic_id, post_number, content, author
+                   FROM discourse_replies
+                   WHERE connection_id = :connection_id AND need_index = 1
+               """
+            rows = session.execute(text(sql), {'connection_id': connection_id}).fetchall()
+        return rows
+    
+    def update_topic_index_status(self, topic_id, connection_id):
+        with self.db_session() as session:
+            sql = text("UPDATE discourse_topics SET need_index = 0 WHERE topic_id = :topic_id AND connection_id = :connection_id")
+            session.execute(sql, {'topic_id': topic_id, 'connection_id': connection_id})
+            session.commit()
+    
+    def update_reply_index_status(self, topic_id, post_number, connection_id):
+        with self.db_session() as session:
+            sql = text("UPDATE discourse_replies SET need_index = 0 WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id")
+            session.execute(sql, {'topic_id': topic_id, 'post_number': post_number, 'connection_id': connection_id})
+            session.commit()
+
+    def _index_discourse_topics_and_replies(self, index_name, connection_id, forum_url):
+        with self.db_session() as session:
+            topics_sql = """
+                SELECT topic_id, title, slug, views, category_id, bumped_at 
+                FROM discourse_topics 
+                WHERE connection_id = :connection_id AND need_index = 1
+            """
+            topics = session.execute(text(topics_sql), {'connection_id': connection_id}).fetchall()
+            
+            for topic in topics:
+                replies_sql = """
+                    SELECT post_number, content 
+                    FROM discourse_replies 
+                    WHERE connection_id = :connection_id AND topic_id = :topic_id
+                    ORDER BY post_number
+                """
+                replies = session.execute(text(replies_sql), {
+                    'connection_id': connection_id,
+                    'topic_id': topic.topic_id
+                }).fetchall()
+                
+                all_replies_content = '\n\n'.join([reply.content for reply in replies if reply.content])
+                
+                topic_data = {
+                    'topic_id': topic.topic_id,
+                    'title': topic.title,
+                    'slug': topic.slug,
+                    'views': topic.views,
+                    'category_id': topic.category_id,
+                    'bumped_at': topic.bumped_at,
+                    'all_replies_content': all_replies_content
+                }
+                
+                self.discourse_index.add_or_update_topic_with_replies(index_name, connection_id, topic_data, forum_url)
+                
+                self.update_topic_index_status(topic.topic_id, connection_id)
+                
+                for reply in replies:
+                    self.update_reply_index_status(topic.topic_id, reply.post_number, connection_id)
+            
+            replies_update_sql = """
+                UPDATE discourse_replies 
+                SET need_index = 0 
+                WHERE connection_id = :connection_id AND topic_id IN (
+                    SELECT topic_id FROM discourse_topics 
+                    WHERE connection_id = :connection_id AND need_index = 1
+                )
+            """
+            session.execute(text(replies_update_sql), {'connection_id': connection_id})
+            session.commit()
