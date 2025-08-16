@@ -36,7 +36,11 @@ class DiscourseSyncManager:
             self.update_topic(title, slug, views, category_id, topic_id, forum.id)
             logger.debug(f"Updated existing topic {topic_id}")
         else:
-            bumped_at = time_str_to_utc_time(topic_data.get('bumped_at')) or datetime.datetime.now(datetime.UTC)
+            # When using webhook, the returned value does not have a bumped_at.
+            if topic_data.get('bumped_at'):
+                bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
+            else:
+                bumped_at = time_str_to_utc_time(topic_data.get('last_posted_at'))
 
             self.insert_topic(topic_id, title, slug, views, category_id, forum.id, bumped_at)
             logger.debug(f"Created new topic {topic_id}")
@@ -385,16 +389,21 @@ class DiscourseSyncManager:
         topic_id = request_data.get('topic', {}).get('id')
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
             self._handle_topic_update(forum, topic_id, request_data)
+            updated_at = time_str_to_utc_time(request_data['topic']['last_posted_at'])
         elif event_type in ['post_created', 'post_edited', 'post_recovered']:
             self._handle_reply_update(forum, topic_id, request_data)
+            updated_at = time_str_to_utc_time(request_data['topic']['updated_at'])
         elif event_type == 'topic_destroyed':
             self.delete_topic_and_replies(topic_id, forum.id)
+            updated_at = time_str_to_utc_time(request_data['topic']['last_posted_at'])
         elif event_type == 'post_destroyed':
             self._handle_reply_delete(forum, topic_id, request_data)
+            updated_at = time_str_to_utc_time(request_data['topic']['updated_at'])
+
         else:
             logger.warning(f"Unknown event type: {event_type}")
 
-        self.update_connection_updated_at(connection_id, time_str_to_utc_time(request_data.get('updated_at')))
+        self.update_connection_updated_at(connection_id, updated_at)
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
