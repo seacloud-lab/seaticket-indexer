@@ -8,6 +8,13 @@ class CrawlStatus:
     FAILED = 'failed'
 
 
+class IndexStatus:
+    PENDING = 'pending'
+    INDEXING = 'indexing'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+
+
 class ConnectionType(Enum):
     EMAIL = 'email'
     GITHUB_ISSUE = 'github_issue'
@@ -39,3 +46,5 @@ office_suffixes = [
 REPO_FILE_SIZE_LIMIT = 10 * 1024 * 1024
 
 REPO_NAME_CACHE_TIME_OUT = 24 * 60 * 60
+
+CONNECTION_STATUS_UPDATE_LIMIT = 100

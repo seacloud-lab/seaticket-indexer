@@ -2,6 +2,8 @@ import json
 import os
 
 from seaqa_indexer.crawler.utils import url_to_filename, get_site_dir
+from seaqa_indexer.utils.constants import CrawlStatus
+from seaqa_indexer.utils import need_update_connection_status
 
 
 class BatchCrawlPipeline:
@@ -23,10 +25,18 @@ class BatchCrawlPipeline:
             os.remove(filepath)
             spider.logger.info('delete filename: %s', url)
 
+        spider.connection_status['total_records'] = len(spider.processed_urls)
+        spider.connection_status['last_sync_status'] = CrawlStatus.COMPLETED
+        spider.update_connection_status(self.site_id, json.dumps(spider.connection_status), is_update_time=True)
+
         spider.logger.info(f"Update completed: processed {len(spider.processed_urls)} URLs, deleted {len(urls_to_delete)} removed pages")
 
     def process_item(self, item, spider):
         self.save_content(item)
+        spider.crawled_count += 1
+        spider.connection_status['last_sync_count'] = spider.crawled_count
+        if need_update_connection_status(spider.crawled_count):
+            spider.update_connection_status(self.site_id, json.dumps(spider.connection_status))
         return item
 
     def save_content(self, item):

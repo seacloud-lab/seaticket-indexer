@@ -11,7 +11,7 @@ from sqlalchemy.sql import text
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.utils import decrypt_config, need_update_connection_status
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 
@@ -80,7 +80,7 @@ class GithubIssuesSyncManager:
             })
             session.commit()
 
-    def get_issues_connection_by_id(self, connection_id):
+    def get_project_connection_by_id(self, connection_id):
         with self.db_session() as session:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
@@ -102,12 +102,25 @@ class GithubIssuesSyncManager:
             })
             session.commit()
 
-    def finish_sync(self, connection_id, updated_at, status):
+    def update_status_and_time(self, connection_id, status, updated_at):
         with self.db_session() as session:
             cmd = """UPDATE project_connection SET updated_at=:updated_at, status=:status WHERE id = :connection_id"""
-            params = {'connection_id': connection_id, 'updated_at': updated_at,  'status': status}
+            params = {'connection_id': connection_id, 'updated_at': updated_at, 'status': status}
             session.execute(text(cmd), params)
             session.commit()
+
+    def finish_sync(self, connection_id, updated_at, connection_status, sync_count):
+        total_count = self.get_github_issues_count(connection_id)
+        connection_status['total_records'] = total_count
+        connection_status['last_sync_count'] = sync_count
+        connection_status['last_sync_status'] = CrawlStatus.COMPLETED
+        self.update_status_and_time(connection_id, json.dumps(connection_status), updated_at)
+
+    def get_github_issues_count(self, connection_id):
+        with self.db_session() as session:
+            sql = """SELECT count(*) FROM github_issues WHERE connection_id=:connection_id"""
+            connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
+        return connection
 
     def get_webhook_secret(self, connection_id):
         with self.db_session() as session:
@@ -154,13 +167,15 @@ class GithubIssuesSyncManager:
         }
         self.mq.lpush('issues_sync_task', json.dumps(msg_content))
 
-    def issues_sync(self, issues_sync_id):
-        project_connection = self.get_issues_connection_by_id(issues_sync_id)
-        issues_sync_status = project_connection.status
-        if issues_sync_status == CrawlStatus.CRAWLING:
-            logger.warning('issues: %s is crawling', issues_sync_id)
-            return
-        self.update_issues_sync_status(issues_sync_id, CrawlStatus.CRAWLING)
+    def issues_sync(self, project_connection):
+        logger.info(f"Start crawling site {project_connection.id}")
+        connection_id = project_connection.id
+        connection_status = json.loads(project_connection.status)
+        last_sync_status = connection_status.get('last_sync_status')
+        last_sync_status['last_sync_status'] = CrawlStatus.CRAWLING
+
+        self.update_issues_sync_status(connection_id, json.dumps(last_sync_status))
+
         config = decrypt_config(json.loads(project_connection.config))
         server_url = config.get('repository')
         token = config.get('token')
@@ -172,36 +187,40 @@ class GithubIssuesSyncManager:
         except Exception as e:
             raise GithubRepositoryInvalidException("github repository is invalid: %s", e)
 
-        github_api = GitHubAPI(token, repo_owner, repo_name, issues_sync_id)
+        github_api = GitHubAPI(token, repo_owner, repo_name, connection_id)
         since = old_updated_at.isoformat() + "Z" if old_updated_at else None
         new_updated_at = datetime.datetime.now(datetime.UTC)
 
         page = 1
         per_page = 100  # max 100
-        total_count = 0
+        sync_count = 0
         while True:
             issues = github_api.list_issues(since=since, state='all', per_page=per_page, page=page)
             if not issues:
                 break
 
             for issue in issues:
-                total_count += 1
                 if 'pull_request' in issue:
                     continue
-                self.save_or_update_issues_to_db(issues_sync_id, issue)
+                sync_count += 1
+                self.save_or_update_issues_to_db(connection_id, issue)
+                if need_update_connection_status(sync_count):
+                    connection_status['last_sync_count'] = sync_count
+                    self.update_issues_sync_status(connection_id, json.dumps(connection_status))
 
             if len(issues) < per_page:
                 break
             page += 1
-        logger.info(f"Fetched {total_count} issues from GitHub")
-        self.finish_sync(issues_sync_id, new_updated_at, CrawlStatus.COMPLETED)
-        logger.info('Finish github issues sync task: %s', issues_sync_id)
-        self.add_issues_index_task(issues_sync_id)
+        logger.info(f"Fetched {sync_count} issues from GitHub")
+
+        self.finish_sync(connection_id, new_updated_at, connection_status, sync_count)
+        logger.info('Finish github issues sync task: %s', connection_id)
+        self.add_issues_index_task(connection_id)
 
     def update_issues_sync_status(self, connection_id, status):
         with self.db_session() as session:
-            cmd = """UPDATE project_connection SET status = :status WHERE id = :issues_sync_id"""
-            session.execute(text(cmd), {'issues_sync_id': connection_id, 'status': status})
+            cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
+            session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
             session.commit()
 
     def update_issues_sync(self):
@@ -219,10 +238,12 @@ class GithubIssuesSyncManager:
             for project_connection in project_connections:
                 connection_id = project_connection.id
                 try:
-                    self.issues_sync(connection_id)
+                    self.add_github_issues_sync_task(connection_id)
                 except Exception as e:
-                    logger.warning('update issues sync failed, issues_sync_id: %s, error: %s', connection_id, e)
-                    self.update_issues_sync_status(connection_id, CrawlStatus.FAILED)
+                    logger.warning('update issues sync failed, connection_id: %s, error: %s', connection_id, e)
+                    sync_status = json.loads(project_connection.status)
+                    sync_status['last_sync_status'] = CrawlStatus.FAILED
+                    self.update_issues_sync_status(connection_id, json.dumps(sync_status))
 
     def get_project_connection_by_page(self, start, limit):
         with self.db_session() as session:

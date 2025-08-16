@@ -79,9 +79,9 @@ def add_github_issues_index_task():
 
 @application.route('/webhook/github/', methods=['POST'])
 def github_webhook():
-    issues_sync_id = request.args.get('connection_id')
+    connection_id = request.args.get('connection_id')
 
-    if not issues_sync_id:
+    if not connection_id:
         return jsonify({'error': 'Missing connection_id'}), 400
 
     payload = request.get_json(force=True)
@@ -104,8 +104,12 @@ def github_webhook():
     signature = request.headers.get('X-Hub-Signature-256')
     msg = request.data
 
+    project_connection = application.github_issues_sync_manager.get_project_connection_by_id(connection_id)
+    if not project_connection:
+        return jsonify({'error': 'connection not found'}), 404
+
     try:
-        application.github_issues_sync_manager.update_github_issues_by_webhook(issues_sync_id, issues_data, issue_id, action, signature, msg)
+        application.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issues_data, issue_id, action, signature, msg)
     except SignatureInvalidException:
         return jsonify({'error': 'Invalid signature'}), 403
     except Exception as e:

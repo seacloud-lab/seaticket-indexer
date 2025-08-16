@@ -8,11 +8,14 @@ class SitemapCrawlerSpider(SitemapSpider):
     sitemap_follow = ['.xml']
     sitemap_urls = []
 
-    def __init__(self, site_url, project_uuid, site_id, sitemap_url, *args, **kwargs):
+    def __init__(self, site_url, project_uuid, site_id, sitemap_url, connection_status, update_connection_status, *args, **kwargs):
         super(SitemapCrawlerSpider, self).__init__(*args, **kwargs)
         self.start_urls = [site_url]
         self.project_uuid = project_uuid
         self.site_id = site_id
+        self.connection_status = connection_status
+        self.update_connection_status = update_connection_status
+        self.crawled_count = 0
         self.sitemap_urls = [sitemap_url]
         self.parse_item = self.parse_item
         self.processed_urls = set()

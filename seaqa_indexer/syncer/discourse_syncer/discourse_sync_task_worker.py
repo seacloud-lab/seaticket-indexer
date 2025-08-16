@@ -50,11 +50,8 @@ class DiscourseSyncTaskWorker(object):
                 logger.info('%s start discourse sync connection: %s' % (self.tname, connection_id))
                 lock_key = self._get_discourse_lock_key(connection_id)
                 self.locked_keys.add(lock_key)
-                try:
-                    self.discourse_sync_manager.sync_discourse(connection_id)
-                except Exception as e:
-                    logger.exception('%s discourse sync connection %s error: %s' % (self.tname, connection_id, e))
-                    self.discourse_sync_manager.update_status(connection_id, CrawlStatus.FAILED)
+
+
                 try:
                     self.locked_keys.remove(lock_key)
                 except KeyError:
@@ -65,6 +62,23 @@ class DiscourseSyncTaskWorker(object):
             else:
                 # the connection is updated by other thread, push back to the queue
                 self.add_to_undo_task(connection_id)
+
+    def sync_discourse(self, connection_id):
+        project_connection = self.discourse_sync_manager.get_project_connection_by_id(connection_id)
+        if not project_connection:
+            logger.warning('connection: %s not found', connection_id)
+            return
+        site_status = json.loads(project_connection.status)
+        last_sync_status = site_status.get('site_status')
+        if last_sync_status == CrawlStatus.CRAWLING:
+            logger.warning('connection: %s is syncing', connection_id)
+            return
+        try:
+            self.discourse_sync_manager.sync_discourse(project_connection)
+        except Exception as e:
+            logger.exception('%s discourse sync connection %s error: %s' % (self.tname, connection_id, e))
+            site_status['last_sync_status'] = CrawlStatus.FAILED
+            self.discourse_sync_manager.update_status(connection_id, json.dumps(site_status))
 
     def add_to_undo_task(self, connection_id):
         """Push task back to the end of the queue.
