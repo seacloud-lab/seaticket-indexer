@@ -51,7 +51,7 @@ def add_init_crawl_task():
     connection_id = request.args.get('connection_id')
     task_type = request.args.get('type')
     if task_type == ConnectionType.SITE.value:
-        application.web_crawl_manager.add_crawl_task(connection_id)
+        application.web_crawl_manager.add_crawl_site_task(connection_id)
     elif task_type == ConnectionType.DISCOURSE_FORUM.value:
         application.discourse_sync_manager.add_discourse_sync_task(connection_id)
     else:
