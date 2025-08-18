@@ -51,7 +51,7 @@ class DiscourseSyncTaskWorker(object):
                 lock_key = self._get_discourse_lock_key(connection_id)
                 self.locked_keys.add(lock_key)
 
-
+                self.sync_discourse(connection_id)
                 try:
                     self.locked_keys.remove(lock_key)
                 except KeyError:
