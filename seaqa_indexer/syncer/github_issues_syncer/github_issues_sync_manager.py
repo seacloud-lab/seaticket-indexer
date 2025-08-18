@@ -120,7 +120,7 @@ class GithubIssuesSyncManager:
         with self.db_session() as session:
             sql = """SELECT count(*) FROM github_issues WHERE connection_id=:connection_id"""
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-        return connection
+        return connection[0]
 
     def get_webhook_secret(self, connection_id):
         with self.db_session() as session:
@@ -171,10 +171,9 @@ class GithubIssuesSyncManager:
         logger.info(f"Start crawling site {project_connection.id}")
         connection_id = project_connection.id
         connection_status = json.loads(project_connection.status)
-        last_sync_status = connection_status.get('last_sync_status')
-        last_sync_status['last_sync_status'] = CrawlStatus.CRAWLING
+        connection_status['last_sync_status'] = CrawlStatus.CRAWLING
 
-        self.update_issues_sync_status(connection_id, json.dumps(last_sync_status))
+        self.update_issues_sync_status(connection_id, json.dumps(connection_status))
 
         config = decrypt_config(json.loads(project_connection.config))
         server_url = config.get('repository')
