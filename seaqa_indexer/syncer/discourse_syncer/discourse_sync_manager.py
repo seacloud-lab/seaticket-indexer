@@ -375,20 +375,14 @@ class DiscourseSyncManager:
         topic_id = request_data.get('topic', {}).get('id')
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
             self._handle_topic_update(connection_id, topic_id, request_data)
-            updated_at = time_str_to_utc_time(request_data['topic']['last_posted_at'])
         elif event_type in ['post_created', 'post_edited', 'post_recovered']:
             self._handle_reply_update(connection_id, topic_id, request_data)
-            updated_at = time_str_to_utc_time(request_data['topic']['updated_at'])
         elif event_type == 'topic_destroyed':
             self.delete_topic_and_replies(topic_id, connection_id)
-            updated_at = time_str_to_utc_time(request_data['topic']['last_posted_at'])
         elif event_type == 'post_destroyed':
             self._handle_reply_delete(connection_id, topic_id, request_data)
-            updated_at = time_str_to_utc_time(request_data['topic']['updated_at'])
         else:
             logger.warning(f"Unknown event type: {event_type}")
-
-        self.update_connection_updated_at(connection_id, updated_at)
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
