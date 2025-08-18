@@ -273,17 +273,13 @@ class DiscourseSyncManager:
                 topic_id = topic_data.get('id')
 
                 # Handle different sync scenarios
-                if not last_updated_at:
-                    # means first sync discourse
-                    self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
-                else:
-                    self._update_existing_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers)
+                self.add_or_update_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers)
 
                 sync_count += 1
                 if need_update_connection_status(sync_count):
                     connection_status['last_sync_count'] = sync_count
                     self.update_status(connection_id, json.dumps(connection_status))
-                time.sleep(0.05)
+                time.sleep(1)
 
             if should_stop:
                 break
@@ -388,7 +384,7 @@ class DiscourseSyncManager:
             "Api-Username": api_username
         }
 
-    def _update_existing_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers):
+    def add_or_update_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers):
         """Deletes and recreates an existing topic and its replies to ensure content is up-to-date."""
         # Delete existing topic and its replies
         self.delete_topic_and_replies(topic_id, connection_id)
