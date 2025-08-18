@@ -224,7 +224,7 @@ class DiscourseSyncManager:
         with self.db_session() as session:
             sql = """SELECT count(*) FROM discourse_topics WHERE connection_id=:connection_id"""
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-        return connection
+        return connection[0]
 
     def update_status_and_time(self, connection_id, status, updated_at):
         with self.db_session() as session:
@@ -239,10 +239,9 @@ class DiscourseSyncManager:
 
         connection_id = project_connection.id
         connection_status = json.loads(project_connection.status)
-        last_sync_status = connection_status.get('last_sync_status')
-        last_sync_status['last_sync_status'] = CrawlStatus.CRAWLING
+        connection_status['last_sync_status'] = CrawlStatus.CRAWLING
 
-        self.update_status(connection_id, json.dumps(last_sync_status))
+        self.update_status(connection_id, json.dumps(connection_status))
         config = json.loads(project_connection.config)
         config = decrypt_config(config)
         forum_url = config['url']
