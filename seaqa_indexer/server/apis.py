@@ -1,6 +1,7 @@
 import logging
 import jwt
 import json
+import datetime
 from functools import wraps
 from flask import request, jsonify, Flask
 
@@ -58,6 +59,28 @@ def add_init_crawl_task():
         return jsonify({'success': False, 'error_msg': f'Unsupported type: {task_type}'}), 400
 
     return jsonify({'success': True}), 200
+
+
+@application.route('/manual-crawl-site', methods=['POST'])
+@auth_required
+def manual_crawl_site():
+    try:
+        data = request.get_json(force=True)
+        connection_id = data.get('connection_id')
+        
+        if not connection_id:
+            return jsonify({'success': False, 'error_msg': 'Missing site_id parameter'}), 400
+        
+        success, message = application.web_crawl_manager.manual_crawl_site(connection_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': message}), 200
+        else:
+            return jsonify({'success': False, 'error_msg': message}), 400
+            
+    except Exception as e:
+        logger.exception('Manual crawl site API error: %s', e)
+        return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
 
 
 @application.route('/add-index-seafile-task', methods=['GET'])

@@ -5,6 +5,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
 
+
 logger = logging.getLogger(__name__)
 
 
