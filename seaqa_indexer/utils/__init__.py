@@ -131,3 +131,7 @@ def encrypt_config(config):
     detail_clone.update(encrypted_details)
     return json.dumps(detail_clone)
 
+
+def need_update_connection_status(item_count):
+    from seaqa_indexer.utils.constants import CONNECTION_STATUS_UPDATE_LIMIT
+    return item_count / CONNECTION_STATUS_UPDATE_LIMIT == item_count // CONNECTION_STATUS_UPDATE_LIMIT

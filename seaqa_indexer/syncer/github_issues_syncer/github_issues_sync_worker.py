@@ -70,8 +70,8 @@ class GithubIssuesSyncTaskWorker(object):
                         if not data:
                             logger.warning('issues_sync_task: invalid.', res)
                         else:
-                            issues_sync_id = data.get('connection_id')
-                            self.issues_sync(issues_sync_id)
+                            connection_id = data.get('connection_id')
+                            self.issues_sync(connection_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -80,12 +80,22 @@ class GithubIssuesSyncTaskWorker(object):
             # prevent case that redis break at program running.
             time.sleep(0.3)
 
-    def issues_sync(self, issues_sync_id):
+    def issues_sync(self, connection_id):
+        project_connection = self.issues_sync_manager.get_project_connection_by_id(connection_id)
+        if not project_connection:
+            logger.warning('discourse forum: %s not found', connection_id)
+            return
+        issues_sync_status = json.loads(project_connection.status)
+        last_sync_status = issues_sync_status.get('last_sync_status')
+        if last_sync_status == CrawlStatus.CRAWLING:
+            logger.warning('issues: %s is crawling', connection_id)
+            return
         try:
-            self.issues_sync_manager.issues_sync(issues_sync_id)
+            self.issues_sync_manager.issues_sync(project_connection)
         except Exception as e:
-            logger.exception('sync issues: %s failed, error: %s', issues_sync_id, e)
-            self.issues_sync_manager.update_issues_sync_status(issues_sync_id, CrawlStatus.FAILED)
+            logger.exception('sync issues: %s failed, error: %s', connection_id, e)
+            issues_sync_status['last_sync_status'] = CrawlStatus.FAILED
+            self.issues_sync_manager.update_issues_sync_status(connection_id, json.dumps(issues_sync_status))
 
     def cron_sync_issues(self):
         logger.info('Start to sync issues timer, interval = %s sec', self.sync_issues_interval)
