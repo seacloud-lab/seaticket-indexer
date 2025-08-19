@@ -36,8 +36,11 @@ class DiscourseSyncManager:
             self.update_topic(title, slug, views, category_id, topic_id, connection_id)
             logger.debug(f"Updated existing topic {topic_id}")
         else:
-            bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
-
+            # When using webhook, the returned value does not have a bumped_at.
+            if topic_data.get('bumped_at'):
+                bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
+            else:
+                bumped_at = time_str_to_utc_time(topic_data.get('last_posted_at'))
             self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at)
             logger.debug(f"Created new topic {topic_id}")
 
