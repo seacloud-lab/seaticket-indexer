@@ -3,7 +3,6 @@ import time
 import logging
 import threading
 import signal
-import shutil
 
 from sqlalchemy.sql import text
 
@@ -12,7 +11,7 @@ from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.seasearch.index_manager import IndexManager
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.crawler.utils import get_base_dir, get_site_dir
+from seaqa_indexer.crawler.storage import get_storage
 
 
 logger = logging.getLogger(__name__)
@@ -94,10 +93,9 @@ class ProjectConnectionCleaner(object):
         # delete project index
         self.index_manager.delete_index_by_project(project_uuid)
 
-        # delete crawled file folder
-        crawled_base_dir = get_base_dir(project_uuid)
-        if os.path.exists(crawled_base_dir):
-            shutil.rmtree(crawled_base_dir)
+        # delete crawled file folder (S3/local)
+        storage = get_storage()
+        storage.delete_project(project_uuid)
         # delete db record
         self.delete_deleted_project(project_uuid)
 
@@ -107,9 +105,8 @@ class ProjectConnectionCleaner(object):
         self.index_manager.delete_index_by_connection(project_uuid, connection_id, connection_type)
 
         if connection_type == ConnectionType.SITE.value:
-            site_dir = get_site_dir(connection_id, project_uuid)
-            if os.path.exists(site_dir):
-                shutil.rmtree(site_dir)
+            storage = get_storage()
+            storage.delete_site(connection_id, project_uuid) ### xxxxx
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             self.delete_issues_from_db(connection_id)
 
