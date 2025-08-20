@@ -6,14 +6,9 @@ import threading
 import signal
 from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
 
-from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import GithubIssuesSyncManager
-from seaqa_indexer.utils.constants import CrawlStatus
-
-
+from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync import GithubIssuesSync
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-
-
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 
@@ -26,7 +21,7 @@ class GithubIssuesSyncTaskWorker(object):
 
     def __init__(self):
         self.db_session = init_db_session_class()
-        self.issues_sync_manager = GithubIssuesSyncManager()
+        self.github_issues_sync = GithubIssuesSync(self.db_session)
         self.should_stop = threading.Event()
         self.worker_num = 3
         self.sync_issues_interval = 7 * 24 * 60 * 60
@@ -51,8 +46,6 @@ class GithubIssuesSyncTaskWorker(object):
         for i in range(int(self.worker_num)):
             t = threading.Thread(target=self.issues_sync_handler, name='issues_sync_handler_thread_' + str(i), daemon=True)
             t.start()
-
-        threading.Thread(target=self.cron_sync_issues, name='cron_sync_issues_thread', daemon=True).start()
 
     def issues_sync_handler(self):
         logger.info('%s starting issues sync work' % self.tname)
@@ -81,33 +74,10 @@ class GithubIssuesSyncTaskWorker(object):
             time.sleep(0.3)
 
     def issues_sync(self, connection_id):
-        project_connection = self.issues_sync_manager.get_project_connection_by_id(connection_id)
-        if not project_connection:
-            logger.warning('discourse forum: %s not found', connection_id)
-            return
-        issues_sync_status = json.loads(project_connection.status)
-        last_sync_status = issues_sync_status.get('last_sync_status')
-        if last_sync_status == CrawlStatus.CRAWLING:
-            logger.warning('issues: %s is crawling', connection_id)
-            return
         try:
-            self.issues_sync_manager.issues_sync(project_connection)
+            self.github_issues_sync.issues_sync(connection_id)
         except Exception as e:
             logger.exception('sync issues: %s failed, error: %s', connection_id, e)
-            issues_sync_status['last_sync_status'] = CrawlStatus.FAILED
-            self.issues_sync_manager.update_issues_sync_status(connection_id, json.dumps(issues_sync_status))
-
-    def cron_sync_issues(self):
-        logger.info('Start to sync issues timer, interval = %s sec', self.sync_issues_interval)
-        while not self.should_stop.is_set():
-            self.should_stop.wait(self.sync_issues_interval)
-            if not self.should_stop.is_set():
-                try:
-                    self.issues_sync_manager.update_issues_sync()
-                except Exception as e:
-                    logger.exception('cron sync issues error: %s', e)
-
-                logger.info('finish cron sync issues...')
 
     def signal_term_handler(self, signal, frame):
         os._exit(0)
