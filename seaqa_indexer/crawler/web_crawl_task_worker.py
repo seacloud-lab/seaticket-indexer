@@ -15,10 +15,10 @@ from twisted.internet import reactor
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
+from seaqa_indexer.crawler.web_crawl import WebCrawl
+from seaqa_indexer.db import init_db_session_class
 
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.utils.constants import CrawlStatus
 
 
 logger = logging.getLogger(__name__)
@@ -29,10 +29,10 @@ class WebCrawlTaskWorker(object):
     """
 
     def __init__(self):
-        self.web_crawl_manager = WebCrawlManager()
+        self.db_session = init_db_session_class()
+        self.web_crawl = WebCrawl(self.db_session)
         self.should_stop = threading.Event()
         self.worker_num = 3
-        self.update_indexes_interval = 7 * 24 * 60 * 60
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         reactor.suggestThreadPoolSize(10)
@@ -56,7 +56,6 @@ class WebCrawlTaskWorker(object):
             t = threading.Thread(target=self.web_crawl_handler, name='web_crawl_handler_thread_' + str(i), daemon=True)
             t.start()
 
-        threading.Thread(target=self.cron_crawl_web_sites, name='cron_crawl_web_sites_thread', daemon=True).start()
         threading.Thread(target=reactor.run, name='reactor_thread', daemon=True, kwargs={'installSignalHandlers': False}).start()
 
     def web_crawl_handler(self):
@@ -86,33 +85,10 @@ class WebCrawlTaskWorker(object):
             time.sleep(0.3)
 
     def crawl_site(self, site_id):
-        project_connection = self.web_crawl_manager.get_site_by_id(site_id)
-        if not project_connection:
-            logger.warning('site: %s not found', site_id)
-            return
-        site_status = json.loads(project_connection.status)
-        last_sync_status = site_status.get('site_status')
-        if last_sync_status == CrawlStatus.CRAWLING:
-            logger.warning('site: %s is crawling', site_id)
-            return
         try:
-            self.web_crawl_manager.crawl_site(project_connection)
+            self.web_crawl.crawl_site(site_id)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', site_id, e)
-            site_status['last_sync_status'] = CrawlStatus.FAILED
-            self.web_crawl_manager.update_connection_status(site_id, json.dumps(site_status))
-
-    def cron_crawl_web_sites(self):
-        logger.info('Start to crawl web sites timer, interval = %s sec', self.update_indexes_interval)
-        while not self.should_stop.is_set():
-            self.should_stop.wait(self.update_indexes_interval)
-            if not self.should_stop.is_set():
-                try:
-                    self.web_crawl_manager.update_sites_indexes()
-                except Exception as e:
-                    logger.exception('cron crawl sites error: %s', e)
-
-                logger.info('finish cron crawl sites...')
 
     def signal_term_handler(self, signal, frame):
         os._exit(0)
