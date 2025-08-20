@@ -7,11 +7,11 @@ from seaqa_indexer.utils import get_python_executable, run
 
 
 __all__ = [
-    'DiscourseSyncerStarter',
+    'ConnectionSyncWorkerStarter',
 ]
 
 
-class DiscourseSyncerStarter(object):
+class ConnectionSyncWorkerStarter(object):
     def __init__(self):
         self._enabled = True
         self._logfile = LOG_FILE
@@ -19,17 +19,17 @@ class DiscourseSyncerStarter(object):
 
     def start(self):
         if not self.is_enabled():
-            logging.warning('Can not start discourse syncer starter: it is not enabled!')
+            logging.warning('Can not start connection sync worker starter: it is not enabled!')
             return
 
-        DiscourseSync(self._logfile, self._loglevel).start()
-        logging.info('discourse syncer starter is started')
+        ConnectionSyncWorker(self._logfile, self._loglevel).start()
+        logging.info('connection sync worker starter is started')
 
     def is_enabled(self):
         return self._enabled
 
 
-class DiscourseSync(Thread):
+class ConnectionSyncWorker(Thread):
     def __init__(self, logfile, loglevel):
         Thread.__init__(self)
         self._logfile = logfile
@@ -40,12 +40,11 @@ class DiscourseSync(Thread):
         try:
             cmd = [
                 get_python_executable(),
-                '-m',
-                'seaqa_indexer.syncer.discourse_syncer.discourse_sync_task_worker'
+                '-m', 'seaqa_indexer.syncer.connection_sync_worker'
             ]
             run(cmd, )
         except Exception as e:
-            logging.exception('error when start discourse_syncer_starter: %s', e)
+            logging.exception('error when start connection sync worker: %s', e)
 
     def cancel(self):
         self.finished.set()
