@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from seaqa_indexer import config
 from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException
-from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus, IndexStatus
+from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus
 
 
 application = Flask(__name__)
@@ -65,6 +65,14 @@ def add_init_crawl_task():
 @application.route('/manual-sync-connection', methods=['POST'])
 @auth_required
 def manual_sync_connection():
+    def _enqueue_wrapper(func, *args, **kwargs):
+        try:
+            func(*args, **kwargs)
+            return True, 'Manual sync task enqueued'
+        except Exception as e:
+            logger.exception('enqueue manual sync failed: %s', e)
+            return False, f'Failed to enqueue manual sync: {str(e)}'
+
     try:
         data = request.get_json(force=True)
         connection_id = data.get('connection_id')
@@ -82,15 +90,12 @@ def manual_sync_connection():
         except Exception:
             connection_status = {}
 
-        if connection_status.get('last_sync_status') == CrawlStatus.CRAWLING.value:
+        if connection_status.get('last_sync_status') == CrawlStatus.CRAWLING:
             return jsonify({'success': False, 'error_msg': 'Connection is currently syncing'}), 400
-        elif connection_status.get('last_sync_status') == CrawlStatus.PENDING.value:
-            return jsonify({'success': False, 'error_msg': 'Connection is currently pending'}), 400
-        elif connection_status.get('last_index_status') == IndexStatus.INDEXING.value:
-            return jsonify({'success': False, 'error_msg': 'Connection is currently indexing'}), 400
-        elif connection_status.get('last_index_status') == IndexStatus.PENDING.value:
+        elif connection_type != ConnectionType.SEAFILE.value and connection_status.get('last_sync_status') == CrawlStatus.PENDING:
             return jsonify({'success': False, 'error_msg': 'Connection is currently pending'}), 400
 
+        # Cooldown time
         if connection.indexed_at:
             now = datetime.datetime.now(datetime.timezone.utc)
             indexed_at_utc = connection.indexed_at.replace(tzinfo=datetime.timezone.utc)
@@ -102,15 +107,12 @@ def manual_sync_connection():
                 local_time_aware = next_sync_time.replace(tzinfo=ZoneInfo('UTC')).astimezone(local_tz)
                 next_sync_display = local_time_aware.strftime('%Y-%m-%d %H:%M:%S')
                 return jsonify({'success': False, 'error_msg': f'Manual sync too frequent. next time: {next_sync_display}'}), 400
-
-        def _enqueue_wrapper(func, *args, **kwargs):
-            try:
-                func(*args, **kwargs)
-                return True, 'Manual sync task enqueued'
-            except Exception as e:
-                logger.exception('enqueue manual sync failed: %s', e)
-                return False, f'Failed to enqueue manual sync: {str(e)}'
-
+        
+        # Update connection status
+        connection_status['last_sync_status'] = CrawlStatus.PENDING
+        application.index_manager.update_connection_status(connection_id, json.dumps(connection_status))
+        
+        # Enqueue sync task
         if connection_type == ConnectionType.SITE.value:
             success, message = _enqueue_wrapper(application.web_crawl_manager.add_crawl_site_task, connection_id)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
