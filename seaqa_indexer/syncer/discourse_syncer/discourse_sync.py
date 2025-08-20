@@ -10,10 +10,6 @@ from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_sta
 logger = logging.getLogger(__name__)
 
 
-class ForumNotFoundException(Exception):
-    pass
-
-
 class DiscourseSync:
     def __init__(self, db_session):
         self.db_session = db_session

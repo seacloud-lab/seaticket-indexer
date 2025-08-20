@@ -15,9 +15,8 @@ from twisted.internet import reactor
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.crawler.web_crawl import WebCrawl
 from seaqa_indexer.db import init_db_session_class
-
+from seaqa_indexer.crawler.crawl_web import craw_web
 from seaqa_indexer.mq import get_mq
 
 
@@ -30,7 +29,6 @@ class WebCrawlTaskWorker(object):
 
     def __init__(self):
         self.db_session = init_db_session_class()
-        self.web_crawl = WebCrawl(self.db_session)
         self.should_stop = threading.Event()
         self.worker_num = 3
 
@@ -74,8 +72,8 @@ class WebCrawlTaskWorker(object):
                         if not data:
                             logger.warning('web_crawl_task: invalid.', res)
                         else:
-                            site_id = data.get('site_id')
-                            self.crawl_site(site_id)
+                            connection_id = data.get('site_id')
+                            self.crawl_site(connection_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -84,11 +82,11 @@ class WebCrawlTaskWorker(object):
             # prevent case that redis break at program running.
             time.sleep(0.3)
 
-    def crawl_site(self, site_id):
+    def crawl_site(self, connection_id):
         try:
-            self.web_crawl.crawl_site(site_id)
+            craw_web(connection_id, self.db_session, self.mq)
         except Exception as e:
-            logger.exception('crawl site: %s failed, error: %s', site_id, e)
+            logger.exception('crawl site: %s failed, error: %s', connection_id, e)
 
     def signal_term_handler(self, signal, frame):
         os._exit(0)
