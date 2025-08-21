@@ -18,12 +18,6 @@ MYSQL_PORT = 3306
 MYSQL_DB = 'sea_qa'
 MYSQL_UNIX_SOCKET = ''
 
-# S3 Configuration
-S3_HOST = ''
-S3_FILE_BUCKET = ''
-S3_KEY_ID = ''
-S3_SECRET_KEY = ''
-
 # index setting
 LANG = 'chinese'
 
@@ -59,8 +53,7 @@ REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
 REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
 REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')
 
-# S3/MinIO settings
-S3_HOST = os.environ.get('S3_HOST') or S3_HOST
-S3_FILE_BUCKET = os.environ.get('S3_FILE_BUCKET') or S3_FILE_BUCKET
-S3_KEY_ID = os.environ.get('S3_KEY_ID') or S3_KEY_ID
-S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY') or S3_SECRET_KEY
+S3_HOST = os.environ.get('S3_HOST')
+S3_FILE_BUCKET = os.environ.get('S3_FILE_BUCKET')
+S3_KEY_ID = os.environ.get('S3_KEY_ID')
+S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY')

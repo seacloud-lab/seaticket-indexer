@@ -1,5 +1,6 @@
 import json
 import boto3
+import logging
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
@@ -9,6 +10,8 @@ from seaqa_indexer.config import (
     S3_KEY_ID,
     S3_SECRET_KEY,
 )
+
+logger = logging.getLogger(__name__)
 
 KEY_PREFIX_FORMAT = "{project_uuid}/{site_id}/"
 
@@ -43,7 +46,6 @@ class S3Storage(BaseStorage):
             aws_secret_access_key=S3_SECRET_KEY,
             endpoint_url=S3_HOST,
             config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
-            # region_name='us-east-1',
         )
         self.bucket = S3_FILE_BUCKET
 
@@ -76,8 +78,10 @@ class S3Storage(BaseStorage):
         self.client.delete_object(Bucket=self.bucket, Key=key)
 
     def list_files(self, site_id, project_uuid):
+        return list(self.iter_files(site_id, project_uuid))
+
+    def iter_files(self, site_id, project_uuid):
         prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=site_id)
-        files = []
         continuation_token = None
         while True:
             params = {'Bucket': self.bucket, 'Prefix': prefix}
@@ -88,12 +92,11 @@ class S3Storage(BaseStorage):
                 key = obj['Key']
                 if not key.endswith('.json'):
                     continue
-                files.append(key[len(prefix):])
+                yield key[len(prefix):]
             if resp.get('IsTruncated'):
                 continuation_token = resp.get('NextContinuationToken')
             else:
                 break
-        return files
 
     def _delete_by_prefix(self, prefix):
         continuation_token = None

@@ -75,10 +75,7 @@ def spider_parse_item(spider, response):
 def load_existing_site_info(site_id, project_uuid, existing_site_info):
     """Load the ETag and Last-Modified information of an existing file"""
     storage = get_storage()
-    filenames = storage.list_files(site_id, project_uuid)
-    if not filenames:
-        return
-    for filename in filenames:
+    for filename in storage.iter_files(site_id, project_uuid):
         data = storage.read_json(site_id, project_uuid, filename)
         if not data:
             continue
