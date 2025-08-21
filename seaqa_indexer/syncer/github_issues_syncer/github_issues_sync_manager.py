@@ -24,12 +24,12 @@ class GithubRepositoryInvalidException(Exception):
 
 class GithubIssuesSyncManager:
     def __init__(self):
-        self.db_session = init_db_session_class()
+        self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
-        self.github_issues_sync = GithubIssuesSync(self.db_session)
+        self.github_issues_sync = GithubIssuesSync(self.db_session_class)
 
     def get_project_connection_by_id(self, connection_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
@@ -38,7 +38,7 @@ class GithubIssuesSyncManager:
         return connection
 
     def get_webhook_secret(self, connection_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             cmd = "SELECT config FROM project_connection WHERE id = :connection_id"
             result = session.execute(text(cmd), {'connection_id': connection_id}).fetchone()
             if not result:

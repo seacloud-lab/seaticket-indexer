@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 class GithubIssuesSync:
-    def __init__(self, db_session):
-        self.db_session = db_session
+    def __init__(self, db_session_class):
+        self.db_session_class = db_session_class
 
     def save_or_update_issues_to_db(self, connection_id, issue):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = text("""
                 INSERT INTO github_issues (
                     issue_id, issue_number, title, body, state,
@@ -64,7 +64,7 @@ class GithubIssuesSync:
             session.commit()
 
     def tag_issue_deleted(self, connection_id, issue_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = text("""
                 UPDATE github_issues
                 SET deleted = 1
@@ -77,13 +77,13 @@ class GithubIssuesSync:
             session.commit()
 
     def get_github_issues_count(self, connection_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT count(*) FROM github_issues WHERE connection_id=:connection_id"""
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
         return connection[0]
 
     def update_connection_status(self, connection_id, status):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
             session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
             session.commit()

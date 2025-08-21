@@ -9,7 +9,7 @@ from seaqa_indexer.crawler.web_crawl import WebCrawl
 logger = logging.getLogger(__name__)
 
 
-def craw_web(connection_id, db_session, mq):
+def craw_web(connection_id, db_session_class, mq):
     def failed_crawl_site(error_msg, params):
         site_id, site_url, connection_status = params
         connection_status['last_sync_status'] = CrawlStatus.FAILED
@@ -24,7 +24,7 @@ def craw_web(connection_id, db_session, mq):
         mq.lpush('index_task', json.dumps(msg_content))
 
     logger.info(f"Start crawl connection: {connection_id}")
-    seaqa_db = SeaqaDB(db_session)
+    seaqa_db = SeaqaDB(db_session_class)
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
@@ -43,7 +43,7 @@ def craw_web(connection_id, db_session, mq):
     sitemap_url = connection_config.get('sitemap_url')
     project_uuid = str(project_connection.project_uuid)
 
-    web_crawl = WebCrawl(db_session)
+    web_crawl = WebCrawl(db_session_class)
 
     if not sitemap_url:
         sitemap_url = web_crawl.get_sitemap_url(site_url)

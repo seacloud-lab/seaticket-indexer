@@ -45,11 +45,11 @@ class ProjectConnectionTaskPublisherTimer(Thread):
         self._loglevel = loglevel
         self.finished = Event()
         self._interval = interval
-        self.db_session = init_db_session_class()
+        self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def get_project_connections_by_page(self, start, limit):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid, pc.type
              FROM project_connection pc 
             INNER JOIN projects p 

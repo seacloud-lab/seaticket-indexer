@@ -20,14 +20,14 @@ logger = logging.getLogger(__name__)
 
 
 class WebCrawl:
-    def __init__(self, db_session):
-        self.db_session = db_session
+    def __init__(self, db_session_class):
+        self.db_session_class = db_session_class
 
         self.settings = get_project_settings()
         self.runner = CrawlerRunner(self.settings)
 
     def update_connection_status(self, site_id, status, is_update_time=False):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             cmd = """UPDATE project_connection SET status = :status"""
             params = {'site_id': site_id, 'status': status}
             if is_update_time:

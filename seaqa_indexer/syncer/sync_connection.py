@@ -14,9 +14,9 @@ from seaqa_indexer.utils import decrypt_config
 logger = logging.getLogger(__name__)
 
 
-def sync_connection(connection_id, db_session, mq):
+def sync_connection(connection_id, db_session_class, mq):
     logger.info(f"Start sync connection: {connection_id}")
-    seaqa_db = SeaqaDB(db_session)
+    seaqa_db = SeaqaDB(db_session_class)
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
@@ -46,7 +46,7 @@ def sync_connection(connection_id, db_session, mq):
             discourse_api_key = config['api_key']
             discourse_api_username = config['api_username']
 
-            discourse_sync = DiscourseSync(db_session)
+            discourse_sync = DiscourseSync(db_session_class)
             latest_bumped_at, sync_count = discourse_sync.sync(connection_id, forum_url, discourse_api_key, discourse_api_username, last_updated_at, connection_status)
 
             new_updated_at = latest_bumped_at if latest_bumped_at else last_updated_at
@@ -65,7 +65,7 @@ def sync_connection(connection_id, db_session, mq):
                 return
             since = old_updated_at.isoformat() + "Z" if old_updated_at else None
             new_updated_at = datetime.datetime.now(datetime.UTC)
-            github_issues_sync = GithubIssuesSync(db_session)
+            github_issues_sync = GithubIssuesSync(db_session_class)
             sync_count = github_issues_sync.sync(connection_id, token, repo_owner, repo_name, since, connection_status)
             total_count = github_issues_sync.get_github_issues_count(connection_id)
     except Exception as e:

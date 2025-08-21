@@ -17,12 +17,12 @@ class ForumNotFoundException(Exception):
 
 class DiscourseSyncManager:
     def __init__(self):
-        self.db_session = init_db_session_class()
+        self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
-        self.discourse_sync = DiscourseSync(self.db_session)
+        self.discourse_sync = DiscourseSync(self.db_session_class)
 
     def get_project_connection_by_id(self, pc_id, conn_type='discourse_forum'):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.updated_at
             FROM project_connection pc 
             INNER JOIN projects p 

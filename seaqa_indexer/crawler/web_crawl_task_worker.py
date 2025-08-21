@@ -28,7 +28,7 @@ class WebCrawlTaskWorker(object):
     """
 
     def __init__(self):
-        self.db_session = init_db_session_class()
+        self.db_session_class = init_db_session_class()
         self.should_stop = threading.Event()
         self.worker_num = 3
 
@@ -84,7 +84,7 @@ class WebCrawlTaskWorker(object):
 
     def crawl_site(self, connection_id):
         try:
-            craw_web(connection_id, self.db_session, self.mq)
+            craw_web(connection_id, self.db_session_class, self.mq)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', connection_id, e)
 

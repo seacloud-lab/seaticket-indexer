@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class ProjectConnectionCleaner(object):
     def __init__(self):
-        self.db_session = init_db_session_class()
+        self.db_session_class = init_db_session_class()
         self.index_manager = IndexManager()
         self.should_stop = threading.Event()
         self.clear_interval = 10 * 60
@@ -58,7 +58,7 @@ class ProjectConnectionCleaner(object):
 
     def get_all_deleted_connections(self):
         """get connection deleted"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.config, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc
             INNER JOIN projects p
@@ -67,25 +67,25 @@ class ProjectConnectionCleaner(object):
             return connections
 
     def get_all_deleted_projects(self):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT * FROM deleted_projects"""
             connections = session.execute(text(sql)).fetchall()
             return connections
 
     def delete_deleted_project(self, project_uuid):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """DELETE FROM deleted_projects WHERE project_uuid=:project_uuid"""
             session.execute(text(sql), {'project_uuid': project_uuid})
             session.commit()
 
     def delete_deleted_connection(self, connection_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """DELETE FROM project_connection WHERE id=:connection_id"""
             session.execute(text(sql), {'connection_id': connection_id})
             session.commit()
 
     def delete_issues_from_db(self, connection_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = text("DELETE FROM github_issues WHERE connection_id = :connection_id")
             session.execute(sql, {'connection_id': connection_id})
             session.commit()

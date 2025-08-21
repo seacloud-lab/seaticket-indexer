@@ -21,7 +21,7 @@ class DiscourseSyncTaskWorker(object):
     """
 
     def __init__(self):
-        self.db_session = init_db_session_class()
+        self.db_session_class = init_db_session_class()
         self.should_stop = threading.Event()
         self.worker_num = 3
         self.update_discourse_interval = 7 * 24 * 60 * 60
@@ -100,7 +100,7 @@ class DiscourseSyncTaskWorker(object):
 
     def sync(self, connection_id):
         try:
-            sync_connection(connection_id, self.db_session, self.mq)
+            sync_connection(connection_id, self.db_session_class, self.mq)
         except Exception as e:
             logger.exception('%s sync connection %s error: %s' % (self.tname, connection_id, e))
 

@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class DiscourseSync:
-    def __init__(self, db_session):
-        self.db_session = db_session
+    def __init__(self, db_session_class):
+        self.db_session_class = db_session_class
 
     def handle_topic_update(self, connection_id, topic_id, data):
         topic_data = data.get('topic', {})
@@ -57,14 +57,14 @@ class DiscourseSync:
 
     def check_existing_topic(self, topic_id, connection_id):
         """Check if a topic already exists"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT id FROM discourse_topics 
                       WHERE topic_id = :topic_id AND connection_id = :connection_id"""
             return session.execute(text(sql), {'topic_id': topic_id, 'connection_id': connection_id}).fetchone()
 
     def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, bumped_at):
         """Insert a new topic"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """INSERT INTO discourse_topics 
                      (topic_id, title, slug, views, category_id, connection_id, bumped_at) 
                      VALUES (:topic_id, :title, :slug, :views, :category_id, :connection_id, :bumped_at)"""
@@ -81,7 +81,7 @@ class DiscourseSync:
 
     def insert_reply(self, topic_id, post_number, content, author, connection_id):
         """Insert a new reply"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """INSERT INTO discourse_replies 
                      (topic_id, post_number, content, author, connection_id) 
                      VALUES (:topic_id, :post_number, :content, :author, :connection_id)"""
@@ -96,7 +96,7 @@ class DiscourseSync:
 
     def update_topic(self, title, slug, views, category_id, topic_id, connection_id):
         """Update an existing topic"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """UPDATE discourse_topics 
                        SET title = :title, slug = :slug, views = :views, 
                            category_id = :category_id 
@@ -113,7 +113,7 @@ class DiscourseSync:
 
     def check_existing_reply(self, topic_id, post_number, connection_id):
         """Check if a reply already exists"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT id FROM discourse_replies 
                       WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
             return session.execute(text(sql), {
@@ -124,7 +124,7 @@ class DiscourseSync:
 
     def update_reply(self, content, author, topic_id, post_number, connection_id):
         """Update an existing reply"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """UPDATE discourse_replies 
                        SET content = :content, author = :author 
                        WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
@@ -139,7 +139,7 @@ class DiscourseSync:
 
     def delete_topic_and_replies(self, topic_id, connection_id):
         """Delete a topic and all its replies"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             # Delete replies first
             delete_replies_sql = """DELETE FROM discourse_replies 
             WHERE topic_id = :topic_id AND connection_id = :connection_id"""
@@ -159,7 +159,7 @@ class DiscourseSync:
 
     def delete_reply(self, topic_id, post_number, connection_id):
         """Delete a specific reply"""
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """DELETE FROM discourse_replies 
             WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
             session.execute(text(sql), {
@@ -272,13 +272,13 @@ class DiscourseSync:
         }
 
     def get_discourse_forum_count(self, connection_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT count(*) FROM discourse_topics WHERE connection_id=:connection_id"""
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
         return connection[0]
 
     def update_connection_status(self, connection_id, status):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
             session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
             session.commit()
