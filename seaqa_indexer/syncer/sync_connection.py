@@ -21,6 +21,12 @@ def sync_connection(connection_id, db_session_class, mq):
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
         return
+
+    connection_is_active = project_connection.is_active
+    if not connection_is_active:
+        logger.warning('connection: %s is inactive', connection_id)
+        return
+
     connection_status = json.loads(project_connection.status)
     last_sync_status = connection_status.get('last_sync_status')
     if last_sync_status == CrawlStatus.CRAWLING:
@@ -54,7 +60,7 @@ def sync_connection(connection_id, db_session_class, mq):
 
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
             server_url = config.get('repository')
-            token = config.get('token')
+            token = config.get('access_token')
             old_updated_at = project_connection.updated_at
             try:
                 path = urlparse(server_url).path

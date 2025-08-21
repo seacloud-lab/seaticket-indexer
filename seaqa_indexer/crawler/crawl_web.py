@@ -29,6 +29,12 @@ def craw_web(connection_id, db_session_class, mq):
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
         return
+
+    connection_is_active = project_connection.is_active
+    if not connection_is_active:
+        logger.warning('connection: %s is inactive', connection_id)
+        return
+
     connection_status = json.loads(project_connection.status)
     last_sync_status = connection_status.get('last_sync_status')
     if last_sync_status == CrawlStatus.CRAWLING:

@@ -29,6 +29,11 @@ def update_connection_index(connection_id, db_session_class):
         logger.warning('project connection: %s , not exist')
         return
 
+    connection_is_active = connection.is_active
+    if not connection_is_active:
+        logger.warning('connection: %s is inactive', connection_id)
+        return
+
     connection_type = connection.type
     connection_status = json.loads(connection.status)
 
