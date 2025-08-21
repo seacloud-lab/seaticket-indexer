@@ -10,9 +10,9 @@ def kill_web_crawler_task_worker():
     ]
     run(cmd)
 
-def kill_discourse_sync_task_worker():
+def kill_connection_sync_task_worker():
     cmd = [
-        'pkill', '-f', 'seaqa_indexer.syncer.discourse_syncer.discourse_sync_task_worker'
+        'pkill', '-f', 'seaqa_indexer.syncer.connection_sync_worker'
     ]
     run(cmd)
 
@@ -30,19 +30,11 @@ def kill_project_connetion_cleaner():
     run(cmd)
 
 
-def kill_github_issues_sync_worker():
-    cmd = [
-        'pkill', '-f', 'seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_worker'
-    ]
-    run(cmd)
-
-
 def signal_term_handler(signal, frame):
     kill_web_crawler_task_worker()
     kill_index_task_worker()
-    kill_github_issues_sync_worker()
     kill_project_connetion_cleaner()
-    kill_discourse_sync_task_worker()
+    kill_connection_sync_task_worker()
     os._exit(0)
 
 

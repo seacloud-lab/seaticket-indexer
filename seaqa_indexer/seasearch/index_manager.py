@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 class IndexManager:
     def __init__(self):
-        self.db_session = init_db_session_class()
+        self.db_session_class = init_db_session_class()
         self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
         self.site_index = SiteIndex(self.seasearch_api)
         self.seafile_index = SeafileIndex(self.seasearch_api)
@@ -37,7 +37,7 @@ class IndexManager:
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def get_project_connection_by_id(self, connection_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
@@ -46,7 +46,7 @@ class IndexManager:
         return connection
 
     def get_pending_index_project_connections(self, start, limit):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
              FROM project_connection pc 
             INNER JOIN projects p 
@@ -55,7 +55,7 @@ class IndexManager:
             return connections
 
     def finish_index(self, connection_id, indexed_at, connection_status, updated_at=None, config=None):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             cmd = """UPDATE project_connection SET indexed_at=:indexed_at, status=:connection_status"""
             params = {'connection_id': connection_id, 'indexed_at': indexed_at, 'connection_status': json.dumps(connection_status)}
             if updated_at:
@@ -69,7 +69,7 @@ class IndexManager:
             session.commit()
 
     def get_all_need_index_issues_from_db(self, issues_sync_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = """
                    SELECT id, issue_number, title, body, state, created_at,
                           updated_at, closed_at, labels, comments, author, url, deleted
@@ -80,19 +80,19 @@ class IndexManager:
         return rows
 
     def delete_issue_from_db(self, issue_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = text("DELETE FROM github_issues WHERE id = :id")
             session.execute(sql, {'id': issue_id})
             session.commit()
 
     def update_issues_index_status(self, issue_id):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             sql = text("UPDATE github_issues SET need_index = 0 WHERE id = :id")
             session.execute(sql, {'id': issue_id})
             session.commit()
 
     def update_connection_status(self, connection_id, status):
-        with self.db_session() as session:
+        with self.db_session_class() as session:
             cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
             session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
             session.commit()
