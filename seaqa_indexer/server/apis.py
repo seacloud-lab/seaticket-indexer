@@ -1,10 +1,8 @@
 import logging
 import jwt
 import json
-import datetime
 from functools import wraps
 from flask import request, jsonify, Flask
-from zoneinfo import ZoneInfo
 
 from seaqa_indexer import config
 from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
@@ -65,71 +63,30 @@ def add_init_crawl_task():
 @application.route('/manual-sync-connection', methods=['POST'])
 @auth_required
 def manual_sync_connection():
-    def _enqueue_wrapper(func, *args, **kwargs):
-        try:
-            func(*args, **kwargs)
-            return True, 'Manual sync task enqueued'
-        except Exception as e:
-            logger.exception('enqueue manual sync failed: %s', e)
-            return False, f'Failed to enqueue manual sync: {str(e)}'
+    data = request.get_json(force=True)
+    connection_id = data.get('connection_id')
+    connection_type = data.get('connection_type')
+    
+    if not connection_id:
+        return jsonify({'success': False, 'error_msg': 'Missing connection_id parameter'}), 400
 
+    # Enqueue sync task
     try:
-        data = request.get_json(force=True)
-        connection_id = data.get('connection_id')
-        connection_type = data.get('connection_type')
-        
-        if not connection_id:
-            return jsonify({'success': False, 'error_msg': 'Missing connection_id parameter'}), 400
-
-        connection = application.index_manager.get_project_connection_by_id(connection_id)
-        if not connection:
-            return jsonify({'success': False, 'error_msg': 'connection not found'}), 404
-
-        try:
-            connection_status = json.loads(connection.status) if connection.status else {}
-        except Exception:
-            connection_status = {}
-
-        if connection_status.get('last_sync_status') == CrawlStatus.CRAWLING:
-            return jsonify({'success': False, 'error_msg': 'Connection is currently syncing'}), 400
-        elif connection_type != ConnectionType.SEAFILE.value and connection_status.get('last_sync_status') == CrawlStatus.PENDING:
-            return jsonify({'success': False, 'error_msg': 'Connection is currently pending'}), 400
-
-        # Cooldown time
-        if connection.indexed_at:
-            now = datetime.datetime.now(datetime.timezone.utc)
-            indexed_at_utc = connection.indexed_at.replace(tzinfo=datetime.timezone.utc)
-            time_diff = now - indexed_at_utc
-            cooldown_seconds = 24 * 60 * 60
-            if time_diff.total_seconds() < cooldown_seconds:
-                next_sync_time = indexed_at_utc + datetime.timedelta(seconds=cooldown_seconds)
-                local_tz = ZoneInfo(config.TIME_ZONE)
-                local_time_aware = next_sync_time.replace(tzinfo=ZoneInfo('UTC')).astimezone(local_tz)
-                next_sync_display = local_time_aware.strftime('%Y-%m-%d %H:%M:%S')
-                return jsonify({'success': False, 'error_msg': f'Manual sync too frequent. next time: {next_sync_display}'}), 400
-        
-        # Update connection status
-        connection_status['last_sync_status'] = CrawlStatus.PENDING
-        application.index_manager.update_connection_status(connection_id, json.dumps(connection_status))
-        
-        # Enqueue sync task
         if connection_type == ConnectionType.SITE.value:
-            success, message = _enqueue_wrapper(application.web_crawl_manager.add_crawl_site_task, connection_id)
+            application.app.web_crawl_manager.add_crawl_site_task(connection_id)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            success, message = _enqueue_wrapper(application.github_issues_sync_manager.add_github_issues_sync_task, connection_id)
+            application.app.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            success, message = _enqueue_wrapper(application.discourse_sync_manager.add_discourse_sync_task, connection_id)
+            application.app.discourse_sync_manager.add_discourse_sync_task(connection_id)
         elif connection_type == ConnectionType.SEAFILE.value:
-            success, message = _enqueue_wrapper(application.index_manager.add_connection_index_task, connection_id)
-        
-        if success:
-            return jsonify({'success': True, 'message': message}), 200
+            application.app.index_manager.add_connection_index_task(connection_id)
         else:
-            return jsonify({'success': False, 'error_msg': message}), 400
-            
+            return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
     except Exception as e:
-        logger.exception('Manual sync connection API error: %s', e)
+        logger.exception('enqueue manual sync failed: %s', e)
         return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
+
+    return jsonify({'success': True}), 200
 
 
 @application.route('/add-index-seafile-task', methods=['GET'])
