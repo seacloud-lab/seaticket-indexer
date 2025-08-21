@@ -4,6 +4,8 @@ from datetime import datetime
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
+from sqlalchemy.sql import text
+from seaqa_indexer.utils import need_update_connection_status
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +89,9 @@ class GitHubIssuesIndex(object):
         }
     }
 
-    def __init__(self, seasearch_api, shard_num=1):
+    def __init__(self, seasearch_api, db_session_class, shard_num=1):
         self.seasearch_api = seasearch_api
+        self.db_session_class = db_session_class
         self.shard_num = shard_num
         self.lang = LANG
 
@@ -292,3 +295,68 @@ class GitHubIssuesIndex(object):
 
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
+
+    def get_all_need_index_issues_from_db(self, issues_sync_id):
+        with self.db_session_class() as session:
+            sql = """
+                   SELECT id, issue_number, title, body, state, created_at,
+                          updated_at, closed_at, labels, comments, author, url, deleted
+                   FROM github_issues
+                   WHERE connection_id = :connection_id AND need_index = 1
+               """
+            rows = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchall()
+        return rows
+
+    def delete_issue_from_db(self, issue_id):
+        with self.db_session_class() as session:
+            sql = text("DELETE FROM github_issues WHERE id = :id")
+            session.execute(sql, {'id': issue_id})
+            session.commit()
+
+    def update_issues_index_status(self, issue_id):
+        with self.db_session_class() as session:
+            sql = text("UPDATE github_issues SET need_index = 0 WHERE id = :id")
+            session.execute(sql, {'id': issue_id})
+            session.commit()
+
+    def update(self, index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db):
+        issues = self.get_all_need_index_issues_from_db(connection_id)
+        index_count = 0
+        need_cleared_issues_index_set = set()
+
+        for issue in issues:
+            issue_id = issue.id
+            issue_dict = {
+                'id': issue_id,
+                'number': issue.issue_number,
+                'title': issue.title,
+                'body': issue.body,
+                'state': issue.state,
+                'created_at': issue.created_at.isoformat() if issue.created_at else None,
+                'updated_at': issue.updated_at.isoformat() if issue.updated_at else None,
+                'closed_at': issue.closed_at.isoformat() if issue.closed_at else None,
+                'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
+                'comments': issue.comments,
+                'user': {'login': issue.author},
+                'url': issue.url,
+                'repo_owner': repo_owner,
+                'repo_name': repo_name,
+            }
+            if issue.deleted == 1:
+                key = self.gen_index_id(connection_id, issue_id)
+                need_cleared_issues_index_set.add(key)
+            else:
+                self.add_or_update_issue(index_name, connection_id, issue_dict)
+                self.update_issues_index_status(issue_id)
+                index_count += 1
+
+            if need_update_connection_status(index_count):
+                connection_status['last_indexed_count'] = index_count
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+
+        if need_cleared_issues_index_set:
+            self.delete_indexes_by_ids(index_name, need_cleared_issues_index_set)
+            for issue_id in need_cleared_issues_index_set:
+                self.delete_issue_from_db(issue_id)
+
+        return index_count
