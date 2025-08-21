@@ -57,15 +57,3 @@ def craw_web(connection_id, db_session_class, mq):
         logger.exception('failed to crawl site: %s, error: %s', connection_id, e)
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-
-
-# def failed_crawl_site(seaqa_db, error_msg, params):
-#     site_id, site_url, connection_status = params
-#     connection_status['last_sync_status'] = CrawlStatus.FAILED
-#     seaqa_db.update_connection_status(site_id, json.dumps(connection_status))
-#     logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
-#
-#
-# def success_call_back(msg, mq, params):
-#     site_id = params[0]
-#     mq.add_site_index_task(site_id)

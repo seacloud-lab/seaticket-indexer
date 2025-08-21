@@ -7,7 +7,7 @@ from flask import request, jsonify, Flask
 from seaqa_indexer import config
 from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException
-from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus
+from seaqa_indexer.utils.constants import ConnectionType
 
 
 application = Flask(__name__)
@@ -66,7 +66,7 @@ def manual_sync_connection():
     data = request.get_json(force=True)
     connection_id = data.get('connection_id')
     connection_type = data.get('connection_type')
-    
+
     if not connection_id:
         return jsonify({'success': False, 'error_msg': 'Missing connection_id parameter'}), 400
 
