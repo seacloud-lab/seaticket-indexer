@@ -24,7 +24,6 @@ class IndexTaskWorker(object):
     """
 
     def __init__(self):
-        self.db_session = init_db_session_class()
         self.index_manager = IndexManager()
         self.should_stop = threading.Event()
         self.worker_num = 3
