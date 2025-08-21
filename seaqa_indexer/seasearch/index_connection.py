@@ -57,12 +57,15 @@ def update_site_index(project_connection, seasearch_api, seaqa_db):
     connection_status = json.loads(project_connection.status)
     site_index = SiteIndex(seasearch_api)
 
-    if indexed_at and indexed_at > update_at:
-        return
-
+    new_indexed_at = datetime.datetime.now(datetime.UTC)
     connection_id = project_connection.id
     project_uuid = project_connection.project_uuid
-    new_indexed_at = datetime.datetime.now(datetime.UTC)
+    if indexed_at and indexed_at > update_at:
+        connection_status['last_indexed_count'] = 0
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status))
+        return
+
     site_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
     site_index.create_index_if_missing(site_index_name)
 
@@ -96,13 +99,16 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     redis_cache.set(new_repo_id, json.dumps({server_url: new_repo_name}), REPO_NAME_CACHE_TIME_OUT)
 
     new_last_modified = time_str_to_utc_time(new_last_modified)
+    new_indexed_at = datetime.datetime.now(datetime.UTC)
     if new_repo_id == old_repo_id and str(old_last_modified) == str(new_last_modified).split('+')[0]:
+        connection_status['last_indexed_count'] = 0
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status))
         logger.info('connection: %s, repo: %s does not change, skip this update', connection_id, new_repo_id)
         return
 
     seafile_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
     seafile_index.create_index_if_missing(seafile_index_name)
-    new_indexed_at = datetime.datetime.now(datetime.UTC)
     index_count, total_records = seafile_index.update(seafile_index_name, connection_id, new_repo_id, seahub_api, connection_status, seaqa_db)
 
     config['repo_id'] = new_repo_id
