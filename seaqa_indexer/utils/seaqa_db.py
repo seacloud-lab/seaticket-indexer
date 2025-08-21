@@ -11,7 +11,7 @@ class SeaqaDB(object):
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.updated_at, pc.type
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.updated_at, pc.type, pc.indexed_at
             FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id"""
@@ -47,4 +47,18 @@ class SeaqaDB(object):
         with self.db_session_class() as session:
             cmd = """UPDATE project_connection SET config = :config WHERE id = :connection_id"""
             session.execute(text(cmd), {'connection_id': connection_id, 'config': config})
+            session.commit()
+
+    def update_connection(self, connection_id, indexed_at, connection_status, updated_at=None, config=None):
+        with self.db_session_class() as session:
+            cmd = """UPDATE project_connection SET indexed_at=:indexed_at, status=:connection_status"""
+            params = {'connection_id': connection_id, 'indexed_at': indexed_at, 'connection_status': connection_status}
+            if updated_at:
+                cmd += ", updated_at=:updated_at"
+                params['updated_at'] = updated_at
+            if config:
+                cmd += ", config=:config"
+                params['config'] = config
+            cmd += " WHERE id = :connection_id"
+            session.execute(text(cmd), params)
             session.commit()

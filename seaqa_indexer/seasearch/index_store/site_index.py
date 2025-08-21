@@ -1,8 +1,10 @@
 import json
+import os
 import logging
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
+from seaqa_indexer.utils import need_update_connection_status
 
 logger = logging.getLogger(__name__)
 
@@ -258,3 +260,62 @@ class SiteIndex(object):
 
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
+
+    def get_all_id_to_site_info_by_site_id(self, site_index_name, connection_id):
+        per_size = 1000
+        start = 0
+        site_id_to_site_info = {}
+        while True:
+            hits, total = self.query_data_by_connection_id(site_index_name, connection_id, start, per_size)
+            for hit in hits:
+                source = hit['_source']
+                url = source['url']
+                index_id = self.gen_index_id(connection_id, url)
+                site_id_to_site_info[index_id] = source
+
+            start += per_size
+            if len(hits) < per_size:
+                break
+        return site_id_to_site_info
+
+    def update(self, site_index_name, connection_id, site_dir, connection_status, seaqa_db):
+        crawled_site_files = [f for f in os.listdir(site_dir)]
+
+        index_id_to_site_info = self.get_all_id_to_site_info_by_site_id(site_index_name, connection_id)
+        old_index_ids_set = set(index_id_to_site_info.keys())
+        new_index_ids_set = set()
+
+        index_count = 0
+        for filename in crawled_site_files:
+            filepath = os.path.join(site_dir, filename)
+
+            with open(filepath, 'r', encoding='utf-8') as f:
+                crawled_data = json.load(f)
+
+            url = crawled_data.get('url')
+            etag = crawled_data.get('etag')
+            last_modified = crawled_data.get('last_modified')
+            content = crawled_data.get('content')
+            title = crawled_data.get('title')
+
+            key = self.gen_index_id(connection_id, url)
+            new_index_ids_set.add(key)
+
+            logger.debug('start to update url: %s', url)
+            indexed_site_info = index_id_to_site_info.get(key)
+
+            if not indexed_site_info:
+                self.add_document(site_index_name, connection_id, content, url, etag, title, last_modified)
+            else:
+                if (etag and indexed_site_info.get('etag') == etag) or \
+                        (last_modified and indexed_site_info.get('last_modified') == last_modified):
+                    continue
+                self.update_document(site_index_name, connection_id, content, url, etag, title, last_modified)
+            index_count += 1
+            if need_update_connection_status(index_count):
+                connection_status['last_indexed_count'] = index_count
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        # clear deleted site crawled url
+        need_cleared_site_id_set = old_index_ids_set - new_index_ids_set
+        self.delete_indexes_by_ids(site_index_name, need_cleared_site_id_set)
+        return index_count
