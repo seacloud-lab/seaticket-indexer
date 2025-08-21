@@ -51,9 +51,9 @@ def add_init_crawl_task():
     connection_id = request.args.get('connection_id')
     task_type = request.args.get('type')
     if task_type == ConnectionType.SITE.value:
-        application.web_crawl_manager.add_crawl_site_task(connection_id)
+        application.app.web_crawl_manager.add_crawl_site_task(connection_id)
     elif task_type == ConnectionType.DISCOURSE_FORUM.value:
-        application.discourse_sync_manager.add_discourse_sync_task(connection_id)
+        application.app.discourse_sync_manager.add_discourse_sync_task(connection_id)
     else:
         return jsonify({'success': False, 'error_msg': f'Unsupported type: {task_type}'}), 400
 
@@ -64,7 +64,7 @@ def add_init_crawl_task():
 @auth_required
 def add_index_seafile_task():
     connection_id = request.args.get('connection_id')
-    application.index_manager.add_connection_index_task(connection_id)
+    application.app.index_manager.add_connection_index_task(connection_id)
 
     return jsonify({'success': True}), 200
 
@@ -73,7 +73,7 @@ def add_index_seafile_task():
 @auth_required
 def add_github_issues_index_task():
     connection_id = request.args.get('connection_id')
-    application.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
+    application.app.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
     return jsonify({'success': True}), 200
 
 
@@ -104,12 +104,12 @@ def github_webhook():
     signature = request.headers.get('X-Hub-Signature-256')
     msg = request.data
 
-    project_connection = application.github_issues_sync_manager.get_project_connection_by_id(connection_id)
+    project_connection = application.app.github_issues_sync_manager.get_project_connection_by_id(connection_id)
     if not project_connection:
         return jsonify({'error': 'connection not found'}), 404
 
     try:
-        application.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issues_data, issue_id, action, signature, msg)
+        application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issues_data, issue_id, action, signature, msg)
     except SignatureInvalidException:
         return jsonify({'error': 'Invalid signature'}), 403
     except Exception as e:
@@ -148,7 +148,7 @@ def search():
     except:
         count = 20
 
-    results = application.index_manager.search(project_uuid, connection_types, connection_ids, query, start=0, size=count)
+    results = application.app.index_manager.search(project_uuid, connection_types, connection_ids, query, start=0, size=count)
 
     return {'results': results}, 200
 
@@ -172,7 +172,7 @@ def discourse_webhook():
         return jsonify({'error': 'event_type invalid'}), 400
 
     try:
-        application.discourse_sync_manager.handle_webhook(connection_id, data, event_type)
+        application.app.discourse_sync_manager.handle_webhook(connection_id, data, event_type)
     except ForumNotFoundException:
         return {'error': 'Forum not found'}, 404
     except Exception as e:
