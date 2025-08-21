@@ -9,11 +9,10 @@ from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, Ti
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.index_manager import IndexManager
+from seaqa_indexer.seasearch.index_connection import update_connection_index
+from seaqa_indexer.db import init_db_session_class
 
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils import time_difference_to_midnight
 
 
 logger = logging.getLogger(__name__)
@@ -24,7 +23,7 @@ class IndexTaskWorker(object):
     """
 
     def __init__(self):
-        self.index_manager = IndexManager()
+        self.db_session_class = init_db_session_class()
         self.should_stop = threading.Event()
         self.worker_num = 3
 
@@ -56,7 +55,6 @@ class IndexTaskWorker(object):
             t = threading.Thread(target=self.index_task_worker, name='index_task_worker_thread_' + str(i), daemon=True)
             t.start()
 
-        threading.Thread(target=self.cron_update_indexes, name='cron_update_indexes_thread', daemon=True).start()
         threading.Thread(target=self.refresh_lock, name='refresh_thread', daemon=True).start()
 
     def index_task_worker(self):
@@ -108,7 +106,7 @@ class IndexTaskWorker(object):
 
     def update_index(self, connection_id):
         try:
-            self.index_manager.update_index(connection_id)
+            update_connection_index(connection_id, self.db_session_class)
         except Exception as e:
             logger.exception('update connection: %s index failed, error: %s', connection_id, e)
 
@@ -124,22 +122,6 @@ class IndexTaskWorker(object):
         self.mq.lpush('index_task', json.dumps(msg_content))
         logger.info('%s push back task connection_id: %s, to the queue' %
                      (threading.current_thread().name, connection_id))
-
-    def cron_update_indexes(self):
-        logger.info('Start to update index timer, triggered at midnight')
-        while not self.should_stop.is_set():
-
-            now_to_midnight_second = time_difference_to_midnight()
-            self.should_stop.wait(now_to_midnight_second)
-
-            if not self.should_stop.is_set():
-                logger.info('start to update indexes')
-                try:
-                    self.index_manager.update_indexes()
-                except Exception as e:
-                    logger.exception('cron update index error: %s', e)
-
-                logger.info('put all indexes task into queue...')
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)
