@@ -1,17 +1,15 @@
-import os
 import logging
 import json
 import datetime
 from urllib.parse import urlparse
 
-from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT, IndexStatus
+from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT, IndexStatus
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type
-from seaqa_indexer.crawler.utils import get_site_dir
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.utils import time_str_to_utc_time, decrypt_config, encrypt_config
 from seaqa_indexer.app.event_redis import redis_cache
@@ -69,9 +67,7 @@ def update_site_index(project_connection, seasearch_api, seaqa_db):
     site_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
     site_index.create_index_if_missing(site_index_name)
 
-    site_dir = get_site_dir(connection_id, project_uuid)
-
-    index_count = site_index.update(site_index_name, connection_id, site_dir, connection_status, seaqa_db)
+    index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db)
 
     # finish index
     connection_status['last_indexed_count'] = index_count

@@ -28,6 +28,7 @@ class ProjectConnectionCleaner(object):
         self.locked_keys = set()
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
+        self.storage = get_storage()
 
         self.set_signal()
 
@@ -93,9 +94,9 @@ class ProjectConnectionCleaner(object):
         # delete project index
         self.index_manager.delete_index_by_project(project_uuid)
 
-        # delete crawled file folder (S3/local)
-        storage = get_storage()
-        storage.delete_project(project_uuid)
+        # delete crawled file folder
+        if self.storage is not None:
+            self.storage.delete_project(project_uuid)
         # delete db record
         self.delete_deleted_project(project_uuid)
 
@@ -105,8 +106,8 @@ class ProjectConnectionCleaner(object):
         self.index_manager.delete_index_by_connection(project_uuid, connection_id, connection_type)
 
         if connection_type == ConnectionType.SITE.value:
-            storage = get_storage()
-            storage.delete_site(connection_id, project_uuid) ### xxxxx
+            if self.storage is not None:
+                self.storage.delete_site(connection_id, project_uuid)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             self.delete_issues_from_db(connection_id)
 

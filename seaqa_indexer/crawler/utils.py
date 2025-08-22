@@ -1,6 +1,5 @@
 import re
 import hashlib
-import json
 import urllib.parse
 from seaqa_indexer.crawler.extractor import extract_html
 from seaqa_indexer.crawler.storage import get_storage
@@ -75,6 +74,8 @@ def spider_parse_item(spider, response):
 def load_existing_site_info(site_id, project_uuid, existing_site_info):
     """Load the ETag and Last-Modified information of an existing file"""
     storage = get_storage()
+    if storage is None:
+        return
     for filename in storage.iter_files(site_id, project_uuid):
         data = storage.read_json(site_id, project_uuid, filename)
         if not data:

@@ -5,6 +5,7 @@ import logging
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
+from seaqa_indexer.crawler.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,7 @@ class SiteIndex(object):
         self.seasearch_api = seasearch_api
         self.shard_num = shard_num
         self.lang = LANG
+        self.storage = get_storage()
 
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
@@ -278,19 +280,18 @@ class SiteIndex(object):
                 break
         return site_id_to_site_info
 
-    def update(self, site_index_name, connection_id, site_dir, connection_status, seaqa_db):
-        crawled_site_files = [f for f in os.listdir(site_dir)]
-
+    def update(self, site_index_name, connection_id, project_uuid, connection_status, seaqa_db):
         index_id_to_site_info = self.get_all_id_to_site_info_by_site_id(site_index_name, connection_id)
         old_index_ids_set = set(index_id_to_site_info.keys())
         new_index_ids_set = set()
 
         index_count = 0
-        for filename in crawled_site_files:
-            filepath = os.path.join(site_dir, filename)
-
-            with open(filepath, 'r', encoding='utf-8') as f:
-                crawled_data = json.load(f)
+        if not self.storage:
+            connection_status['last_indexed_count'] = index_count
+            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+            return index_count
+        for filename in self.storage.iter_files(connection_id, project_uuid):
+            crawled_data = self.storage.read_json(connection_id, project_uuid, filename)
 
             url = crawled_data.get('url')
             etag = crawled_data.get('etag')

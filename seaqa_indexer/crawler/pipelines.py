@@ -10,6 +10,7 @@ class BatchCrawlPipeline:
     def __init__(self):
         self.project_uuid = None
         self.site_id = None
+        self.storage = get_storage()
 
     def open_spider(self, spider):
         self.project_uuid = spider.project_uuid
@@ -18,10 +19,12 @@ class BatchCrawlPipeline:
     def close_spider(self, spider):
         urls_to_delete = set(spider.existing_site_info.keys()) - spider.processed_urls
 
+        if self.storage is None:
+            spider.logger.warning('Update failed: storage is not initialized')
+            return
         for url in urls_to_delete:
             filename = url_to_filename(url)
-            storage = get_storage()
-            storage.delete_file(self.site_id, self.project_uuid, filename)
+            self.storage.delete_file(self.site_id, self.project_uuid, filename)
             spider.logger.info('delete filename: %s', url)
 
         spider.connection_status['total_records'] = len(spider.processed_urls)
@@ -45,8 +48,8 @@ class BatchCrawlPipeline:
         etag = item.get('etag') if item else None
         last_modified = item.get('last_modified') if item else None
         filename = url_to_filename(url)
-        storage = get_storage()
-
+        if self.storage is None:
+            return
         new_content = {
             "url": url,
             "title": title,
@@ -55,4 +58,4 @@ class BatchCrawlPipeline:
             "last_modified": last_modified,
         }
 
-        storage.write_json(self.site_id, self.project_uuid, filename, new_content)
+        self.storage.write_json(self.site_id, self.project_uuid, filename, new_content)

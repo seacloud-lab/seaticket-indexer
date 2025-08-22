@@ -6,7 +6,7 @@ from botocore.exceptions import ClientError
 
 from seaqa_indexer.config import (
     S3_HOST,
-    S3_FILE_BUCKET,
+    S3_WEB_CRAWL_BUCKET,
     S3_KEY_ID,
     S3_SECRET_KEY,
 )
@@ -47,7 +47,16 @@ class S3Storage(BaseStorage):
             endpoint_url=S3_HOST,
             config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
         )
-        self.bucket = S3_FILE_BUCKET
+        self.bucket = S3_WEB_CRAWL_BUCKET
+
+    def ping(self):
+        """Check if S3 bucket is accessible. Returns True if ok, else False."""
+        try:
+            self.client.head_bucket(Bucket=self.bucket)
+            return True
+        except Exception as e:
+            logger.warning("S3 ping failed for bucket %s: %s", self.bucket, e)
+            return False
 
     @staticmethod
     def _key(project_uuid, site_id, filename):
@@ -135,6 +144,21 @@ _storage = None
 
 def get_storage():
     global _storage
-    if _storage is None:
-        _storage = S3Storage()
-    return _storage
+    if _storage is not None:
+        return _storage
+    # Determine if S3 is configured
+    s3_configured = all([S3_HOST, S3_WEB_CRAWL_BUCKET, S3_KEY_ID, S3_SECRET_KEY])
+    if s3_configured:
+        try:
+            s3 = S3Storage()
+            if s3.ping():
+                _storage = s3
+                return _storage
+            else:
+                logger.warning("S3 configured but not reachable.")
+        except Exception as e:
+            logger.warning("Failed to initialize S3Storage: %s", e)
+    else:
+        logger.warning("S3 not configured.")
+
+    return None

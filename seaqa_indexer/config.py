@@ -54,6 +54,6 @@ REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
 REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')
 
 S3_HOST = os.environ.get('S3_HOST')
-S3_FILE_BUCKET = os.environ.get('S3_FILE_BUCKET')
+S3_WEB_CRAWL_BUCKET = os.environ.get('S3_WEB_CRAWL_BUCKET')
 S3_KEY_ID = os.environ.get('S3_KEY_ID')
 S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY')
