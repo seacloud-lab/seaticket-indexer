@@ -41,23 +41,6 @@ class GithubIssuesSyncManager:
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
         return connection
 
-    def get_webhook_secret(self, connection_id):
-        with self.db_session_class() as session:
-            cmd = "SELECT config, is_active FROM project_connection WHERE id = :connection_id"
-            result = session.execute(text(cmd), {'connection_id': connection_id}).fetchone()
-            if not result:
-                return None
-            config_str = result[0]
-            is_active = result[1]
-
-            if not config_str:
-                return None
-
-            config = json.loads(config_str)
-            webhook_secret = decrypt_config(config).get('webhook_secret')
-
-            return webhook_secret, is_active
-
     def verify_signature(self, signature, msg, github_secret):
         if not signature:
             return True
@@ -78,7 +61,7 @@ class GithubIssuesSyncManager:
         connection_is_active = project_connection.is_active
 
         if not connection_is_active:
-            raise GithubIssuesNotFoundException()
+            raise GithubIssuesInactiveException()
         if not self.verify_signature(signature, msg, secret):
             raise SignatureInvalidException()
 
