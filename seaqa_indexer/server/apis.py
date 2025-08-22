@@ -5,8 +5,10 @@ from functools import wraps
 from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
-from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException
-from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException
+from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException, \
+    GithubIssuesNotFoundException, GithubIssuesInactiveException
+from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException, \
+    ForumInActiveException
 from seaqa_indexer.utils.constants import ConnectionType
 
 
@@ -133,14 +135,16 @@ def github_webhook():
     signature = request.headers.get('X-Hub-Signature-256')
     msg = request.data
 
-    project_connection = application.app.github_issues_sync_manager.get_project_connection_by_id(connection_id)
-    if not project_connection:
-        return jsonify({'error': 'connection not found'}), 404
-
     try:
         application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issues_data, issue_id, action, signature, msg)
     except SignatureInvalidException:
         return jsonify({'error': 'Invalid signature'}), 403
+    except GithubIssuesInactiveException:
+        logger.warning('Connection: %s is inactive', connection_id)
+        return {'warning': 'connection is inactive,request ignored'}, 200
+    except GithubIssuesNotFoundException:
+        return jsonify({'error': 'connection not found'}), 404
+
     except Exception as e:
         logger.error(e)
         return jsonify({'error': 'Internal Server Error'}), 500
@@ -204,6 +208,9 @@ def discourse_webhook():
         application.app.discourse_sync_manager.handle_webhook(connection_id, data, event_type)
     except ForumNotFoundException:
         return {'error': 'Forum not found'}, 404
+    except ForumInActiveException:
+        logger.warning('Connection: %s is inactive', connection_id)
+        return {'warning': 'connection is inactive,request ignored'}, 200
     except Exception as e:
         logger.error(f"Discourse webhook error: {e}")
         return {'error': 'Internal Server Error'}, 500

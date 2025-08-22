@@ -50,18 +50,6 @@ class GitHubIssuesIndex(object):
             'labels': {
                 'type': 'keyword',
             },
-            'created_at': {
-                'type': 'date',
-                'format': 'epoch_millis'
-            },
-            'updated_at': {
-                'type': 'date',
-                'format': 'epoch_millis'
-            },
-            'closed_at': {
-                'type': 'date',
-                'format': 'epoch_millis'
-            },
             'comments_count': {
                 'type': 'integer',
             }
@@ -222,16 +210,6 @@ class GitHubIssuesIndex(object):
     def add_or_update_issue(self, index_name, connection_id, issue_data):
         _id = self.gen_index_id(connection_id, issue_data['id'])
 
-        def convert_time_to_millisecond_timestamp(t):
-            if not t:
-                return None
-            try:
-                dt = datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ")
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                logger.warning(f"Failed to parse the time {t}")
-                return None
-
         doc = {
             'connection_id': connection_id,
             'repo_owner': issue_data['repo_owner'],
@@ -244,9 +222,6 @@ class GitHubIssuesIndex(object):
             'body': issue_data['body'] or '',
             'state': issue_data['state'],
             'labels': [label['name'] for label in issue_data.get('labels', [])],
-            'created_at': convert_time_to_millisecond_timestamp(issue_data['created_at']),
-            'updated_at': convert_time_to_millisecond_timestamp(issue_data['updated_at']),
-            'closed_at': convert_time_to_millisecond_timestamp(issue_data.get('closed_at')),
             'comments_count': issue_data['comments']
         }
 
@@ -332,9 +307,6 @@ class GitHubIssuesIndex(object):
                 'title': issue.title,
                 'body': issue.body,
                 'state': issue.state,
-                'created_at': issue.created_at.isoformat() if issue.created_at else None,
-                'updated_at': issue.updated_at.isoformat() if issue.updated_at else None,
-                'closed_at': issue.closed_at.isoformat() if issue.closed_at else None,
                 'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
                 'comments': issue.comments,
                 'user': {'login': issue.author},

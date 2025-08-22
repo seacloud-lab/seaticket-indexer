@@ -18,7 +18,11 @@ class SignatureInvalidException(Exception):
     pass
 
 
-class GithubRepositoryInvalidException(Exception):
+class GithubIssuesNotFoundException(Exception):
+    pass
+
+
+class GithubIssuesInactiveException(Exception):
     pass
 
 
@@ -30,28 +34,12 @@ class GithubIssuesSyncManager:
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at, pc.is_active
              FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
         return connection
-
-    def get_webhook_secret(self, connection_id):
-        with self.db_session_class() as session:
-            cmd = "SELECT config FROM project_connection WHERE id = :connection_id"
-            result = session.execute(text(cmd), {'connection_id': connection_id}).fetchone()
-            if not result:
-                return None
-            config_str = result[0]
-
-            if not config_str:
-                return None
-
-            config = json.loads(config_str)
-            webhook_secret = decrypt_config(config).get('webhook_secret')
-
-            return webhook_secret
 
     def verify_signature(self, signature, msg, github_secret):
         if not signature:
@@ -66,7 +54,16 @@ class GithubIssuesSyncManager:
 
     def update_github_issues_by_webhook(self, connection_id, issue, issue_id, action, signature, msg):
         logger.info(f"Received webhook for issue #{issue_id}, action: {action}")
-        secret = self.get_webhook_secret(connection_id)
+        project_connection = self.get_project_connection_by_id(connection_id)
+        if not project_connection:
+            raise GithubIssuesNotFoundException()
+        config = json.loads(project_connection.config)
+        config = decrypt_config(config)
+        secret = config.get('webhook_secret')
+        connection_is_active = project_connection.is_active
+
+        if not connection_is_active:
+            raise GithubIssuesInactiveException()
         if not self.verify_signature(signature, msg, secret):
             raise SignatureInvalidException()
 
