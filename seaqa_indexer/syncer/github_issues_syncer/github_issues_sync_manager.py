@@ -55,6 +55,8 @@ class GithubIssuesSyncManager:
     def update_github_issues_by_webhook(self, connection_id, issue, issue_id, action, signature, msg):
         logger.info(f"Received webhook for issue #{issue_id}, action: {action}")
         project_connection = self.get_project_connection_by_id(connection_id)
+        if not project_connection:
+            raise GithubIssuesNotFoundException()
         config = json.loads(project_connection.config)
         config = decrypt_config(config)
         secret = config.get('webhook_secret')
