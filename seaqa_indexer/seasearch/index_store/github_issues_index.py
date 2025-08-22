@@ -50,18 +50,6 @@ class GitHubIssuesIndex(object):
             'labels': {
                 'type': 'keyword',
             },
-            'created_at': {
-                'type': 'date',
-                'format': 'epoch_millis'
-            },
-            'updated_at': {
-                'type': 'date',
-                'format': 'epoch_millis'
-            },
-            'closed_at': {
-                'type': 'date',
-                'format': 'epoch_millis'
-            },
             'comments_count': {
                 'type': 'integer',
             }
