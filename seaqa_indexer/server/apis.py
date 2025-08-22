@@ -60,6 +60,35 @@ def add_init_crawl_task():
     return jsonify({'success': True}), 200
 
 
+@application.route('/manual-sync-connection', methods=['POST'])
+@auth_required
+def manual_sync_connection():
+    data = request.get_json(force=True)
+    connection_id = data.get('connection_id')
+    connection_type = data.get('connection_type')
+
+    if not connection_id:
+        return jsonify({'success': False, 'error_msg': 'Missing connection_id parameter'}), 400
+
+    # Enqueue sync task
+    try:
+        if connection_type == ConnectionType.SITE.value:
+            application.app.web_crawl_manager.add_crawl_site_task(connection_id)
+        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+            application.app.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
+        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+            application.app.discourse_sync_manager.add_discourse_sync_task(connection_id)
+        elif connection_type == ConnectionType.SEAFILE.value:
+            application.app.index_manager.add_connection_index_task(connection_id)
+        else:
+            return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
+    except Exception as e:
+        logger.exception('enqueue manual sync failed: %s', e)
+        return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
+
+    return jsonify({'success': True}), 200
+
+
 @application.route('/add-index-seafile-task', methods=['GET'])
 @auth_required
 def add_index_seafile_task():
