@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 class ForumNotFoundException(Exception):
     pass
 
+class ForumInActiveException(Exception):
+    pass
+
 
 class DiscourseSyncManager:
     def __init__(self):
@@ -23,7 +26,7 @@ class DiscourseSyncManager:
 
     def get_project_connection_by_id(self, pc_id, conn_type='discourse_forum'):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.updated_at
+            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.updated_at, is_active
             FROM project_connection pc 
             INNER JOIN projects p 
             ON p.id=pc.project_id WHERE p.deleted=false AND pc.type=:conn_type AND pc.id=:pc_id"""
@@ -41,6 +44,11 @@ class DiscourseSyncManager:
         project_connection = self.get_project_connection_by_id(connection_id)
         if not project_connection:
             raise ForumNotFoundException()
+
+        connection_is_active = project_connection.is_active
+        if not connection_is_active:
+            logger.warning('connection: %s is inactive', connection_id)
+            raise ForumInActiveException()
 
         topic_id = request_data.get('topic', {}).get('id')
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
