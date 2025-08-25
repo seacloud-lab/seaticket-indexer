@@ -36,6 +36,12 @@ class DiscourseSyncManager:
         }
         self.mq.lpush('sync_task', json.dumps(msg_content))
 
+    def add_discourse_index_task(self, connection_id):
+        msg_content = {
+            'connection_id': connection_id,
+        }
+        self.mq.lpush('index_task', json.dumps(msg_content))
+
     def handle_webhook(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
         project_connection = self.get_project_connection_by_id(connection_id)
@@ -53,3 +59,4 @@ class DiscourseSyncManager:
             self.discourse_sync.handle_reply_delete(connection_id, topic_id, request_data)
         else:
             logger.warning(f"Unknown event type: {event_type}")
+        self.add_discourse_index_task(connection_id)
