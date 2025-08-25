@@ -1,28 +1,30 @@
 import json
-import os
 
-from seaqa_indexer.crawler.utils import url_to_filename, get_site_dir
+from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils import need_update_connection_status
+from seaqa_indexer.crawler.storage import get_storage
 
 
 class BatchCrawlPipeline:
     def __init__(self):
         self.project_uuid = None
         self.site_id = None
+        self.storage = get_storage()
 
     def open_spider(self, spider):
         self.project_uuid = spider.project_uuid
         self.site_id = spider.site_id
 
     def close_spider(self, spider):
-        site_dir = get_site_dir(self.site_id, self.project_uuid)
         urls_to_delete = set(spider.existing_site_info.keys()) - spider.processed_urls
 
+        if self.storage is None:
+            spider.logger.warning('Update failed: storage is not initialized')
+            return
         for url in urls_to_delete:
             filename = url_to_filename(url)
-            filepath = os.path.join(site_dir, filename)
-            os.remove(filepath)
+            self.storage.delete_file(self.site_id, self.project_uuid, filename)
             spider.logger.info('delete filename: %s', url)
 
         spider.connection_status['total_records'] = len(spider.processed_urls)
@@ -46,9 +48,8 @@ class BatchCrawlPipeline:
         etag = item.get('etag') if item else None
         last_modified = item.get('last_modified') if item else None
         filename = url_to_filename(url)
-        site_dir = get_site_dir(self.site_id, self.project_uuid)
-        filepath = os.path.join(site_dir, filename)
-
+        if self.storage is None:
+            return
         new_content = {
             "url": url,
             "title": title,
@@ -57,5 +58,4 @@ class BatchCrawlPipeline:
             "last_modified": last_modified,
         }
 
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(new_content, f, ensure_ascii=False, indent=2)
+        self.storage.write_json(self.site_id, self.project_uuid, filename, new_content)

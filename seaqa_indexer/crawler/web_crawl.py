@@ -1,4 +1,3 @@
-import os
 import logging
 import requests
 
@@ -13,7 +12,6 @@ from twisted.internet.threads import deferToThread
 
 from seaqa_indexer.crawler.spiders.site_crawler import SiteCrawlerSpider
 from seaqa_indexer.crawler.spiders.sitemap_crawler import SitemapCrawlerSpider
-from seaqa_indexer.crawler.utils import get_site_dir
 
 
 logger = logging.getLogger(__name__)
@@ -85,8 +83,6 @@ class WebCrawl:
 
     def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back,
               fail_call_back):
-        site_dir = get_site_dir(site_id, project_uuid)
-        os.makedirs(site_dir, exist_ok=True)
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
             self.prepare_crawler,
