@@ -1,16 +1,20 @@
 import json
+import uuid
 
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.storage import get_storage
 
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
+from seaqa_indexer.utils.constants import CRAWL_OUTPUT_TABLE
 
 class BatchCrawlPipeline:
     def __init__(self):
         self.project_uuid = None
         self.site_id = None
         self.storage = get_storage()
+        self.seadb_api = SeaDBAPI('')
 
     def open_spider(self, spider):
         self.project_uuid = spider.project_uuid
@@ -57,5 +61,15 @@ class BatchCrawlPipeline:
             "etag": etag,
             "last_modified": last_modified,
         }
-
         self.storage.write_json(self.site_id, self.project_uuid, filename, new_content)
+        uuid_str = str(uuid.UUID(self.project_uuid))
+        insert_rows = [
+            {
+                CRAWL_OUTPUT_TABLE.columns.url.name: url,
+                CRAWL_OUTPUT_TABLE.columns.title.name: title,
+                # CRAWL_OUTPUT_TABLE.columns.content.name: content,
+                CRAWL_OUTPUT_TABLE.columns.etag.name: etag,
+                CRAWL_OUTPUT_TABLE.columns.last_modified.name: last_modified,
+            }
+        ]
+        self.seadb_api.insert_rows(uuid_str, self.site_id, insert_rows)
