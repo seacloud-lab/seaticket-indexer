@@ -1,10 +1,8 @@
-import os
 import re
 import hashlib
-import json
 import urllib.parse
-from seaqa_indexer.config import CRAWL_OUTPUT_DIR
 from seaqa_indexer.crawler.extractor import extract_html
+from seaqa_indexer.crawler.storage import get_storage
 
 
 def url_to_filename(url):
@@ -26,12 +24,6 @@ def url_to_filename(url):
 
     # Add .json extension
     return filename + '.json'
-
-
-def get_site_dir(site_id, project_uuid):
-    base_dir = os.path.join(CRAWL_OUTPUT_DIR, project_uuid)
-    site_dir = os.path.join(base_dir, str(site_id))
-    return site_dir
 
 
 def spider_parse_item(spider, response):
@@ -81,22 +73,17 @@ def spider_parse_item(spider, response):
 
 def load_existing_site_info(site_id, project_uuid, existing_site_info):
     """Load the ETag and Last-Modified information of an existing file"""
-    site_dir = get_site_dir(site_id, project_uuid)
-    if not os.path.exists(site_dir):
+    storage = get_storage()
+    if storage is None:
         return
-
-    for filename in os.listdir(site_dir):
-        if not filename.endswith('.json'):
+    for filename in storage.iter_files(site_id, project_uuid):
+        data = storage.read_json(site_id, project_uuid, filename)
+        if not data:
             continue
-        filepath = os.path.join(site_dir, filename)
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            url = data.get('url')
-            existing_site_info[url] = {
-                'etag': data.get('etag'),
-                'last_modified': data.get('last_modified'),
-            }
-
-
-def get_base_dir(project_uuid):
-    return os.path.join(CRAWL_OUTPUT_DIR, project_uuid)
+        url = data.get('url')
+        if not url:
+            continue
+        existing_site_info[url] = {
+            'etag': data.get('etag'),
+            'last_modified': data.get('last_modified'),
+        }

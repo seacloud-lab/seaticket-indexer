@@ -53,6 +53,7 @@ REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
 REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
 REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')
 
-
-# Crawler save directory
-CRAWL_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'crawled_content')
+S3_HOST = os.environ.get('S3_HOST')
+S3_WEB_CRAWL_BUCKET = os.environ.get('S3_WEB_CRAWL_BUCKET')
+S3_KEY_ID = os.environ.get('S3_KEY_ID')
+S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY')
