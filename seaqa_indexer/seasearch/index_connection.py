@@ -160,9 +160,7 @@ def update_discourse_forum_index(project_connection, seasearch_api, db_session_c
     connection_id = project_connection.id
     update_at = project_connection.updated_at
     indexed_at = project_connection.indexed_at
-    config = decrypt_config(json.loads(project_connection.config))
     project_uuid = project_connection.project_uuid
-    forum_url = config.get('url', '')
     connection_status = json.loads(project_connection.status)
     discourse_forum_index = DiscourseIndex(seasearch_api, db_session_class)
 
@@ -178,7 +176,7 @@ def update_discourse_forum_index(project_connection, seasearch_api, db_session_c
     discourse_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
     discourse_forum_index.create_index_if_missing(discourse_index_name)
 
-    index_count = discourse_forum_index.update(discourse_index_name, connection_id, forum_url, connection_status, seaqa_db)
+    index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db)
 
     # finish index
     connection_status['last_indexed_count'] = index_count

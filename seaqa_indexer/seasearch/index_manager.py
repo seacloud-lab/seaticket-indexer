@@ -195,6 +195,7 @@ class IndexManager:
                     'topic_id': source['topic_id'],
                     'connection_id': source['connection_id'],
                     'content': source['body'],
+                    'slug': source['slug'],
                     'score': score,
                     '_id': _id,
                     'type': 'discourse_forum',

@@ -90,6 +90,19 @@ class ProjectConnectionCleaner(object):
             session.execute(sql, {'connection_id': connection_id})
             session.commit()
 
+    def delete_discourse_data_from_db(self, connection_id):
+        """Delete discourse topics and replies from database"""
+        with self.db_session_class() as session:
+            # Delete discourse replies first (due to foreign key constraints)
+            sql_replies = text("DELETE FROM discourse_replies WHERE connection_id = :connection_id")
+            session.execute(sql_replies, {'connection_id': connection_id})
+            
+            # Delete discourse topics
+            sql_topics = text("DELETE FROM discourse_topics WHERE connection_id = :connection_id")
+            session.execute(sql_topics, {'connection_id': connection_id})
+            
+            session.commit()
+
     def clear_deleted_project(self, project_uuid):
         # delete project index
         self.index_manager.delete_index_by_project(project_uuid)
@@ -112,6 +125,8 @@ class ProjectConnectionCleaner(object):
                 shutil.rmtree(site_dir)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             self.delete_issues_from_db(connection_id)
+        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+            self.delete_discourse_data_from_db(connection_id)
 
         # delete db record
         self.delete_deleted_connection(connection_id)
