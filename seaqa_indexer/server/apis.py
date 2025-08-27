@@ -116,11 +116,12 @@ def github_webhook():
         return {'error_msg': 'Bad request.'}, 400
 
     connection_id = data.get('connection_id')
+
     issue_data = data.get('issue_data')
 
     if not connection_id:
         return jsonify({'error_msg': 'Missing connection_id parameter'}), 400
-    action = request.args.get('action')
+    action = data.get('action')
 
     try:
         issue_id = issue_data['id']
