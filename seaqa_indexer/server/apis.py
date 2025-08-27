@@ -111,21 +111,18 @@ def add_github_issues_index_task():
 def github_webhook():
     connection_id = request.args.get('connection_id')
 
-    payload = request.get_json(force=True)
+    if not connection_id:
+        return jsonify({'success': False, 'error_msg': 'Missing connection_id parameter'}), 400
+    action = request.args.get('action')
+    issue_data = request.get_json(force=True)
 
     try:
-        issue_id = payload['issue']['id']
+        issue_id = issue_data['id']
     except KeyError as e:
         return jsonify({'error': 'Missing expected field in webhook payload'}), 400
 
-    action = payload.get('action')
-
-    issues_data = payload.get('issue')
-    if not issues_data:
-        return jsonify({'error': 'No issue payload'}), 400
-
     try:
-        application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issues_data, issue_id, action)
+        application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issue_data, issue_id, action)
     except Exception as e:
         logger.error(e)
         return jsonify({'error': 'Internal Server Error'}), 500
