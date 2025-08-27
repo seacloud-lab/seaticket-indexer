@@ -1,6 +1,5 @@
 import logging
 import json
-from datetime import datetime
 from sqlalchemy.sql import text
 
 from seaqa_indexer.utils import md5
@@ -25,11 +24,6 @@ class DiscourseIndex(object):
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
                 'fields': {
-                    'ngram': {
-                        'type': 'text',
-                        'index': True,
-                        'analyzer': 'discourse_title_ngram_analyzer',
-                    },
                     'keyword': {
                         'type': 'keyword'
                     }
@@ -43,47 +37,21 @@ class DiscourseIndex(object):
             'category_id': {
                 'type': 'long'
             },
-            'url': {
+            'slug': {
                 'type': 'keyword'
             },
-            'created_at': {
-                'type': 'date',
-                'format': 'epoch_millis'
-            },
-            'updated_at': {
-                'type': 'date',
-                'format': 'epoch_millis'
-            }
         }
     }
 
     index_settings = {
         'analysis': {
             'analyzer': {
-                'discourse_title_ngram_analyzer': {
-                    'type': 'custom',
-                    'tokenizer': 'discourse_title_ngram_tokenizer',
-                    'filter': [
-                        'lowercase',
-                    ],
-                },
                 'gse_standard_analyzer': {
                     'type': 'gse_standard',
                     "char_filter": [
                         "gse_filter"
                     ]
                 },
-            },
-            'tokenizer': {
-                'discourse_title_ngram_tokenizer': {
-                    'type': 'ngram',
-                    'min_gram': 2,
-                    'max_gram': 3,
-                    'token_chars': [
-                        'letter',
-                        'digit'
-                    ]
-                }
             },
             "char_filter": {
                 "gse_filter": {
@@ -168,7 +136,7 @@ class DiscourseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'topic_id', 'title', 'body', 'url'],
+            '_source': ['connection_id', 'topic_id', 'title', 'body', 'slug'],
             'sort': [
                 '_score'
             ],
@@ -188,34 +156,23 @@ class DiscourseIndex(object):
 
         return repo_query_info
 
-    def search(self, index_name, keyword, start, size, search_title_only=False):
-        searches = self._make_query_searches(keyword, search_title_only)
+    def search(self, project_uuid, keyword, start, size, search_title_only=False):
+        bulk_search_params = []
+        search_param = self.get_search_param(project_uuid, keyword, start, size, search_title_only=search_title_only)
+        bulk_search_params.append(search_param)
+
+        query_body = json.dumps({
+            'index_queries': bulk_search_params
+        })
+        results = self.seasearch_api.unified_search(query_body)
         
-        dsl = {
-            'query': {
-                'bool': {
-                    'should': searches
-                }
-            },
-            'from': start,
-            'size': size,
-            'highlight': {
-                'fields': {
-                    'body': {}
-                }
-            },
-            'sort': [
-                {'_score': {'order': 'desc'}},
-                {'updated_at': {'order': 'desc'}}
-            ]
-        }
-        
-        hits, total = self.normal_search(index_name, dsl)
-        
+        hits = results.get('hits', {}).get('hits', [])
+        total = results.get('hits', {}).get('total', {}).get('value', 0)
+        if not hits:
+            return hits, total
         discourse_posts = []
         for hit in hits:
             source = hit['_source']
-            highlight = hit.get('highlight', {})
             
             post = {
                 'connection_id': source['connection_id'],
@@ -223,44 +180,31 @@ class DiscourseIndex(object):
                 'title': source['title'],
                 'body': source['body'],
                 'category_id': source.get('category_id'),
-                'url': source['url'],
-                'created_at': source['created_at'],
-                'updated_at': source['updated_at'],
-                'highlight': highlight.get('body', [])
+                'slug': source['slug'],
             }
             discourse_posts.append(post)
         
-        logger.debug(f"Discourse search: {keyword} in {index_name}, found {len(discourse_posts)} results")
+        logger.debug(f"Discourse search: {keyword} in {project_uuid}, found {len(discourse_posts)} results")
         return discourse_posts
 
     def add_or_update_topic_with_replies(self, index_name, connection_id, topic_data, replies_data, forum_url):
         _id = self.gen_topic_index_id(connection_id, topic_data['topic_id'])
-        
-        def convert_time_to_millisecond_timestamp(t):
-            if not t:
-                return None
-            if isinstance(t, datetime):
-                return int(t.timestamp() * 1000)
-            return None
 
-        topic_url = f"{forum_url}/t/{topic_data.get('slug', '')}/{topic_data['topic_id']}"
-        
-        all_replies_content = []
+        body_content = ''
         for reply in replies_data:
             if reply.content:
-                all_replies_content.append(reply.content)
-        
-        body_content = '\n\n'.join(all_replies_content) if all_replies_content else ''
-        
+                if body_content:
+                    body_content += '\n\n' + reply.content
+                else:
+                    body_content = reply.content
+
         doc = {
             'connection_id': connection_id,
             'topic_id': topic_data['topic_id'],
             'title': topic_data['title'],
             'body': body_content,
             'category_id': topic_data.get('category_id'),
-            'url': topic_url,
-            'created_at': convert_time_to_millisecond_timestamp(topic_data.get('bumped_at')),
-            'updated_at': convert_time_to_millisecond_timestamp(topic_data.get('bumped_at'))
+            'slug': topic_data.get('slug', ''),
         }
 
         bulk_ops = [
@@ -273,11 +217,6 @@ class DiscourseIndex(object):
     def gen_topic_index_id(self, connection_id, topic_id):
         return md5(f"{connection_id}_topic_{topic_id}")
 
-    def delete_topic(self, index_name, connection_id, topic_id):
-        topic_id_str = self.gen_topic_index_id(connection_id, topic_id)
-        delete_ops = [{'delete': {'_index': index_name, '_id': topic_id_str}}]
-        self.seasearch_api.bulk(index_name, delete_ops)
-
     def query_data_by_connection_id(self, index_name, connection_id, start, size):
         dsl = {
             "query": {
@@ -289,8 +228,8 @@ class DiscourseIndex(object):
             },
             "from": start,
             "size": size,
-            "_source": ["topic_id", "title", "post_type", "post_number", "url"],
-            "sort": [{"updated_at": {"order": "desc"}}],
+            "_source": ["topic_id", "title", "post_type", "post_number", "slug"],
+            "sort": ["@topic_id"],
         }
 
         hits, total = self.normal_search(index_name, dsl)
@@ -313,7 +252,6 @@ class DiscourseIndex(object):
 
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
-
 
     def get_all_need_index_topics_from_db(self, connection_id):
         with self.db_session_class() as session:
@@ -381,7 +319,6 @@ class DiscourseIndex(object):
             if replies:
                 post_numbers = [reply.post_number for reply in replies]
                 self.update_replies_index_status_batch(topic.topic_id, post_numbers, connection_id)
-
 
             if need_update_connection_status(index_count):
                 connection_status['last_indexed_count'] = index_count

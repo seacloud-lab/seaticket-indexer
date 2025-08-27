@@ -124,14 +124,6 @@ class GitHubIssuesIndex(object):
 
         searches = []
         searches.append(_make_match_query('title', keyword, **match_query_kwargs))
-        searches.append({
-            'match': {
-                'title.ngram': {
-                    'query': keyword,
-                    'minimum_should_match': '80%',
-                }
-            }
-        })
         if not search_title_only:
             searches.append(_make_match_query('body', keyword, **match_query_kwargs))
             searches.append(_make_match_query('labels', keyword, **match_query_kwargs))
