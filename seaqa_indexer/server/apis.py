@@ -107,6 +107,7 @@ def add_github_issues_index_task():
 
 
 @application.route('/webhook/github/', methods=['POST'])
+@auth_required
 def github_webhook():
     connection_id = request.args.get('connection_id')
 
