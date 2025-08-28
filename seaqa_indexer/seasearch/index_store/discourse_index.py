@@ -215,7 +215,7 @@ class DiscourseIndex(object):
         self.seasearch_api.bulk(index_name, bulk_ops)
 
     def gen_topic_index_id(self, connection_id, topic_id):
-        return md5(f"{connection_id}_{topic_id}")
+        return md5(f"{connection_id}{topic_id}")
 
     def query_data_by_connection_id(self, index_name, connection_id, start, size):
         dsl = {
@@ -256,23 +256,42 @@ class DiscourseIndex(object):
     def get_all_need_index_topics_from_db(self, connection_id):
         with self.db_session_class() as session:
             sql = """
-                   SELECT topic_id, title, slug, views, category_id, bumped_at
+                   SELECT topic_id, title, slug, views, category_id, bumped_at, deleted
                    FROM discourse_topics
                    WHERE connection_id = :connection_id AND need_index = 1
                """
             rows = session.execute(text(sql), {'connection_id': connection_id}).fetchall()
         return rows
-    
+
+    def delete_topic_from_db(self, topic_id, connection_id):
+        """Physically delete topic from database"""
+        with self.db_session_class() as session:
+            sql = text("DELETE FROM discourse_topics WHERE topic_id = :topic_id AND connection_id = :connection_id")
+            session.execute(sql, {'topic_id': topic_id, 'connection_id': connection_id})
+            session.commit()  
+
     def update_topic_index_status(self, topic_id, connection_id):
         with self.db_session_class() as session:
             sql = text("UPDATE discourse_topics SET need_index = 0 WHERE topic_id = :topic_id AND connection_id = :connection_id")
             session.execute(sql, {'topic_id': topic_id, 'connection_id': connection_id})
             session.commit()
 
+    def get_replies_for_topic(self, connection_id, topic_id):
+        with self.db_session_class() as session:
+            sql = """
+                   SELECT post_number, content
+                   FROM discourse_replies
+                   WHERE connection_id = :connection_id AND topic_id = :topic_id
+                   ORDER BY post_number
+               """
+            rows = session.execute(text(sql), {'connection_id': connection_id, 'topic_id': topic_id}).fetchall()
+        return rows
+
     def update(self, index_name, connection_id, connection_status, seaqa_db):
         topics = self.get_all_need_index_topics_from_db(connection_id)
         index_count = 0
-    
+        need_cleared_topics_index_set = set()
+
         for topic in topics:
             replies = self.get_replies_for_topic(connection_id, topic.topic_id)
             
@@ -285,12 +304,20 @@ class DiscourseIndex(object):
                 'bumped_at': topic.bumped_at,
             }
     
-            self.add_or_update_topic_with_replies(index_name, connection_id, topic_data, replies)
-            self.update_topic_index_status(topic.topic_id, connection_id)
-            index_count += 1
+            if topic.deleted == 1:
+                key = self.gen_topic_index_id(connection_id, topic.topic_id)
+                self.delete_topic_from_db(topic.topic_id, connection_id)
+                need_cleared_topics_index_set.add(key)
+            else:
+                self.add_or_update_topic_with_replies(index_name, connection_id, topic_data, replies)
+                self.update_topic_index_status(topic.topic_id, connection_id)
+                index_count += 1
 
             if need_update_connection_status(index_count):
                 connection_status['last_indexed_count'] = index_count
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                
+
+        if need_cleared_topics_index_set:
+            self.delete_indexes_by_ids(index_name, need_cleared_topics_index_set)
+     
         return index_count

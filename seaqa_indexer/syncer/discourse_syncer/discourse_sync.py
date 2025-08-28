@@ -137,21 +137,15 @@ class DiscourseSync:
             })
             session.commit()
 
-    def delete_topic_and_replies(self, topic_id, connection_id):
-        """Delete a topic and all its replies"""
+    def tag_topic_deleted(self, topic_id, connection_id):
+        """Mark a topic as deleted instead of physically deleting it"""
         with self.db_session_class() as session:
-            # Delete replies first
-            delete_replies_sql = """DELETE FROM discourse_replies 
-            WHERE topic_id = :topic_id AND connection_id = :connection_id"""
-            session.execute(text(delete_replies_sql), {
-                'topic_id': topic_id,
-                'connection_id': connection_id
-            })
-
-            # Delete topic
-            delete_topic_sql = """DELETE FROM discourse_topics 
-                     WHERE topic_id = :topic_id AND connection_id = :connection_id"""
-            session.execute(text(delete_topic_sql), {
+            sql = text("""
+                UPDATE discourse_topics
+                SET deleted = 1
+                WHERE topic_id = :topic_id AND connection_id = :connection_id
+            """)
+            session.execute(sql, {
                 'topic_id': topic_id,
                 'connection_id': connection_id
             })
