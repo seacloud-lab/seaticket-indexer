@@ -5,8 +5,6 @@ from functools import wraps
 from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
-from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import SignatureInvalidException, \
-    GithubIssuesNotFoundException, GithubIssuesInactiveException
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException, \
     ForumInActiveException
 from seaqa_indexer.utils.constants import ConnectionType
@@ -109,56 +107,39 @@ def add_github_issues_index_task():
 
 
 @application.route('/webhook/github/', methods=['POST'])
+@auth_required
 def github_webhook():
-    connection_id = request.args.get('connection_id')
+    try:
+        data = request.get_json(force=True)
+    except Exception as e:
+        logger.exception(e)
+        return {'error_msg': 'Bad request.'}, 400
+
+    connection_id = data.get('connection_id')
+
+    issue_data = data.get('issue_data')
 
     if not connection_id:
-        return jsonify({'error': 'Missing connection_id'}), 400
-
-    payload = request.get_json(force=True)
+        return jsonify({'error_msg': 'Missing connection_id parameter'}), 400
+    action = data.get('action')
 
     try:
-        issue_id = payload['issue']['id']
+        issue_id = issue_data['id']
     except KeyError as e:
-        return jsonify({'error': 'Missing expected field in webhook payload'}), 400
-
-    action = payload.get('action')
-
-    event = request.headers.get('X-GitHub-Event')
-    if event != 'issues':
-        return jsonify({'msg': f'Ignored event: {event}'}), 200
-
-    issues_data = payload.get('issue')
-    if not issues_data:
-        return jsonify({'error': 'No issue payload'}), 400
-
-    signature = request.headers.get('X-Hub-Signature-256')
-    msg = request.data
+        return jsonify({'error_msg': 'Missing expected field in webhook payload'}), 400
 
     try:
-        application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issues_data, issue_id, action, signature, msg)
-    except SignatureInvalidException:
-        return jsonify({'error': 'Invalid signature'}), 403
-    except GithubIssuesInactiveException:
-        logger.warning('Connection: %s is inactive', connection_id)
-        return {'warning': 'connection is inactive,request ignored'}, 200
-    except GithubIssuesNotFoundException:
-        return jsonify({'error': 'connection not found'}), 404
-
+        application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issue_data, issue_id, action)
     except Exception as e:
         logger.error(e)
-        return jsonify({'error': 'Internal Server Error'}), 500
+        return jsonify({'error_msg': 'Internal Server Error'}), 500
 
-    return jsonify({'msg': 'Issue event processed'}), 200
+    return jsonify({'success': True}), 200
 
 
 @application.route('/search', methods=['POST'])
 @auth_required
 def search():
-    is_valid = check_auth_token(request)
-    if not is_valid:
-        return {'error_msg': 'Permission denied'}, 403
-
     try:
         data = json.loads(request.data)
     except Exception as e:
