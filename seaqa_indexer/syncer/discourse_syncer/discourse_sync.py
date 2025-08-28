@@ -55,6 +55,20 @@ class DiscourseSync:
             self.delete_reply(topic_id, post_number, connection_id)
             logger.info(f"Deleted reply {post_number} in topic {topic_id}")
 
+    def handle_topic_deleted(self, topic_id, connection_id):
+        """Mark a topic as deleted instead of physically deleting it"""
+        with self.db_session_class() as session:
+            sql = text("""
+                UPDATE discourse_topics
+                SET deleted = 1
+                WHERE topic_id = :topic_id AND connection_id = :connection_id
+            """)
+            session.execute(sql, {
+                'topic_id': topic_id,
+                'connection_id': connection_id
+            })
+            session.commit()
+
     def check_existing_topic(self, topic_id, connection_id):
         """Check if a topic already exists"""
         with self.db_session_class() as session:
@@ -137,6 +151,25 @@ class DiscourseSync:
             })
             session.commit()
 
+    def delete_reply(self, topic_id, post_number, connection_id):
+        """Delete a specific reply"""
+        with self.db_session_class() as session:
+            sql = """DELETE FROM discourse_replies 
+            WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
+            session.execute(text(sql), {
+                'topic_id': topic_id,
+                'post_number': post_number,
+                'connection_id': connection_id
+            })
+            session.commit()
+
+    def _build_api_headers(self, api_key, api_username):
+        """Build API headers for Discourse requests"""
+        return {
+            "Api-Key": api_key,
+            "Api-Username": api_username
+        }
+
     def delete_topic_and_replies(self, topic_id, connection_id):
         """Delete a topic and all its replies"""
         with self.db_session_class() as session:
@@ -156,25 +189,6 @@ class DiscourseSync:
                 'connection_id': connection_id
             })
             session.commit()
-
-    def delete_reply(self, topic_id, post_number, connection_id):
-        """Delete a specific reply"""
-        with self.db_session_class() as session:
-            sql = """DELETE FROM discourse_replies 
-            WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
-            session.execute(text(sql), {
-                'topic_id': topic_id,
-                'post_number': post_number,
-                'connection_id': connection_id
-            })
-            session.commit()
-
-    def _build_api_headers(self, api_key, api_username):
-        """Build API headers for Discourse requests"""
-        return {
-            "Api-Key": api_key,
-            "Api-Username": api_username
-        }
 
     def add_or_update_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers):
         """Deletes and recreates an existing topic and its replies to ensure content is up-to-date."""

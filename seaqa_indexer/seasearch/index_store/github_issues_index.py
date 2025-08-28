@@ -112,14 +112,6 @@ class GitHubIssuesIndex(object):
 
         searches = []
         searches.append(_make_match_query('title', keyword, **match_query_kwargs))
-        searches.append({
-            'match': {
-                'title.ngram': {
-                    'query': keyword,
-                    'minimum_should_match': '80%',
-                }
-            }
-        })
         if not search_title_only:
             searches.append(_make_match_query('body', keyword, **match_query_kwargs))
             searches.append(_make_match_query('labels', keyword, **match_query_kwargs))
@@ -171,9 +163,9 @@ class GitHubIssuesIndex(object):
 
         return repo_query_info
 
-    def search(self, project_uuid, keyword, start, size, search_title_only=False):
+    def search(self, project_uuid, keyword, start, size, connection_ids=None, search_filename_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(project_uuid, keyword, start, size, search_title_only)
+        search_param = self.get_search_param(project_uuid, keyword, start, size, connection_ids, search_filename_only)
         bulk_search_params.append(search_param)
 
         query_body = json.dumps({
@@ -246,7 +238,7 @@ class GitHubIssuesIndex(object):
             },
             "from": start,
             "size": size,
-            "_source": ["issue_id", "repo_owner", "repo_name", "title", "url"],
+            "_source": False,
             "sort": ["@url"],
         }
 

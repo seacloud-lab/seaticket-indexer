@@ -8,6 +8,7 @@ from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
+from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type
 from seaqa_indexer.utils.seahub_api import SeahubAPI
@@ -46,6 +47,8 @@ def update_connection_index(connection_id, db_session_class):
             update_seafile_index(connection, seasearch_api, seaqa_db)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             update_github_issues_index(connection, seasearch_api, db_session_class, seaqa_db)
+        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+            update_discourse_forum_index(connection, seasearch_api, db_session_class, seaqa_db)
     except Exception as e:
         logger.exception('connection: %s update index failed, error: %s', connection_id, e)
         connection_status['last_index_status'] = IndexStatus.FAILED
@@ -148,6 +151,34 @@ def update_github_issues_index(project_connection, seasearch_api, db_session_cla
     github_issues_index.create_index_if_missing(issues_index_name)
 
     index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db)
+
+    # finish index
+    connection_status['last_indexed_count'] = index_count
+    connection_status['last_index_status'] = IndexStatus.COMPLETED
+    seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status))
+
+
+def update_discourse_forum_index(project_connection, seasearch_api, db_session_class, seaqa_db):
+    connection_id = project_connection.id
+    update_at = project_connection.updated_at
+    indexed_at = project_connection.indexed_at
+    project_uuid = project_connection.project_uuid
+    connection_status = json.loads(project_connection.status)
+    discourse_forum_index = DiscourseIndex(seasearch_api, db_session_class)
+
+    new_indexed_at = datetime.datetime.now(datetime.UTC)
+    if indexed_at and indexed_at > update_at:
+        connection_status['last_indexed_count'] = 0
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status))
+        return
+
+    connection_status['last_index_status'] = IndexStatus.INDEXING
+    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    discourse_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
+    discourse_forum_index.create_index_if_missing(discourse_index_name)
+
+    index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db)
 
     # finish index
     connection_status['last_indexed_count'] = index_count
