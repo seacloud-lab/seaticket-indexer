@@ -167,7 +167,7 @@ def search():
     return {'results': results}, 200
 
 
-@application.route('/discourse/webhook/', methods=['POST'])
+@application.route('/webhook/discourse/', methods=['POST'])
 @auth_required
 def discourse_webhook():
     """Handle Discourse webhook callback"""

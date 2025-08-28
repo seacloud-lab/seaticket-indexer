@@ -1,4 +1,3 @@
-import os
 import logging
 import json
 from sqlalchemy.sql import text
@@ -9,6 +8,7 @@ from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, RED
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
+from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type
 from seaqa_indexer.mq import get_mq
@@ -25,6 +25,7 @@ class IndexManager:
         self.site_index = SiteIndex(self.seasearch_api)
         self.seafile_index = SeafileIndex(self.seasearch_api)
         self.github_issues_index = GitHubIssuesIndex(self.seasearch_api, self.db_session_class)
+        self.discourse_index = DiscourseIndex(self.seasearch_api, self.db_session_class)
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def get_project_connection_by_id(self, connection_id):
@@ -48,6 +49,10 @@ class IndexManager:
         #delete issues index
         issues_index_name = gen_index_name_by_type(project_uuid,ConnectionType.GITHUB_ISSUE.value)
         self.github_issues_index.delete_index_by_index_name(issues_index_name)
+        
+        # delete discourse index
+        discourse_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
+        self.discourse_index.delete_index_by_index_name(discourse_index_name)
 
     def delete_index_by_connection(self, project_uuid, connection_id, connection_type):
         index_name = gen_index_name_by_type(project_uuid, connection_type)
@@ -58,6 +63,8 @@ class IndexManager:
             index = self.seafile_index
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             index = self.github_issues_index
+        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+            index = self.discourse_index
         start = 0
         per_size = 100
         while True:
@@ -101,7 +108,9 @@ class IndexManager:
                 issues_search_param = self.github_issues_index.get_search_param(issues_index_name, keyword, start, size, connection_id_list)
                 bulk_search_params.append(issues_search_param)
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                pass
+                discourse_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
+                discourse_search_param = self.discourse_index.get_search_param(discourse_index_name, keyword, start, size, connection_id_list)
+                bulk_search_params.append(discourse_search_param)
 
         if not bulk_search_params:
             return []
@@ -181,7 +190,17 @@ class IndexManager:
                 }
                 result_docs.append(r)
             elif index_name.startswith(ConnectionType.DISCOURSE_FORUM.value):
-                pass
+                r = {
+                    'title': source['title'],
+                    'topic_id': source['topic_id'],
+                    'connection_id': source['connection_id'],
+                    'content': source['body'],
+                    'slug': source['slug'],
+                    'score': score,
+                    '_id': _id,
+                    'type': 'discourse_forum',
+                }
+                result_docs.append(r)
 
         logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
                         project_uuid, result_docs)
