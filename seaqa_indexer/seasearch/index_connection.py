@@ -156,6 +156,7 @@ def update_github_issues_index(project_connection, seasearch_api, db_session_cla
     connection_status['last_index_status'] = IndexStatus.COMPLETED
     seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status))
 
+
 def update_discourse_forum_index(project_connection, seasearch_api, db_session_class, seaqa_db):
     connection_id = project_connection.id
     update_at = project_connection.updated_at

@@ -175,9 +175,9 @@ class GitHubIssuesIndex(object):
 
         return repo_query_info
 
-    def search(self, project_uuid, keyword, start, size, search_title_only=False):
+    def search(self, project_uuid, keyword, start, size, connection_ids=None, search_filename_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(project_uuid, keyword, start, size, search_title_only)
+        search_param = self.get_search_param(project_uuid, keyword, start, size, connection_ids, search_filename_only)
         bulk_search_params.append(search_param)
 
         query_body = json.dumps({
@@ -263,7 +263,7 @@ class GitHubIssuesIndex(object):
             },
             "from": start,
             "size": size,
-            "_source": ["issue_id", "repo_owner", "repo_name", "title", "url"],
+            "_source": False,
             "sort": ["@url"],
         }
 

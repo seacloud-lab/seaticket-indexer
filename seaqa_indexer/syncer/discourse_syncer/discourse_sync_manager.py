@@ -54,7 +54,7 @@ class DiscourseSyncManager:
         elif event_type in ['post_created', 'post_edited', 'post_recovered']:
             self.discourse_sync.handle_reply_update(connection_id, topic_id, request_data)
         elif event_type == 'topic_destroyed':
-            self.discourse_sync.tag_topic_deleted(topic_id, connection_id)
+            self.discourse_sync.handle_topic_deleted(topic_id, connection_id)
         elif event_type == 'post_destroyed':
             self.discourse_sync.handle_reply_delete(connection_id, topic_id, request_data)
         else:

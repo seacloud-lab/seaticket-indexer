@@ -76,7 +76,7 @@ class DiscourseIndex(object):
             self.mapping['properties']['body']['analyzer'] = 'standard'
             self.index_settings['analysis'].pop('char_filter', None)
             self.index_settings['analysis']['analyzer'].pop('gse_standard_analyzer', None)
-        
+
         if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
             data = {
                 'shard_num': self.shard_num,
@@ -156,16 +156,16 @@ class DiscourseIndex(object):
 
         return repo_query_info
 
-    def search(self, project_uuid, keyword, start, size, search_title_only=False):
+    def search(self, project_uuid, keyword, start, size, connection_ids=None, search_filename_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(project_uuid, keyword, start, size, search_title_only=search_title_only)
+        search_param = self.get_search_param(project_uuid, keyword, start, size, connection_ids, search_filename_only)
         bulk_search_params.append(search_param)
 
         query_body = json.dumps({
             'index_queries': bulk_search_params
         })
         results = self.seasearch_api.unified_search(query_body)
-        
+
         hits = results.get('hits', {}).get('hits', [])
         total = results.get('hits', {}).get('total', {}).get('value', 0)
         if not hits:
@@ -173,7 +173,7 @@ class DiscourseIndex(object):
         discourse_posts = []
         for hit in hits:
             source = hit['_source']
-            
+
             post = {
                 'connection_id': source['connection_id'],
                 'topic_id': source['topic_id'],
@@ -183,12 +183,12 @@ class DiscourseIndex(object):
                 'slug': source['slug'],
             }
             discourse_posts.append(post)
-        
+
         logger.debug(f"Discourse search: {keyword} in {project_uuid}, found {len(discourse_posts)} results")
         return discourse_posts
 
     def add_or_update_topic_with_replies(self, index_name, connection_id, topic_data, replies_data):
-        _id = self.gen_topic_index_id(connection_id, topic_data['topic_id'])
+        _id = self.gen_index_id(connection_id, topic_data['topic_id'])
 
         body_content = ''
         for reply in replies_data:
@@ -214,7 +214,7 @@ class DiscourseIndex(object):
 
         self.seasearch_api.bulk(index_name, bulk_ops)
 
-    def gen_topic_index_id(self, connection_id, topic_id):
+    def gen_index_id(self, connection_id, topic_id):
         return md5(f"{connection_id}{topic_id}")
 
     def query_data_by_connection_id(self, index_name, connection_id, start, size):
@@ -228,7 +228,7 @@ class DiscourseIndex(object):
             },
             "from": start,
             "size": size,
-            "_source": ["topic_id", "title", "post_type", "post_number", "slug"],
+            "_source": False,
             "sort": ["@topic_id"],
         }
 
@@ -256,7 +256,7 @@ class DiscourseIndex(object):
     def get_all_need_index_topics_from_db(self, connection_id):
         with self.db_session_class() as session:
             sql = """
-                   SELECT topic_id, title, slug, views, category_id, bumped_at, deleted
+                   SELECT topic_id, title, slug, category_id, deleted
                    FROM discourse_topics
                    WHERE connection_id = :connection_id AND need_index = 1
                """
@@ -268,7 +268,7 @@ class DiscourseIndex(object):
         with self.db_session_class() as session:
             sql = text("DELETE FROM discourse_topics WHERE topic_id = :topic_id AND connection_id = :connection_id")
             session.execute(sql, {'topic_id': topic_id, 'connection_id': connection_id})
-            session.commit()  
+            session.commit()
 
     def update_topic_index_status(self, topic_id, connection_id):
         with self.db_session_class() as session:
@@ -282,7 +282,6 @@ class DiscourseIndex(object):
                    SELECT post_number, content
                    FROM discourse_replies
                    WHERE connection_id = :connection_id AND topic_id = :topic_id
-                   ORDER BY post_number
                """
             rows = session.execute(text(sql), {'connection_id': connection_id, 'topic_id': topic_id}).fetchall()
         return rows
@@ -290,24 +289,23 @@ class DiscourseIndex(object):
     def update(self, index_name, connection_id, connection_status, seaqa_db):
         topics = self.get_all_need_index_topics_from_db(connection_id)
         index_count = 0
-        need_cleared_topics_index_set = set()
+        need_cleared_topic_id_set = set()
+        need_cleared_topic_index_id_set = set()
 
         for topic in topics:
             replies = self.get_replies_for_topic(connection_id, topic.topic_id)
-            
+
             topic_data = {
                 'topic_id': topic.topic_id,
                 'title': topic.title,
                 'slug': topic.slug,
-                'views': topic.views,
                 'category_id': topic.category_id,
-                'bumped_at': topic.bumped_at,
             }
-    
+
             if topic.deleted == 1:
-                key = self.gen_topic_index_id(connection_id, topic.topic_id)
-                self.delete_topic_from_db(topic.topic_id, connection_id)
-                need_cleared_topics_index_set.add(key)
+                need_cleared_topic_id_set.add(topic.topic_id)
+                key = self.gen_index_id(connection_id, topic.topic_id)
+                need_cleared_topic_index_id_set.add(key)
             else:
                 self.add_or_update_topic_with_replies(index_name, connection_id, topic_data, replies)
                 self.update_topic_index_status(topic.topic_id, connection_id)
@@ -317,7 +315,9 @@ class DiscourseIndex(object):
                 connection_status['last_indexed_count'] = index_count
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
 
-        if need_cleared_topics_index_set:
-            self.delete_indexes_by_ids(index_name, need_cleared_topics_index_set)
-     
+        if need_cleared_topic_index_id_set:
+            self.delete_indexes_by_ids(index_name, need_cleared_topic_index_id_set)
+            for topic_id in need_cleared_topic_id_set:
+                self.delete_topic_from_db(topic_id, connection_id)
+
         return index_count
