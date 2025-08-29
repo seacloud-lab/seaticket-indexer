@@ -1,5 +1,4 @@
 import json
-import uuid
 
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.utils.constants import CrawlStatus
@@ -7,14 +6,16 @@ from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.storage import get_storage
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils.constants import CRAWL_OUTPUT_TABLE
+from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
+
+
 
 class BatchCrawlPipeline:
     def __init__(self):
         self.project_uuid = None
         self.site_id = None
         self.storage = get_storage()
-        self.seadb_api = SeaDBAPI('')
+        self.seadb_api = SeaDBAPI()
 
     def open_spider(self, spider):
         self.project_uuid = spider.project_uuid
@@ -26,10 +27,14 @@ class BatchCrawlPipeline:
         if self.storage is None:
             spider.logger.warning('Update failed: storage is not initialized')
             return
-        for url in urls_to_delete:
-            filename = url_to_filename(url)
-            self.storage.delete_file(self.site_id, self.project_uuid, filename)
-            spider.logger.info('delete filename: %s', url)
+
+        if urls_to_delete:
+            sql = f"""SELECT pk FROM `{self.site_id}` WHERE url in ({urls_to_delete}) LIMIT {len(urls_to_delete)}"""
+            pks = self.seadb_api.list_seadb_table_records(self.project_uuid, sql)
+            self.seadb_api.delete_rows(self.project_uuid, self.site_id, pks)
+            files = [url_to_filename(url) for url in urls_to_delete]
+            self.storage.batch_delete_objects(self.site_id, self.project_uuid, files)
+            spider.logger.info('delete files: %s', files)
 
         spider.connection_status['total_records'] = len(spider.processed_urls)
         spider.connection_status['last_sync_status'] = CrawlStatus.COMPLETED
@@ -38,7 +43,10 @@ class BatchCrawlPipeline:
         spider.logger.info(f"Update completed: processed {len(spider.processed_urls)} URLs, deleted {len(urls_to_delete)} removed pages")
 
     def process_item(self, item, spider):
-        self.save_content(item)
+        try:
+            self.save_content(item)
+        except Exception as e:
+            spider.logger.warning(f'Insert into SeaDB or save to storage failed for {item.get("url")}: {e}')
         spider.crawled_count += 1
         spider.connection_status['last_sync_count'] = spider.crawled_count
         if need_update_connection_status(spider.crawled_count):
@@ -54,22 +62,13 @@ class BatchCrawlPipeline:
         filename = url_to_filename(url)
         if self.storage is None:
             return
-        new_content = {
-            "url": url,
-            "title": title,
-            "content": content,
-            "etag": etag,
-            "last_modified": last_modified,
-        }
-        self.storage.write_json(self.site_id, self.project_uuid, filename, new_content)
-        uuid_str = str(uuid.UUID(self.project_uuid))
         insert_rows = [
             {
-                CRAWL_OUTPUT_TABLE.columns.url.name: url,
-                CRAWL_OUTPUT_TABLE.columns.title.name: title,
-                # CRAWL_OUTPUT_TABLE.columns.content.name: content,
-                CRAWL_OUTPUT_TABLE.columns.etag.name: etag,
-                CRAWL_OUTPUT_TABLE.columns.last_modified.name: last_modified,
+                WEB_CRAWL_TABLE.columns.url.name: url,
+                WEB_CRAWL_TABLE.columns.title.name: title,
+                WEB_CRAWL_TABLE.columns.etag.name: etag,
+                WEB_CRAWL_TABLE.columns.last_modified.name: last_modified,
             }
         ]
-        self.seadb_api.insert_rows(uuid_str, self.site_id, insert_rows)
+        self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
+        self.seadb_api.insert_rows(self.project_uuid, self.site_id, insert_rows)

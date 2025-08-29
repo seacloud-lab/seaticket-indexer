@@ -1,6 +1,9 @@
-import requests, jwt, time
+import requests
+import jwt
+import time
+import uuid
 
-from seaqa_indexer.config import JWT_PRIVATE_KEY, SEADB_HOST, SEADB_PORT
+from seaqa_indexer.config import JWT_PRIVATE_KEY, SEADB_SERVER_URL
 
 
 def parse_response(response):
@@ -12,12 +15,19 @@ def parse_response(response):
         except:
             pass
 
+def uuid_str_to_36_chars(uuid_str):
+    if isinstance(uuid_str, uuid.UUID):
+        return str(uuid_str)
+    if len(uuid_str) == 32:
+        return str(uuid.UUID(uuid_str))
+    else:
+        return uuid_str
 
 class SeaDBAPI:
-    def __init__(self, username, timeout=30):
+    def __init__(self, username='', timeout=30):
         self.timeout = timeout
         self.secret_key = JWT_PRIVATE_KEY
-        self.server_url = f'{SEADB_HOST}:{SEADB_PORT}'
+        self.server_url = SEADB_SERVER_URL
         self.username = username
 
     def gen_headers(self, base_id):
@@ -29,22 +39,29 @@ class SeaDBAPI:
         token = jwt.encode(payload, self.secret_key, algorithm='HS256')
         return {"Authorization": "Bearer %s" % token}
     
-    # def get_project_connections(self, project_id):
     
     def ping(self):
         url = f'{self.server_url}/ping'
         response = requests.get(url, timeout=self.timeout)
-        print(response.__dict__)
         return parse_response(response)
     
     # base
     def create_base(self, base_id):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/base'
         response = requests.post(url, headers=headers, timeout=self.timeout)
         return parse_response(response)
     
+    def get_base_info(self, base_id):
+        base_id = uuid_str_to_36_chars(base_id)
+        headers = self.gen_headers(base_id)
+        url = f'{self.server_url}/api/v1/{base_id}/base-info'
+        response = requests.get(url, headers=headers, timeout=self.timeout)
+        return parse_response(response)
+    
     def delete_base(self, base_id):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/base'
         response = requests.delete(url, headers=headers, timeout=self.timeout)
@@ -52,17 +69,17 @@ class SeaDBAPI:
     
     # table
     def create_table(self, base_id, table_name):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/tables'
         params = {
             'table_name': str(table_name)
         }
-        print(params,' ---params')
         response = requests.post(url, headers=headers, json=params, timeout=self.timeout)
-        print(response, '---reposnse ')
         return parse_response(response)
 
     def delete_table(self, base_id, table_id):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/tables/'
         params = {
@@ -73,6 +90,7 @@ class SeaDBAPI:
     
     # rows
     def insert_rows(self, base_id, table_name, rows):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/rows'
         data = {
@@ -84,6 +102,7 @@ class SeaDBAPI:
     
 
     def update_rows(self, base_id, table_name, rows):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/rows'
         data = {
@@ -94,6 +113,7 @@ class SeaDBAPI:
         return parse_response(response)
 
     def delete_rows(self, base_id, table_name, row_ids):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/rows'
         data = {
@@ -103,10 +123,12 @@ class SeaDBAPI:
         response = requests.delete(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
 
-    def query_rows(self, base_id, sql, params=[]):
+    def query_rows(self, base_id, sql, params=[], convert_keys=True):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         post_data = {
-            'sql': sql
+            'sql': sql,
+            'convert_keys': convert_keys
         }
         if params:
             post_data['params'] = params
@@ -116,6 +138,7 @@ class SeaDBAPI:
 
     # columns
     def add_column(self, base_id, table_id, column):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/columns'
         data = {
@@ -124,31 +147,11 @@ class SeaDBAPI:
             'column_type': column['column_type'],
         }
         response = requests.post(url, json=data, headers=headers, timeout=self.timeout)
-        print(response.__dict__)
-        return parse_response(response)
-    
-    # TODO: not support
-    def add_columns(self, base_id, table_id, columns):
-        headers = self.gen_headers(base_id)
-        url = f'{self.server_url}/api/v1/{base_id}/columns'
-        data = {
-            'table_id': table_id,
-            'columns': columns
-        }
-        response = requests.post(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
 
-    # TODO: not support
-    def list_columns(self, base_id, table_id):
-        headers = self.gen_headers(base_id)
-        url = f'{self.server_url}/api/v1/{base_id}/columns'
-        data = {
-            'table_id': table_id
-        }
-        response = requests.get(url, json=data, headers=headers, timeout=self.timeout)
-        return parse_response(response)
 
     def delete_column(self, base_id, table_id, column_key):
+        base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/columns'
         data = {

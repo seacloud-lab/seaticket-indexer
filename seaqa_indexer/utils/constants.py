@@ -50,61 +50,42 @@ REPO_NAME_CACHE_TIME_OUT = 24 * 60 * 60
 CONNECTION_STATUS_UPDATE_LIMIT = 100
 
 
-# crawl output table
-
+# web crawl table
 class PropertyTypes:
     TEXT = 'text'
-    DATE = 'date'
-    LONG_TEXT = 'long-text'
-    CHECKBOX = 'checkbox'
+    DATETIME = 'datetime'
+    INT = 'int64'
+    FLOAT = 'float64'
     SINGLE_SELECT = 'single-select'
     MULTIPLE_SELECT = 'multiple-select'
-    URL = 'url'
-    DURATION = 'duration'
-    NUMBER = 'number'
-    COLLABORATOR = 'collaborator'
-    EMAIL = 'email'
-    CTIME = 'ctime'
-    MTIME = 'mtime'
+    BOOL = 'bool'
  
 
-
-class CrawlOutputTable(object):
+class WebCrawlTable(object):
     def __init__(self, table_id, name):
         self.id = table_id
         self.name = name
 
     @property
     def columns(self):
-        return CrawlOutputColumns()
+        return WebCrawlColumns()
 
 
-
-class PrivatePropertyKeys:
-    URL = '_url'
-    TITLE = '_title'
-    # CONTENT = '_content'
-    ETAG = '_etag'
-    LAST_MODIFIED = '_last_modified'
-
-class CrawlOutputColumns(object):
+class WebCrawlColumns(object):
     def __init__(self):
-        self.url = CrawlOutputColumn(PrivatePropertyKeys.URL, '_url', PropertyTypes.TEXT)
-        self.title = CrawlOutputColumn(PrivatePropertyKeys.TITLE, '_title', PropertyTypes.TEXT)
-        # self.content = CrawlOutputColumn(PrivatePropertyKeys.CONTENT, '_content', PropertyTypes.TEXT)
-        self.etag = CrawlOutputColumn(PrivatePropertyKeys.ETAG, '_etag', PropertyTypes.TEXT)
-        self.last_modified = CrawlOutputColumn(PrivatePropertyKeys.LAST_MODIFIED, '_last_modified', PropertyTypes.TEXT)
+        self.url = WebCrawlColumn('url', PropertyTypes.TEXT)
+        self.title = WebCrawlColumn('title', PropertyTypes.TEXT)
+        self.etag = WebCrawlColumn('etag', PropertyTypes.TEXT)
+        self.last_modified = WebCrawlColumn('last_modified', PropertyTypes.TEXT)
 
-class CrawlOutputColumn(object):
-    def __init__(self, key, name, type, data=None):
-        self.key = key
+class WebCrawlColumn(object):
+    def __init__(self, name, type, data=None):
         self.name = name
         self.type = type
         self.data = data
 
     def to_dict(self, data=None):
         column_data = {
-            'key': self.key,
             'name': self.name,
             'type': self.type,
         }
@@ -116,11 +97,10 @@ class CrawlOutputColumn(object):
 
         return column_data
 
-CRAWL_OUTPUT_TABLE = CrawlOutputTable('0000', 'Table1')
-CRAWL_OUTPUT_COLUMNS = [
-    CRAWL_OUTPUT_TABLE.columns.url.to_dict(),
-    CRAWL_OUTPUT_TABLE.columns.title.to_dict(),
-    # CRAWL_OUTPUT_TABLE.columns.content.to_dict(),
-    CRAWL_OUTPUT_TABLE.columns.etag.to_dict(),
-    CRAWL_OUTPUT_TABLE.columns.last_modified.to_dict(),
+WEB_CRAWL_TABLE = WebCrawlTable('0000', 'Table1')
+WEB_CRAWL_COLUMNS = [
+    WEB_CRAWL_TABLE.columns.url.to_dict(),
+    WEB_CRAWL_TABLE.columns.title.to_dict(),
+    WEB_CRAWL_TABLE.columns.etag.to_dict(),
+    WEB_CRAWL_TABLE.columns.last_modified.to_dict(),
 ]

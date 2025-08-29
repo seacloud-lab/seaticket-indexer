@@ -18,6 +18,9 @@ MYSQL_PORT = 3306
 MYSQL_DB = 'sea_qa'
 MYSQL_UNIX_SOCKET = ''
 
+# SeaDB Configuration
+SEADB_SERVER_URL = ''
+
 # index setting
 LANG = 'chinese'
 
@@ -49,6 +52,8 @@ MYSQL_PORT = int(os.getenv('SEAQA_MYSQL_DB_PORT')) if os.getenv('WEB_CRAWLER_MYS
 MYSQL_DB_NAME = os.getenv('SEAQA_MYSQL_DB_NAME') or MYSQL_DB
 MYSQL_UNIX_SOCKET = os.getenv('WEB_CRAWLER_MYSQL_UNIX_SOCKET') or MYSQL_UNIX_SOCKET
 
+SEADB_SERVER_URL = os.getenv('SEADB_SERVER_URL') or SEADB_SERVER_URL
+
 REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
 REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
 REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')
@@ -57,8 +62,4 @@ S3_HOST = os.environ.get('S3_HOST')
 S3_WEB_CRAWL_BUCKET = os.environ.get('S3_WEB_CRAWL_BUCKET')
 S3_KEY_ID = os.environ.get('S3_KEY_ID')
 S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY')
-
-# SeaDB
-SEADB_HOST = os.getenv('SEADB_HOST')
-SEADB_PORT = os.getenv('SEADB_PORT')
 
