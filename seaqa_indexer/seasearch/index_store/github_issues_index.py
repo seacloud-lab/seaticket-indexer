@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import datetime
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
@@ -52,6 +51,10 @@ class GitHubIssuesIndex(object):
             },
             'comments_count': {
                 'type': 'integer',
+            },
+            'comments_body': {
+                'type': 'text',
+                'analyzer': 'gse_standard_analyzer',
             }
         }
     }
@@ -115,6 +118,7 @@ class GitHubIssuesIndex(object):
         if not search_title_only:
             searches.append(_make_match_query('body', keyword, **match_query_kwargs))
             searches.append(_make_match_query('labels', keyword, **match_query_kwargs))
+            searches.append(_make_match_query('comments_body', keyword, **match_query_kwargs))
 
         return searches
 
@@ -143,7 +147,7 @@ class GitHubIssuesIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'body', 'state', 'labels', 'url'],
+            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'body', 'comments_body', 'state', 'labels', 'url'],
             'sort': [
                 '_score'
             ],
@@ -189,6 +193,7 @@ class GitHubIssuesIndex(object):
                 'title': source.get('title'),
                 'connection_id': source.get('connection_id'),
                 'body': source.get('body'),
+                'comments_body': source.get('comments_body', []),
                 'state': source.get('state'),
                 'labels': source.get('labels', []),
                 'score': hit.get('_score'),
@@ -212,9 +217,10 @@ class GitHubIssuesIndex(object):
             'author': issue_data.get('user', {}).get('login', ''),
             'url': issue_data.get('url', ''),
             'body': issue_data['body'] or '',
+            'comments_body': issue_data.get('comments_body', []),
             'state': issue_data['state'],
             'labels': [label['name'] for label in issue_data.get('labels', [])],
-            'comments_count': issue_data['comments']
+            'comments_count': issue_data['comments_count'],
         }
 
         bulk_ops = [
@@ -266,18 +272,35 @@ class GitHubIssuesIndex(object):
     def get_all_need_index_issues_from_db(self, issues_sync_id):
         with self.db_session_class() as session:
             sql = """
-                   SELECT id, issue_number, title, body, state, created_at,
-                          updated_at, closed_at, labels, comments, author, url, deleted
+                   SELECT id, issue_id, issue_number, title, body, state, created_at,
+                          updated_at, closed_at, labels, comments_count, author, url, deleted
                    FROM github_issues
                    WHERE connection_id = :connection_id AND need_index = 1
                """
             rows = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchall()
         return rows
 
-    def delete_issue_from_db(self, issue_id):
+    def get_all_issue_comments_from_db(self,issues_sync_id, issue_id):
+        with self.db_session_class() as session:
+            sql = """
+                   SELECT id, comment_id, issue_id, connection_id, author, body, created_at,
+                          updated_at, deleted
+                   FROM github_issue_comments
+                   WHERE connection_id = :connection_id AND issue_id = :issue_id
+               """
+            rows = session.execute(text(sql), {'connection_id': issues_sync_id, 'issue_id': issue_id}).fetchall()
+        return rows
+
+    def delete_issue_from_db(self,connection_id, id_key):
         with self.db_session_class() as session:
             sql = text("DELETE FROM github_issues WHERE id = :id")
-            session.execute(sql, {'id': issue_id})
+            session.execute(sql, {'id': id_key, 'connection_id': connection_id})
+            session.commit()
+
+    def delete_comments_from_db(self, connection_id, issue_id):
+        with self.db_session_class() as session:
+            sql = text("DELETE FROM github_issue_comments WHERE connection_id = :connection_id AND issue_id = :issue_id AND deleted = 1")
+            session.execute(sql, {'connection_id': connection_id, 'issue_id': issue_id})
             session.commit()
 
     def update_issues_index_status(self, issue_id):
@@ -292,7 +315,13 @@ class GitHubIssuesIndex(object):
         need_cleared_issues_index_set = set()
 
         for issue in issues:
-            issue_id = issue.id
+            issue_id = issue.issue_id
+            self.delete_comments_from_db(connection_id, issue_id)
+            comments = self.get_all_issue_comments_from_db(connection_id ,issue_id)
+            comments_list = []
+            if comments:
+                for comment in comments:
+                    comments_list.append(comment.body)
             issue_dict = {
                 'id': issue_id,
                 'number': issue.issue_number,
@@ -300,7 +329,8 @@ class GitHubIssuesIndex(object):
                 'body': issue.body,
                 'state': issue.state,
                 'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
-                'comments': issue.comments,
+                'comments_body': comments_list,
+                'comments_count':issue.comments_count,
                 'user': {'login': issue.author},
                 'url': issue.url,
                 'repo_owner': repo_owner,
@@ -309,9 +339,10 @@ class GitHubIssuesIndex(object):
             if issue.deleted == 1:
                 key = self.gen_index_id(connection_id, issue_id)
                 need_cleared_issues_index_set.add(key)
+                self.delete_issue_from_db(connection_id, issue.id)
             else:
                 self.add_or_update_issue(index_name, connection_id, issue_dict)
-                self.update_issues_index_status(issue_id)
+                self.update_issues_index_status(issue.id)
                 index_count += 1
 
             if need_update_connection_status(index_count):
@@ -320,7 +351,5 @@ class GitHubIssuesIndex(object):
 
         if need_cleared_issues_index_set:
             self.delete_indexes_by_ids(index_name, need_cleared_issues_index_set)
-            for issue_id in need_cleared_issues_index_set:
-                self.delete_issue_from_db(issue_id)
 
         return index_count

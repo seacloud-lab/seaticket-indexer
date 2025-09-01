@@ -182,6 +182,7 @@ class IndexManager:
                     'issue_number': source['issue_number'],
                     'connection_id': source['connection_id'],
                     'content': source['body'],
+                    'comments_body': source['comments_body'],
                     'state': source['state'],
                     'labels': source['labels'],
                     'score': score,

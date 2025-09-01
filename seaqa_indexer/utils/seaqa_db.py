@@ -1,3 +1,4 @@
+import datetime
 import logging
 from sqlalchemy import text
 
@@ -30,6 +31,7 @@ class SeaqaDB(object):
             sql = """UPDATE project_connection
                        SET updated_at = :updated_at
                        WHERE id = :connection_id"""
+            updated_at = datetime.datetime.strptime(updated_at, "%Y-%m-%dT%H:%M:%SZ") if updated_at else None
             session.execute(text(sql), {
                 'updated_at': updated_at,
                 'connection_id': connection_id
