@@ -25,8 +25,8 @@ class BatchCrawlPipeline:
             return
 
         if urls_to_delete:
-            sql = f"""SELECT pk FROM `{self.site_id}` WHERE url in ({urls_to_delete}) LIMIT {len(urls_to_delete)}"""
-            pks = self.seadb_api.list_seadb_table_records(self.project_uuid, sql)
+            sql = f"""SELECT _pk FROM `{self.site_id}` WHERE url in ({urls_to_delete}) LIMIT {len(urls_to_delete)}"""
+            pks = self.seadb_api.query_rows(self.project_uuid, sql)
             self.seadb_api.delete_rows(self.project_uuid, self.site_id, pks)
             files = [url_to_filename(url) for url in urls_to_delete]
             self.storage.batch_delete_files(self.site_id, self.project_uuid, files)
