@@ -2,7 +2,7 @@ import re
 import hashlib
 import urllib.parse
 from seaqa_indexer.crawler.extractor import extract_html
-from seaqa_indexer.crawler.storage import get_storage
+from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
 
 
 def url_to_filename(url):
@@ -71,19 +71,16 @@ def spider_parse_item(spider, response):
     }
 
 
-def load_existing_site_info(site_id, project_uuid, existing_site_info):
+def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api=None, limit=1000):
     """Load the ETag and Last-Modified information of an existing file"""
-    storage = get_storage()
-    if storage is None:
+    if seadb_api is None:
         return
-    for filename in storage.iter_files(site_id, project_uuid):
-        data = storage.read_json(site_id, project_uuid, filename)
-        if not data:
-            continue
-        url = data.get('url')
-        if not url:
-            continue
-        existing_site_info[url] = {
-            'etag': data.get('etag'),
-            'last_modified': data.get('last_modified'),
+    sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`
+    FROM `{site_id}`
+    WHERE `{WEB_CRAWL_TABLE.columns.url.name}` IS NOT NULL LIMIT {limit}"""
+    result = seadb_api.query_rows(project_uuid, sql)
+    for row in result.get('results', []):
+        existing_site_info[row.get('url')] = {
+            'etag': row.get('etag'),
+            'last_modified': row.get('last_modified'),
         }

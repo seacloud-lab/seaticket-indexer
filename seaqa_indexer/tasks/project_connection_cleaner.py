@@ -12,6 +12,7 @@ from seaqa_indexer.seasearch.index_manager import IndexManager
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ class ProjectConnectionCleaner(object):
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         self.storage = get_storage()
+        self.seadb_api = SeaDBAPI()
 
         self.set_signal()
 
@@ -110,6 +112,8 @@ class ProjectConnectionCleaner(object):
         # delete crawled file folder
         if self.storage is not None:
             self.storage.delete_project(project_uuid)
+        
+        self.seadb_api.delete_base(project_uuid)
         # delete db record
         self.delete_deleted_project(project_uuid)
 
@@ -121,6 +125,10 @@ class ProjectConnectionCleaner(object):
         if connection_type == ConnectionType.SITE.value:
             if self.storage is not None:
                 self.storage.delete_site(connection_id, project_uuid)
+            base_info = self.seadb_api.get_base_info(project_uuid)
+            tables = base_info['tables']
+            table_id = [table['id'] for table in tables if table['name'] == str(connection_id)][0]
+            self.seadb_api.delete_table(project_uuid, table_id)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             self.delete_issues_from_db(connection_id)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
