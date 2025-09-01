@@ -49,9 +49,6 @@ class GitHubIssuesIndex(object):
             'labels': {
                 'type': 'keyword',
             },
-            'comments_count': {
-                'type': 'integer',
-            },
             'comments_body': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
@@ -220,7 +217,6 @@ class GitHubIssuesIndex(object):
             'comments_body': issue_data.get('comments_body', []),
             'state': issue_data['state'],
             'labels': [label['name'] for label in issue_data.get('labels', [])],
-            'comments_count': issue_data['comments_count'],
         }
 
         bulk_ops = [
@@ -273,7 +269,7 @@ class GitHubIssuesIndex(object):
         with self.db_session_class() as session:
             sql = """
                    SELECT id, issue_id, issue_number, title, body, state, created_at,
-                          updated_at, closed_at, labels, comments_count, author, url, deleted
+                          updated_at, closed_at, labels, author, url, deleted
                    FROM github_issues
                    WHERE connection_id = :connection_id AND need_index = 1
                """
@@ -330,7 +326,6 @@ class GitHubIssuesIndex(object):
                 'state': issue.state,
                 'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
                 'comments_body': comments_list,
-                'comments_count':issue.comments_count,
                 'user': {'login': issue.author},
                 'url': issue.url,
                 'repo_owner': repo_owner,
