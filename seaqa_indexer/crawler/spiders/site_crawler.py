@@ -11,7 +11,7 @@ class SiteCrawlerSpider(CrawlSpider):
         Rule(LinkExtractor(), callback='parse_item', follow=True),
     )
 
-    def __init__(self, site_url, project_uuid, site_id, connection_status, update_connection_status, *args, **kwargs):
+    def __init__(self, site_url, project_uuid, site_id, connection_status, web_crawl_table, update_connection_status, seadb_api, *args, **kwargs):
         super(SiteCrawlerSpider, self).__init__(*args, **kwargs)
         self.start_urls = [site_url]
         parsed_uri = urlparse(site_url)
@@ -20,17 +20,19 @@ class SiteCrawlerSpider(CrawlSpider):
         self.project_uuid = project_uuid
         self.site_id = site_id
         self.connection_status = connection_status
+        self.web_crawl_table = web_crawl_table
         self.update_connection_status = update_connection_status
         self.crawled_count = 0
         self.processed_urls = set()
 
         self.existing_site_info = {}
+        self.seadb_api = seadb_api
         self._load_existing_site_info()
         self.logger.info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
 
     def _load_existing_site_info(self):
         """Load the ETag and Last-Modified information of an existing file"""
-        load_existing_site_info(self.site_id, self.project_uuid, self.existing_site_info)
+        load_existing_site_info(self.site_id, self.project_uuid, self.existing_site_info, self.web_crawl_table, self.seadb_api)
 
     def parse_item(self, response):
         """Parse the page content and extract the data"""

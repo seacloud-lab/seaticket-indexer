@@ -5,20 +5,18 @@ from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.storage import get_storage
 
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
-
 
 class BatchCrawlPipeline:
     def __init__(self):
         self.project_uuid = None
         self.site_id = None
         self.storage = get_storage()
-        self.seadb_api = SeaDBAPI()
 
     def open_spider(self, spider):
         self.project_uuid = spider.project_uuid
         self.site_id = spider.site_id
+        self.seadb_api = spider.seadb_api
+        self.web_crawl_table = spider.web_crawl_table
 
     def close_spider(self, spider):
         urls_to_delete = set(spider.existing_site_info.keys()) - spider.processed_urls
@@ -32,7 +30,7 @@ class BatchCrawlPipeline:
             pks = self.seadb_api.list_seadb_table_records(self.project_uuid, sql)
             self.seadb_api.delete_rows(self.project_uuid, self.site_id, pks)
             files = [url_to_filename(url) for url in urls_to_delete]
-            self.storage.batch_delete_objects(self.site_id, self.project_uuid, files)
+            self.storage.batch_delete_files(self.site_id, self.project_uuid, files)
             spider.logger.info('delete files: %s', files)
 
         spider.connection_status['total_records'] = len(spider.processed_urls)
@@ -63,10 +61,10 @@ class BatchCrawlPipeline:
             return
         insert_rows = [
             {
-                WEB_CRAWL_TABLE.columns.url.name: url,
-                WEB_CRAWL_TABLE.columns.title.name: title,
-                WEB_CRAWL_TABLE.columns.etag.name: etag,
-                WEB_CRAWL_TABLE.columns.last_modified.name: last_modified,
+                self.web_crawl_table.columns.url.name: url,
+                self.web_crawl_table.columns.title.name: title,
+                self.web_crawl_table.columns.etag.name: etag,
+                self.web_crawl_table.columns.last_modified.name: last_modified,
             }
         ]
         self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})

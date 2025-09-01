@@ -1,9 +1,9 @@
 import time
 import jwt
-import uuid
 import requests
 
 from seaqa_indexer.config import JWT_PRIVATE_KEY, SEADB_SERVER_URL
+from seaqa_indexer.utils import uuid_str_to_36_chars
 
 
 def parse_response(response):
@@ -15,13 +15,6 @@ def parse_response(response):
         except:
             pass
 
-def uuid_str_to_36_chars(uuid_str):
-    if isinstance(uuid_str, uuid.UUID):
-        return str(uuid_str)
-    if len(uuid_str) == 32:
-        return str(uuid.UUID(uuid_str))
-    else:
-        return uuid_str
 
 class SeaDBAPI:
     def __init__(self, username='', timeout=30):

@@ -12,6 +12,8 @@ from twisted.internet.threads import deferToThread
 
 from seaqa_indexer.crawler.spiders.site_crawler import SiteCrawlerSpider
 from seaqa_indexer.crawler.spiders.sitemap_crawler import SitemapCrawlerSpider
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
+from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,7 @@ class WebCrawl:
 
         self.settings = get_project_settings()
         self.runner = CrawlerRunner(self.settings)
+        self.seadb_api = SeaDBAPI()
 
     def update_connection_status(self, site_id, status, is_update_time=False):
         with self.db_session_class() as session:
@@ -129,7 +132,9 @@ class WebCrawl:
                 site_id,
                 sitemap_url,
                 connection_status,
-                self.update_connection_status
+                web_crawl_table=WEB_CRAWL_TABLE,
+                update_connection_status=self.update_connection_status,
+                seadb_api=self.seadb_api
             )
         else:
             d = self.runner.crawl(
@@ -138,7 +143,9 @@ class WebCrawl:
                 project_uuid=project_uuid,
                 site_id=site_id,
                 connection_status=connection_status,
+                web_crawl_table=WEB_CRAWL_TABLE,
                 update_connection_status=self.update_connection_status,
+                seadb_api=self.seadb_api
             )
 
         d.addCallback(success_call_back, (site_id,))

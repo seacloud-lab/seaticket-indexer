@@ -5,6 +5,7 @@ import atexit
 import subprocess
 import hashlib
 import json
+import uuid 
 from datetime import datetime, timezone
 from copy import deepcopy
 from seaqa_indexer.utils.hasher import AESPasswordHasher
@@ -135,3 +136,11 @@ def encrypt_config(config):
 def need_update_connection_status(item_count):
     from seaqa_indexer.utils.constants import CONNECTION_STATUS_UPDATE_LIMIT
     return item_count / CONNECTION_STATUS_UPDATE_LIMIT == item_count // CONNECTION_STATUS_UPDATE_LIMIT
+
+def uuid_str_to_36_chars(uuid_str):
+    if isinstance(uuid_str, uuid.UUID):
+        return str(uuid_str)
+    if len(uuid_str) == 32:
+        return str(uuid.UUID(uuid_str))
+    else:
+        return uuid_str

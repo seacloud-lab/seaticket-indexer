@@ -86,7 +86,7 @@ class S3Storage(BaseStorage):
         key = self._key(project_uuid, site_id, filename)
         self.client.delete_object(Bucket=self.bucket, Key=key)
     
-    def batch_delete_objects(self, site_id, project_uuid, files):
+    def batch_delete_files(self, site_id, project_uuid, files):
         prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=site_id)
         objects = [{'Key': prefix + file} for file in files]
         self.client.delete_objects(Bucket=self.bucket, Delete={'Objects': objects})
