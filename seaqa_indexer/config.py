@@ -62,4 +62,3 @@ S3_HOST = os.environ.get('S3_HOST')
 S3_WEB_CRAWL_BUCKET = os.environ.get('S3_WEB_CRAWL_BUCKET')
 S3_KEY_ID = os.environ.get('S3_KEY_ID')
 S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY')
-

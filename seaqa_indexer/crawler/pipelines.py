@@ -9,7 +9,6 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
 
 
-
 class BatchCrawlPipeline:
     def __init__(self):
         self.project_uuid = None

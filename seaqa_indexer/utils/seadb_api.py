@@ -1,7 +1,7 @@
-import requests
-import jwt
 import time
+import jwt
 import uuid
+import requests
 
 from seaqa_indexer.config import JWT_PRIVATE_KEY, SEADB_SERVER_URL
 
@@ -160,4 +160,3 @@ class SeaDBAPI:
         }
         response = requests.delete(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
-

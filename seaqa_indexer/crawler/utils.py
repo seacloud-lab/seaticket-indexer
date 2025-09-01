@@ -74,11 +74,11 @@ def spider_parse_item(spider, response):
 
 def load_existing_site_info(site_id, project_uuid, existing_site_info, limit=1000):
     """Load the ETag and Last-Modified information of an existing file"""
-    sea_db_api = SeaDBAPI()
+    seadb_api = SeaDBAPI()
     sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`
     FROM `{site_id}`
     WHERE `{WEB_CRAWL_TABLE.columns.url.name}` IS NOT NULL LIMIT {limit}"""
-    result = sea_db_api.query_rows(project_uuid, sql)
+    result = seadb_api.query_rows(project_uuid, sql)
     for row in result.get('results', []):
         existing_site_info[row.get('url')] = {
             'etag': row.get('etag'),
