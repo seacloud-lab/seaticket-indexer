@@ -2,6 +2,7 @@ import re
 import hashlib
 import urllib.parse
 from seaqa_indexer.crawler.extractor import extract_html
+from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
 
 
 def url_to_filename(url):
@@ -70,13 +71,13 @@ def spider_parse_item(spider, response):
     }
 
 
-def load_existing_site_info(site_id, project_uuid, existing_site_info, web_crawl_table, seadb_api, limit=1000):
+def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api=None, limit=1000):
     """Load the ETag and Last-Modified information of an existing file"""
     if seadb_api is None:
-        seadb_api = SeaDBAPI()
-    sql = f"""SELECT `{web_crawl_table.columns.url.name}`, `{web_crawl_table.columns.etag.name}`, `{web_crawl_table.columns.last_modified.name}`
+        return
+    sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`
     FROM `{site_id}`
-    WHERE `{web_crawl_table.columns.url.name}` IS NOT NULL LIMIT {limit}"""
+    WHERE `{WEB_CRAWL_TABLE.columns.url.name}` IS NOT NULL LIMIT {limit}"""
     result = seadb_api.query_rows(project_uuid, sql)
     for row in result.get('results', []):
         existing_site_info[row.get('url')] = {
