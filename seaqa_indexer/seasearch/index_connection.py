@@ -93,7 +93,7 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     project_uuid = project_connection.project_uuid
     connection_status = json.loads(project_connection.status)
 
-    seafile_index = SeafileIndex(seasearch_api, seaqa_db)
+    seafile_index = SeafileIndex(seasearch_api)
     seahub_api = SeahubAPI(server_url, api_token)
     repo_info = seahub_api.get_repo_info()
     new_repo_id = repo_info.get('repo_id')
