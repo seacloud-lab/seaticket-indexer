@@ -6,6 +6,8 @@ from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.storage import get_storage
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
+from seaqa_indexer.crawler.utils import url_to_filename
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,7 @@ class SiteIndex(object):
         self.shard_num = shard_num
         self.lang = LANG
         self.storage = get_storage()
+        self.seadb_api = SeaDBAPI()
 
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
@@ -290,32 +293,68 @@ class SiteIndex(object):
             connection_status['last_indexed_count'] = index_count
             seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             return index_count
-        for filename in self.storage.iter_files(connection_id, project_uuid):
-            crawled_data = self.storage.read_json(connection_id, project_uuid, filename)
+        
+        page_size = 1000
+        offset = 0
+        bulk_params = []
+        
+        def _flush_bulk_if_needed(force=False):
+            nonlocal bulk_params
+            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
+                self.seasearch_api.bulk(site_index_name, bulk_params)
+                bulk_params = []
 
-            url = crawled_data.get('url')
-            etag = crawled_data.get('etag')
-            last_modified = crawled_data.get('last_modified')
-            content = crawled_data.get('content')
-            title = crawled_data.get('title')
+        while True:
+            sql = f"""SELECT * FROM `{connection_id}`
+                ORDER BY url LIMIT {page_size} OFFSET {offset}"""
+            result = self.seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+            if not rows:
+                break
 
-            key = self.gen_index_id(connection_id, url)
-            new_index_ids_set.add(key)
+            for row in rows:
+                url = row.get('url')
+                etag = row.get('etag')
+                last_modified = row.get('last_modified')
+                title = row.get('title')
+                key = self.gen_index_id(connection_id, url)
+                new_index_ids_set.add(key)
 
-            logger.debug('start to update url: %s', url)
-            indexed_site_info = index_id_to_site_info.get(key)
+                logger.debug('start to update url: %s', url)
+                indexed_site_info = index_id_to_site_info.get(key)
 
-            if not indexed_site_info:
-                self.add_document(site_index_name, connection_id, content, url, etag, title, last_modified)
-            else:
-                if (etag and indexed_site_info.get('etag') == etag) or \
-                        (last_modified and indexed_site_info.get('last_modified') == last_modified):
+                if indexed_site_info and (
+                    (etag and indexed_site_info.get('etag') == etag) or
+                    (last_modified and indexed_site_info.get('last_modified') == last_modified)
+                ):
                     continue
-                self.update_document(site_index_name, connection_id, content, url, etag, title, last_modified)
-            index_count += 1
-            if need_update_connection_status(index_count):
-                connection_status['last_indexed_count'] = index_count
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+
+                filename = url_to_filename(url)
+                file_json = self.storage.read_json(connection_id, project_uuid, filename)
+                content = file_json.get('content')
+
+                index_info = {'index': {'_index': site_index_name, '_id': key}}
+                doc_info = {
+                    'connection_id': connection_id,
+                    'content': content,
+                    'url': url,
+                    'etag': etag,
+                    'title': title,
+                    'last_modified': last_modified,
+                }
+                bulk_params.append(index_info)
+                bulk_params.append(doc_info)
+
+                index_count += 1
+                if need_update_connection_status(index_count):
+                    connection_status['last_indexed_count'] = index_count
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+
+                _flush_bulk_if_needed()
+
+            offset += page_size
+
+        _flush_bulk_if_needed(force=True)
         # clear deleted site crawled url
         need_cleared_site_id_set = old_index_ids_set - new_index_ids_set
         self.delete_indexes_by_ids(site_index_name, need_cleared_site_id_set)

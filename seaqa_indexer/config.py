@@ -18,6 +18,9 @@ MYSQL_PORT = 3306
 MYSQL_DB = 'sea_qa'
 MYSQL_UNIX_SOCKET = ''
 
+# SeaDB Configuration
+SEADB_SERVER_URL = ''
+
 # index setting
 LANG = 'chinese'
 
@@ -48,6 +51,8 @@ MYSQL_PASSWORD = os.getenv('SEAQA_MYSQL_DB_PASSWORD') or MYSQL_PASSWORD
 MYSQL_PORT = int(os.getenv('SEAQA_MYSQL_DB_PORT')) if os.getenv('WEB_CRAWLER_MYSQL_PORT') else MYSQL_PORT
 MYSQL_DB_NAME = os.getenv('SEAQA_MYSQL_DB_NAME') or MYSQL_DB
 MYSQL_UNIX_SOCKET = os.getenv('WEB_CRAWLER_MYSQL_UNIX_SOCKET') or MYSQL_UNIX_SOCKET
+
+SEADB_SERVER_URL = os.getenv('SEADB_SERVER_URL') or SEADB_SERVER_URL
 
 REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
 REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
