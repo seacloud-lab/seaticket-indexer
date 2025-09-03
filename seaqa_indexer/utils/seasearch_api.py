@@ -49,10 +49,7 @@ class SeaSearchAPI(object):
 
     def create_index(self, index_name, data):
         url = self.server + '/api/index/' + index_name
-        print(url)
-        print(data)
         response = requests.put(url, headers=self.headers, json=data, timeout=self.timeout)
-        print(response.__dict__)
         if response.status_code == 400:
             raise Exception('create index: %s, error: %s' % (index_name, response.text))
         data = parse_response(response)

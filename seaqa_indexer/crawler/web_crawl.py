@@ -34,8 +34,9 @@ class WebCrawl:
             params = {'site_id': site_id, 'status': status}
             if is_update_time:
                 updated_at = datetime.datetime.now(datetime.UTC)
-                cmd += ", updated_at=:updated_at"
+                cmd += ", updated_at=:updated_at, synced_at=:synced_at"
                 params['updated_at'] = updated_at
+                params['synced_at'] = updated_at
 
             cmd += " WHERE id = :site_id"
 

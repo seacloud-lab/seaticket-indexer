@@ -36,10 +36,10 @@ class SeaqaDB(object):
             })
             session.commit()
 
-    def update_status_and_time(self, connection_id, status, updated_at):
+    def update_status_and_time(self, connection_id, status, updated_at, synced_at):
         with self.db_session_class() as session:
-            cmd = """UPDATE project_connection SET updated_at=:updated_at, status=:status WHERE id = :connection_id"""
-            params = {'connection_id': connection_id, 'updated_at': updated_at, 'status': status}
+            cmd = """UPDATE project_connection SET updated_at=:updated_at, synced_at=:synced_at, status=:status WHERE id = :connection_id"""
+            params = {'connection_id': connection_id, 'updated_at': updated_at, 'synced_at': synced_at, 'status': status}
             session.execute(text(cmd), params)
             session.commit()
 
@@ -49,13 +49,16 @@ class SeaqaDB(object):
             session.execute(text(cmd), {'connection_id': connection_id, 'config': config})
             session.commit()
 
-    def update_connection(self, connection_id, indexed_at, connection_status, updated_at=None, config=None):
+    def update_connection(self, connection_id, indexed_at, connection_status, updated_at=None, synced_at=None, config=None):
         with self.db_session_class() as session:
             cmd = """UPDATE project_connection SET indexed_at=:indexed_at, status=:connection_status"""
             params = {'connection_id': connection_id, 'indexed_at': indexed_at, 'connection_status': connection_status}
             if updated_at:
                 cmd += ", updated_at=:updated_at"
                 params['updated_at'] = updated_at
+            if synced_at:
+                cmd += ", synced_at=:synced_at"
+                params['synced_at'] = synced_at
             if config:
                 cmd += ", config=:config"
                 params['config'] = config

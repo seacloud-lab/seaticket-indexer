@@ -2,7 +2,6 @@
 import logging
 import json
 import datetime
-import zoneinfo
 
 from sqlalchemy.sql import text
 from threading import Thread, Event
@@ -27,14 +26,14 @@ class ProjectConnectionTaskPublisher(object):
         self._logfile = LOG_FILE
         self._loglevel = LOG_LEVEL
         self._interval = 24 * 60 * 60
-        self._sync_interval_days = 3 # days
+        self._sync_interval = 3 * 24 * 60 * 60
 
     def start(self):
         if not self.is_enabled():
             logging.warning('Can not start project connection task publisher: it is not enabled!')
             return
 
-        ProjectConnectionTaskPublisherTimer(self._logfile, self._loglevel, self._interval, self._sync_interval_days).start()
+        ProjectConnectionTaskPublisherTimer(self._logfile, self._loglevel, self._interval, self._sync_interval).start()
         logging.info('project connection task publisher is started')
 
     def is_enabled(self):
@@ -42,13 +41,13 @@ class ProjectConnectionTaskPublisher(object):
 
 
 class ProjectConnectionTaskPublisherTimer(Thread):
-    def __init__(self, logfile, loglevel, interval, sync_interval_days):
+    def __init__(self, logfile, loglevel, interval, sync_interval):
         Thread.__init__(self)
         self._logfile = logfile
         self._loglevel = loglevel
         self.finished = Event()
         self._interval = interval
-        self._sync_interval_days = sync_interval_days
+        self._sync_interval = sync_interval
         self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
@@ -63,9 +62,9 @@ class ProjectConnectionTaskPublisherTimer(Thread):
     
     def get_last_sync_time(self, connection_id):
         with self.db_session_class() as session:
-            sql = """SELECT updated_at FROM project_connection WHERE id=:connection_id"""
+            sql = """SELECT synced_at FROM project_connection WHERE id=:connection_id"""
             result = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-            return result.updated_at
+            return result.synced_at
 
     def publish_project_connection_tasks(self):
         start, limit = 0, 1000
@@ -78,13 +77,14 @@ class ProjectConnectionTaskPublisherTimer(Thread):
             start += 1000
             if len(project_connections) == 0:
                 break
+            now = datetime.datetime.now(datetime.timezone.utc)
             for project_connection in project_connections:
                 connection_id = project_connection.id
                 connection_type = project_connection.type
                 try:
                     last_sync_time = self.get_last_sync_time(connection_id)
-                    last_sync_time = last_sync_time.replace(tzinfo=zoneinfo.ZoneInfo('UTC'))
-                    if (datetime.datetime.now(datetime.UTC) - last_sync_time).days > self._sync_interval_days or last_sync_time is None:
+                    last_sync_time = last_sync_time.replace(tzinfo=datetime.timezone.utc)
+                    if (now - last_sync_time).total_seconds() > self._sync_interval or last_sync_time is None:
                         if connection_type == ConnectionType.SITE.value:
                             self.add_crawl_site_task(connection_id)
                         elif connection_type == ConnectionType.SEAFILE.value:

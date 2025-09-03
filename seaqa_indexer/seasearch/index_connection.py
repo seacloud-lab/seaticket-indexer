@@ -84,7 +84,7 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     server_url = config.get('server_url')
     api_token = config.get('api_token')
     old_repo_id = config.get('repo_id')
-    old_last_modified = project_connection.indexed_at
+    old_last_modified = project_connection.updated_at
     project_uuid = project_connection.project_uuid
     connection_status = json.loads(project_connection.status)
 
@@ -98,12 +98,12 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     redis_cache.set(new_repo_id, json.dumps({server_url: new_repo_name}), REPO_NAME_CACHE_TIME_OUT)
 
     new_last_modified = time_str_to_utc_time(new_last_modified)
-    new_updated_at = datetime.datetime.now(datetime.UTC)
-
+    new_indexed_at = datetime.datetime.now(datetime.UTC)
     if new_repo_id == old_repo_id and str(old_last_modified) == str(new_last_modified).split('+')[0]:
         connection_status['last_indexed_count'] = 0
         connection_status['last_index_status'] = IndexStatus.COMPLETED
-        seaqa_db.update_connection(connection_id, old_last_modified, json.dumps(connection_status), updated_at=new_updated_at)
+        connection_status['last_sync_status'] = CrawlStatus.COMPLETED
+        seaqa_db.update_connection(connection_id, old_last_modified, json.dumps(connection_status), synced_at=new_indexed_at)
         logger.info('connection: %s, repo: %s does not change, skip this update', connection_id, new_repo_id)
         return
 
@@ -116,8 +116,9 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     config['repo_name'] = new_repo_name
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
+    connection_status['last_sync_status'] = CrawlStatus.COMPLETED
     connection_status['total_records'] = total_records
-    seaqa_db.update_connection(connection_id, new_last_modified, json.dumps(connection_status), updated_at=new_updated_at, config=encrypt_config(config))
+    seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status), updated_at=new_last_modified, synced_at=new_indexed_at, config=encrypt_config(config))
 
 
 def update_github_issues_index(project_connection, seasearch_api, db_session_class, seaqa_db):
