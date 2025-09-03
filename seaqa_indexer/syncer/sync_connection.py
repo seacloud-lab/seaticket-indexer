@@ -55,7 +55,7 @@ def sync_connection(connection_id, db_session_class, mq):
             discourse_sync = DiscourseSync(db_session_class)
             latest_bumped_at, sync_count = discourse_sync.sync(connection_id, forum_url, discourse_api_key, discourse_api_username, last_updated_at, connection_status)
 
-            new_updated_at = latest_bumped_at if latest_bumped_at else last_updated_at
+            new_updated_at = latest_bumped_at if latest_bumped_at else datetime.datetime.now(datetime.UTC)
             total_count = discourse_sync.get_discourse_forum_count(connection_id)
 
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
