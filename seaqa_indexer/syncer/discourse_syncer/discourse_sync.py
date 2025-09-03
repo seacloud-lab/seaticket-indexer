@@ -23,7 +23,8 @@ class DiscourseSync:
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
         if existing_topic:
-            self.update_topic(title, slug, views, category_id, topic_id, connection_id)
+            bumped_at = time_str_to_utc_time(topic_data.get('last_posted_at'))
+            self.update_topic(title, slug, views, category_id, topic_id, connection_id, bumped_at)
             logger.debug(f"Updated existing topic {topic_id}")
         else:
             # When using webhook, the returned value does not have a bumped_at.
@@ -108,18 +109,19 @@ class DiscourseSync:
             })
             session.commit()
 
-    def update_topic(self, title, slug, views, category_id, topic_id, connection_id):
+    def update_topic(self, title, slug, views, category_id, topic_id, connection_id, bumped_at):
         """Update an existing topic"""
         with self.db_session_class() as session:
             sql = """UPDATE discourse_topics 
                        SET title = :title, slug = :slug, views = :views, 
-                           category_id = :category_id 
+                           category_id = :category_id, bumped_at = :bumped_at
                        WHERE topic_id = :topic_id AND connection_id = :connection_id"""
             session.execute(text(sql), {
                 'title': title,
                 'slug': slug,
                 'views': views,
                 'category_id': category_id,
+                'bumped_at': bumped_at,
                 'topic_id': topic_id,
                 'connection_id': connection_id
             })

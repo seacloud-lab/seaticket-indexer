@@ -40,6 +40,9 @@ class DiscourseIndex(object):
             'slug': {
                 'type': 'keyword'
             },
+            'bumped_at': {
+                'type': 'date'
+            },
         }
     }
 
@@ -136,7 +139,7 @@ class DiscourseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'topic_id', 'title', 'body', 'slug'],
+            '_source': ['connection_id', 'topic_id', 'title', 'body', 'slug', 'bumped_at'],
             'sort': [
                 '_score'
             ],
@@ -181,6 +184,7 @@ class DiscourseIndex(object):
                 'body': source['body'],
                 'category_id': source.get('category_id'),
                 'slug': source['slug'],
+                'bumped_at': source['bumped_at'],
             }
             discourse_posts.append(post)
 
@@ -205,6 +209,7 @@ class DiscourseIndex(object):
             'body': body_content,
             'category_id': topic_data.get('category_id'),
             'slug': topic_data.get('slug', ''),
+            'bumped_at': topic_data.get('bumped_at'),
         }
 
         bulk_ops = [
@@ -256,7 +261,8 @@ class DiscourseIndex(object):
     def get_all_need_index_topics_from_db(self, connection_id):
         with self.db_session_class() as session:
             sql = """
-                   SELECT topic_id, title, slug, category_id, deleted
+                   SELECT topic_id, title, slug, category_id, deleted, 
+                   bumped_at
                    FROM discourse_topics
                    WHERE connection_id = :connection_id AND need_index = 1
                """
@@ -300,6 +306,7 @@ class DiscourseIndex(object):
                 'title': topic.title,
                 'slug': topic.slug,
                 'category_id': topic.category_id,
+                'bumped_at': topic.bumped_at,
             }
 
             if topic.deleted == 1:

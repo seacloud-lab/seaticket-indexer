@@ -197,6 +197,7 @@ class IndexManager:
                     'content': source['body'],
                     'slug': source['slug'],
                     'score': score,
+                    'bumped_at': source['bumped_at'],
                     '_id': _id,
                     'type': 'discourse_forum',
                 }
