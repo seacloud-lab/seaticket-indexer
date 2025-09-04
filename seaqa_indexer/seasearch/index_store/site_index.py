@@ -240,7 +240,7 @@ class SiteIndex(object):
             },
             "from": start,
             "size": size,
-            "_source": ["url"],
+            "_source": ["url", "last_modified", "etag"],
             "sort": ["@url"],
         }
 
@@ -293,11 +293,11 @@ class SiteIndex(object):
             connection_status['last_indexed_count'] = index_count
             seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             return index_count
-        
+
         page_size = 1000
         offset = 0
         bulk_params = []
-        
+
         def _flush_bulk_if_needed(force=False):
             nonlocal bulk_params
             if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
