@@ -49,7 +49,7 @@ class IndexManager:
         #delete issues index
         issues_index_name = gen_index_name_by_type(project_uuid,ConnectionType.GITHUB_ISSUE.value)
         self.github_issues_index.delete_index_by_index_name(issues_index_name)
-        
+
         # delete discourse index
         discourse_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
         self.discourse_index.delete_index_by_index_name(discourse_index_name)
@@ -76,7 +76,7 @@ class IndexManager:
                 _id = hit['_id']
                 ids.append(_id)
 
-            self.seafile_index.delete_indexes_by_ids(index_name, ids)
+            index.delete_indexes_by_ids(index_name, ids)
 
     def add_connection_index_task(self, connection_id):
         msg_content = {
