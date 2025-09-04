@@ -83,11 +83,11 @@ def sync_connection(connection_id, db_session_class, mq):
     # finish sync
     if not new_updated_at:
         new_updated_at = last_updated_at
-    synced_at = datetime.datetime.now(datetime.UTC)
+    last_sync_time = datetime.datetime.now(datetime.UTC)
     connection_status['total_records'] = total_count
     connection_status['last_sync_count'] = sync_count
     connection_status['last_sync_status'] = CrawlStatus.COMPLETED
-    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), new_updated_at, synced_at)
+    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), new_updated_at, last_sync_time)
 
     logger.info('Finish sync connection: %s', connection_id)
     msg_content = {

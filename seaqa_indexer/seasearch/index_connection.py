@@ -102,8 +102,7 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     if new_repo_id == old_repo_id and str(old_last_modified) == str(new_last_modified).split('+')[0]:
         connection_status['last_indexed_count'] = 0
         connection_status['last_index_status'] = IndexStatus.COMPLETED
-        connection_status['last_sync_status'] = CrawlStatus.COMPLETED
-        seaqa_db.update_connection(connection_id, old_last_modified, json.dumps(connection_status), synced_at=new_indexed_at)
+        seaqa_db.update_connection(connection_id, old_last_modified, json.dumps(connection_status), last_sync_time=new_indexed_at)
         logger.info('connection: %s, repo: %s does not change, skip this update', connection_id, new_repo_id)
         return
 
@@ -116,9 +115,8 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     config['repo_name'] = new_repo_name
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
-    connection_status['last_sync_status'] = CrawlStatus.COMPLETED
     connection_status['total_records'] = total_records
-    seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status), updated_at=new_last_modified, synced_at=new_indexed_at, config=encrypt_config(config))
+    seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status), updated_at=new_last_modified, last_sync_time=new_indexed_at, config=encrypt_config(config))
 
 
 def update_github_issues_index(project_connection, seasearch_api, db_session_class, seaqa_db):

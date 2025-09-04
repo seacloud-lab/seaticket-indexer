@@ -240,7 +240,7 @@ class SiteIndex(object):
             },
             "from": start,
             "size": size,
-            "_source": ["url"],
+            "_source": ["url", "last_modified", "etag"],
             "sort": ["@url"],
         }
 

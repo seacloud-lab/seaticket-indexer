@@ -62,9 +62,9 @@ class ProjectConnectionTaskPublisherTimer(Thread):
     
     def get_last_sync_time(self, connection_id):
         with self.db_session_class() as session:
-            sql = """SELECT synced_at FROM project_connection WHERE id=:connection_id"""
+            sql = """SELECT last_sync_time FROM project_connection WHERE id=:connection_id"""
             result = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-            return result.synced_at
+            return result.last_sync_time
 
     def publish_project_connection_tasks(self):
         start, limit = 0, 1000
