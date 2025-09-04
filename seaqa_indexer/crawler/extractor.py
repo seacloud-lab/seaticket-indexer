@@ -1,4 +1,5 @@
 import logging
+from lxml import etree
 from copy import copy
 
 from trafilatura.core import trafilatura_sequence
@@ -37,4 +38,16 @@ def extract_html(url, file_content, favor_precision=False, favor_recall=False, f
     cleaned_tree_backup = copy(cleaned_tree)
     postbody, temp_text, len_text = trafilatura_sequence(cleaned_tree, cleaned_tree_backup, tree, options)
 
-    return xmltotxt(postbody, options.formatting)
+    def _localname(tag):
+        return tag.rsplit('}', 1)[-1] if isinstance(tag, str) and '}' in tag else tag
+
+    MARKER = '[[[TBL_SEP]]]'
+    for node in postbody.iter():
+        # handle table
+        if _localname(getattr(node, 'tag', '')) == 'table':
+            node.tail = (node.tail or '') + MARKER
+
+    text = xmltotxt(postbody, options.formatting)
+    if text:
+        text = text.replace(MARKER, '\n')
+    return text
