@@ -117,19 +117,27 @@ def github_webhook():
 
     connection_id = data.get('connection_id')
 
-    issue_data = data.get('issue_data')
+    update_data = data.get('update_data')
 
     if not connection_id:
         return jsonify({'error_msg': 'Missing connection_id parameter'}), 400
     action = data.get('action')
+    event = data.get('event')
+
+    if event == 'issues':
+        try:
+            issue_id = update_data['id']
+        except KeyError as e:
+            return jsonify({'error_msg': 'Missing expected field in webhook payload'}), 400
+    elif event == 'issue_comment':
+        try:
+            issue_data = update_data.get('issue')
+            issue_id = issue_data['id']
+        except KeyError as e:
+            return jsonify({'error_msg': 'Missing expected field in webhook payload'}), 400
 
     try:
-        issue_id = issue_data['id']
-    except KeyError as e:
-        return jsonify({'error_msg': 'Missing expected field in webhook payload'}), 400
-
-    try:
-        application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, issue_data, issue_id, action)
+        application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, update_data, issue_id, action, event)
     except Exception as e:
         logger.error(e)
         return jsonify({'error_msg': 'Internal Server Error'}), 500

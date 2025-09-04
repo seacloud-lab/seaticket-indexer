@@ -20,11 +20,11 @@ class GithubIssuesSync:
                 INSERT INTO github_issues (
                     issue_id, issue_number, title, body, state,
                     created_at, updated_at, closed_at, labels,
-                    comments, connection_id, author, url, need_index
+                    comments_count, connection_id, author, url, need_index
                 ) VALUES (
                     :issue_id, :issue_number, :title, :body, :state,
                     :created_at, :updated_at, :closed_at, :labels,
-                    :comments, :connection_id, :author, :url, :need_index
+                    :comments_count, :connection_id, :author, :url, :need_index
                 )
                 ON DUPLICATE KEY UPDATE
                     title = VALUES(title),
@@ -35,7 +35,7 @@ class GithubIssuesSync:
                     updated_at = VALUES(updated_at),
                     closed_at = VALUES(closed_at),
                     labels = VALUES(labels),
-                    comments = VALUES(comments),
+                    comments_count = VALUES(comments_count),
                     need_index = 1
             """)
 
@@ -57,11 +57,44 @@ class GithubIssuesSync:
                 'closed_at': datetime.datetime.strptime(issue.get('closed_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get
                     ('closed_at') else None,
                 'labels': json.dumps(label_names),
-                'comments': issue.get('comments'),
+                'comments_count': issue.get('comments'),
                 'connection_id': connection_id,
                 'need_index': 1,
             })
             session.commit()
+
+    def save_or_update_issue_comments_to_db(self, connection_id, issue_id, comment):
+        with self.db_session_class() as session:
+            sql = text("""
+                    INSERT INTO github_issue_comments (
+                        comment_id, issue_id, connection_id,
+                        author, body, created_at, updated_at
+                    ) VALUES (
+                        :comment_id, :issue_id, :connection_id,
+                        :author, :body, :created_at, :updated_at
+                    )
+                    ON DUPLICATE KEY UPDATE
+                        author = VALUES(author),
+                        body = VALUES(body),
+                        updated_at = VALUES(updated_at) ;
+                """)
+
+            created_at = datetime.datetime.strptime(comment['created_at'], "%Y-%m-%dT%H:%M:%SZ") if comment.get(
+                'created_at') else None
+            updated_at = datetime.datetime.strptime(comment['updated_at'], "%Y-%m-%dT%H:%M:%SZ") if comment.get(
+                'updated_at') else None
+
+            session.execute(sql, {
+                'comment_id': comment['id'],
+                'issue_id': issue_id,
+                'connection_id': connection_id,
+                'author': comment.get('user', {}).get('login', ''),
+                'body': comment.get('body', ''),
+                'created_at': created_at,
+                'updated_at': updated_at,
+            })
+            session.commit()
+
 
     def tag_issue_deleted(self, connection_id, issue_id):
         with self.db_session_class() as session:
@@ -73,6 +106,37 @@ class GithubIssuesSync:
             session.execute(sql, {
                 'connection_id': connection_id,
                 'issue_id': issue_id
+            })
+            session.commit()
+
+    def tag_comment_deleted(self, connection_id, comment_id):
+        with self.db_session_class() as session:
+            sql = text("""
+                UPDATE github_issue_comments
+                SET deleted = 1
+                WHERE connection_id = :connection_id AND comment_id = :comment_id
+            """)
+            session.execute(sql, {
+                'connection_id': connection_id,
+                'comment_id': comment_id
+            })
+            session.commit()
+
+    def update_issue_record(self, connection_id, issue_id, updated_at, comments_count):
+        with self.db_session_class() as session:
+            sql = text("""
+                UPDATE github_issues
+                SET need_index = 1, updated_at = :updated_at, comments_count = :comments_count
+                WHERE connection_id = :connection_id AND issue_id = :issue_id
+            """)
+
+            updated_time = datetime.datetime.strptime(updated_at, "%Y-%m-%dT%H:%M:%SZ") if updated_at else None,
+
+            session.execute(sql, {
+                'connection_id': connection_id,
+                'issue_id': issue_id,
+                'updated_at': updated_time,
+                'comments_count': comments_count,
             })
             session.commit()
 
@@ -106,6 +170,15 @@ class GithubIssuesSync:
                 if need_update_connection_status(sync_count):
                     connection_status['last_sync_count'] = sync_count
                     self.update_connection_status(connection_id, json.dumps(connection_status))
+                comments_page = 1
+                while True:
+                    comments = github_api.get_issue_comments(issue['number'], per_page=per_page, page=comments_page)
+                    comments_page += 1
+                    if not comments:
+                        break
+                    for comment in comments:
+                        sync_count += 1
+                        self.save_or_update_issue_comments_to_db(connection_id, issue['id'], comment)
 
             if len(issues) < per_page:
                 return sync_count
