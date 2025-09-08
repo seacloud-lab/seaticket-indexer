@@ -1,5 +1,6 @@
 import logging
 import json
+import datetime
 
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -42,7 +43,8 @@ def craw_web(connection_id, db_session_class, mq):
         return
 
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
-    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    last_sync_time = datetime.datetime.now(datetime.UTC)
+    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time)
 
     connection_config = json.loads(project_connection.config)
     site_url = connection_config.get('url')

@@ -35,9 +35,10 @@ def sync_connection(connection_id, db_session_class, mq):
 
     connection_id = project_connection.id
     connection_type = project_connection.type
-    last_sync_time_old = project_connection.last_sync_time
+    old_last_sync_time = project_connection.last_sync_time
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
-    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    last_sync_time = datetime.datetime.now(datetime.UTC)
+    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time)
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
@@ -52,14 +53,13 @@ def sync_connection(connection_id, db_session_class, mq):
             discourse_api_username = config['api_username']
 
             discourse_sync = DiscourseSync(db_session_class)
-            latest_bumped_at, sync_count = discourse_sync.sync(connection_id, forum_url, discourse_api_key, discourse_api_username, last_sync_time_old, connection_status)
+            latest_bumped_at, sync_count = discourse_sync.sync(connection_id, forum_url, discourse_api_key, discourse_api_username, old_last_sync_time, connection_status)
 
             total_count = discourse_sync.get_discourse_forum_count(connection_id)
 
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
             server_url = config.get('repository')
             token = config.get('access_token')
-            old_last_sync_time = project_connection.last_sync_time
             try:
                 path = urlparse(server_url).path
                 parts = path.strip("/").split("/")
@@ -78,11 +78,10 @@ def sync_connection(connection_id, db_session_class, mq):
         return
 
     # finish sync
-    last_sync_time = datetime.datetime.now(datetime.UTC)
     connection_status['total_records'] = total_count
     connection_status['last_sync_count'] = sync_count
     connection_status['last_sync_status'] = CrawlStatus.COMPLETED
-    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time)
+    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
 
     logger.info('Finish sync connection: %s', connection_id)
     msg_content = {

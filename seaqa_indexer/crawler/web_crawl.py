@@ -28,17 +28,10 @@ class WebCrawl:
         self.seadb_api = SeaDBAPI()
         self.storage = get_storage()
 
-    def update_connection_status(self, site_id, status, is_update_time=False):
+    def update_connection_status(self, site_id, status):
         with self.db_session_class() as session:
-            cmd = """UPDATE project_connection SET status = :status"""
+            cmd = """UPDATE project_connection SET status = :status WHERE id = :site_id"""
             params = {'site_id': site_id, 'status': status}
-            if is_update_time:
-                last_sync_time = datetime.datetime.now(datetime.UTC)
-                cmd += ", last_sync_time=:last_sync_time"
-                params['last_sync_time'] = last_sync_time
-
-            cmd += " WHERE id = :site_id"
-
             session.execute(text(cmd), params)
             session.commit()
 
