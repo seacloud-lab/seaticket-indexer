@@ -42,7 +42,7 @@ class DiscourseSync:
         existing_reply = self.check_existing_reply(topic_id, post_number, forum.id)
         content = reply_data.get('cooked', '')
         author = reply_data.get('username', '')
-        updated_at = reply_data.get('updated_at')
+        updated_at = time_str_to_utc_time(reply_data.get('updated_at'))
         if existing_reply:
             self.update_reply(content, author, topic_id, post_number, updated_at, forum.id)
             logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
@@ -235,7 +235,7 @@ class DiscourseSync:
             post_number = reply.get('post_number')
             content = reply.get('cooked')
             author = reply.get('username')
-            updated_at = reply.get('updated_at')
+            updated_at = time_str_to_utc_time(reply.get('updated_at'))
 
             self.insert_reply(topic_id, post_number, content, author, updated_at, connection_id)
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
