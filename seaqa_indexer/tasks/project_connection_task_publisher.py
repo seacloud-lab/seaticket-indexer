@@ -1,7 +1,6 @@
 # coding: UTF-8
 import logging
 import json
-import datetime
 
 from sqlalchemy.sql import text
 from threading import Thread, Event
@@ -53,11 +52,21 @@ class ProjectConnectionTaskPublisherTimer(Thread):
 
     def get_project_connections_by_page(self, start, limit):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid, pc.type
-             FROM project_connection pc 
-            INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false LIMIT :start, :limit"""
-            project_connections = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
+            sql = """
+            SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid, pc.type, pc.last_sync_time
+            FROM project_connection pc
+            INNER JOIN projects p ON p.id = pc.project_id
+            WHERE p.deleted = false
+              AND (
+                    pc.last_sync_time IS NULL
+                    OR TIMESTAMPDIFF(SECOND, pc.last_sync_time, UTC_TIMESTAMP()) > :sync_interval
+                  )
+            LIMIT :start, :limit
+            """
+            project_connections = session.execute(
+                text(sql),
+                {'start': start, 'limit': limit, 'sync_interval': self._sync_interval}
+            ).fetchall()
             return project_connections
     
     def get_last_sync_time(self, connection_id):
@@ -77,24 +86,20 @@ class ProjectConnectionTaskPublisherTimer(Thread):
             start += 1000
             if len(project_connections) == 0:
                 break
-            now = datetime.datetime.now(datetime.timezone.utc)
             for project_connection in project_connections:
                 connection_id = project_connection.id
                 connection_type = project_connection.type
                 try:
-                    last_sync_time = self.get_last_sync_time(connection_id)
-                    last_sync_time = last_sync_time.replace(tzinfo=datetime.timezone.utc)
-                    if (now - last_sync_time).total_seconds() > self._sync_interval or last_sync_time is None:
-                        if connection_type == ConnectionType.SITE.value:
-                            self.add_crawl_site_task(connection_id)
-                        elif connection_type == ConnectionType.SEAFILE.value:
-                            self.add_seafile_index_task(connection_id)
-                        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                            self.add_github_issues_sync_task(connection_id)
-                        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                            self.add_discourse_sync_task(connection_id)
-                        else:
-                            logger.error('connection_id: %s, type: %s, not supported.', connection_id, connection_type)
+                    if connection_type == ConnectionType.SITE.value:
+                        self.add_crawl_site_task(connection_id)
+                    elif connection_type == ConnectionType.SEAFILE.value:
+                        self.add_seafile_index_task(connection_id)
+                    elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                        self.add_github_issues_sync_task(connection_id)
+                    elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+                        self.add_discourse_sync_task(connection_id)
+                    else:
+                        logger.error('connection_id: %s, type: %s, not supported.', connection_id, connection_type)
                 except Exception as e:
                     logger.error('cron publish project connection task failed, connection_id: %s, error: %s', connection_id, e)
 

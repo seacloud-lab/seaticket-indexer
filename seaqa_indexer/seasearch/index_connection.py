@@ -63,17 +63,14 @@ def update_site_index(project_connection, seasearch_api, seaqa_db):
 
     connection_id = project_connection.id
     project_uuid = project_connection.project_uuid
-    indexed_at = project_connection.indexed_at
 
     site_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
     site_index.create_index_if_missing(site_index_name)
 
     index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db)
-    if index_count != 0:
-        # finish index
-        connection_status['last_indexed_count'] = index_count
-        indexed_at = datetime.datetime.now(datetime.UTC)
+    connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
+    indexed_at = datetime.datetime.now(datetime.UTC)
     seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
 
@@ -84,7 +81,7 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     server_url = config.get('server_url')
     api_token = config.get('api_token')
     old_repo_id = config.get('repo_id')
-    old_last_modified = project_connection.updated_at
+    old_last_modified = project_connection.indexed_at
     project_uuid = project_connection.project_uuid
     connection_status = json.loads(project_connection.status)
 
@@ -98,11 +95,11 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     redis_cache.set(new_repo_id, json.dumps({server_url: new_repo_name}), REPO_NAME_CACHE_TIME_OUT)
 
     new_last_modified = time_str_to_utc_time(new_last_modified)
-    new_indexed_at = datetime.datetime.now(datetime.UTC)
+    new_last_sync_time = datetime.datetime.now(datetime.UTC)
     if new_repo_id == old_repo_id and str(old_last_modified) == str(new_last_modified).split('+')[0]:
         connection_status['last_indexed_count'] = 0
         connection_status['last_index_status'] = IndexStatus.COMPLETED
-        seaqa_db.update_connection(connection_id, old_last_modified, json.dumps(connection_status), last_sync_time=new_indexed_at)
+        seaqa_db.update_connection(connection_id, old_last_modified, json.dumps(connection_status), last_sync_time=new_last_sync_time)
         logger.info('connection: %s, repo: %s does not change, skip this update', connection_id, new_repo_id)
         return
 
@@ -116,14 +113,14 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
     connection_status['total_records'] = total_records
-    seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status), updated_at=new_last_modified, last_sync_time=new_indexed_at, config=encrypt_config(config))
+    new_indexed_at = datetime.datetime.now(datetime.UTC)
+    seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status), last_sync_time=new_last_sync_time, config=encrypt_config(config))
 
 
 def update_github_issues_index(project_connection, seasearch_api, db_session_class, seaqa_db):
     connection_id = project_connection.id
     config = decrypt_config(json.loads(project_connection.config))
     project_uuid = project_connection.project_uuid
-    indexed_at = project_connection.indexed_at
     server_url = config.get('repository')
     path = urlparse(server_url).path
     parts = path.strip("/").split("/")
@@ -138,10 +135,9 @@ def update_github_issues_index(project_connection, seasearch_api, db_session_cla
     github_issues_index.create_index_if_missing(issues_index_name)
 
     index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db)
-    if index_count != 0:
-        # finish index
-        indexed_at = datetime.datetime.now(datetime.UTC)
-        connection_status['last_indexed_count'] = index_count
+    # finish index
+    indexed_at = datetime.datetime.now(datetime.UTC)
+    connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
     seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
@@ -152,17 +148,13 @@ def update_discourse_forum_index(project_connection, seasearch_api, db_session_c
     connection_status = json.loads(project_connection.status)
     discourse_forum_index = DiscourseIndex(seasearch_api, db_session_class)
 
-    indexed_at = project_connection.indexed_at
-
     connection_status['last_index_status'] = IndexStatus.INDEXING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
     discourse_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
     discourse_forum_index.create_index_if_missing(discourse_index_name)
 
     index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db)
-    if index_count != 0:
-        # finish index
-        indexed_at = datetime.datetime.now(datetime.UTC)
-        connection_status['last_indexed_count'] = index_count
+    indexed_at = datetime.datetime.now(datetime.UTC)
+    connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
     seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
