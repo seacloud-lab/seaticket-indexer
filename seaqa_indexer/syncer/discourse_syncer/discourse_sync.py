@@ -42,11 +42,12 @@ class DiscourseSync:
         existing_reply = self.check_existing_reply(topic_id, post_number, forum.id)
         content = reply_data.get('cooked', '')
         author = reply_data.get('username', '')
+        reply_time = reply_data.get('updated_at')
         if existing_reply:
-            self.update_reply(content, author, topic_id, post_number, forum.id)
+            self.update_reply(content, author, topic_id, post_number, reply_time, forum.id)
             logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
         else:
-            self.insert_reply(topic_id, post_number, content, author, forum.id)
+            self.insert_reply(topic_id, post_number, content, author, reply_time, forum.id)
             logger.debug(f"Created new reply {post_number} in topic {topic_id}")
 
     def handle_reply_delete(self, connection_id, topic_id, data):
@@ -94,17 +95,18 @@ class DiscourseSync:
             })
             session.commit()
 
-    def insert_reply(self, topic_id, post_number, content, author, connection_id):
+    def insert_reply(self, topic_id, post_number, content, author, reply_time, connection_id):
         """Insert a new reply"""
         with self.db_session_class() as session:
             sql = """INSERT INTO discourse_replies 
-                     (topic_id, post_number, content, author, connection_id) 
-                     VALUES (:topic_id, :post_number, :content, :author, :connection_id)"""
+                     (topic_id, post_number, content, author, reply_time, connection_id) 
+                     VALUES (:topic_id, :post_number, :content, :author, :reply_time, :connection_id)"""
             session.execute(text(sql), {
                 'topic_id': topic_id,
                 'post_number': post_number,
                 'content': content,
                 'author': author,
+                'reply_time': reply_time,
                 'connection_id': connection_id,
             })
             session.commit()
@@ -138,18 +140,19 @@ class DiscourseSync:
                 'connection_id': connection_id
             }).fetchone()
 
-    def update_reply(self, content, author, topic_id, post_number, connection_id):
+    def update_reply(self, content, author, topic_id, post_number, reply_time, connection_id):
         """Update an existing reply"""
         with self.db_session_class() as session:
             sql = """UPDATE discourse_replies 
-                       SET content = :content, author = :author 
+                       SET content = :content, author = :author, reply_time = reply_time
                        WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
             session.execute(text(sql), {
                 'content': content,
                 'author': author,
                 'topic_id': topic_id,
                 'post_number': post_number,
-                'connection_id': connection_id
+                'connection_id': connection_id,
+                'reply_time': reply_time
             })
             session.commit()
 
@@ -232,8 +235,9 @@ class DiscourseSync:
             post_number = reply.get('post_number')
             content = reply.get('cooked')
             author = reply.get('username')
+            reply_time = reply.get('updated_at')
 
-            self.insert_reply(topic_id, post_number, content, author, connection_id)
+            self.insert_reply(topic_id, post_number, content, author, reply_time, connection_id)
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
 
     def fetch_latest_topics_page(self, forum_url, headers, page):
