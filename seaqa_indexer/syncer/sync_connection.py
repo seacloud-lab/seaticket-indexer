@@ -35,8 +35,9 @@ def sync_connection(connection_id, db_session_class, mq):
 
     connection_id = project_connection.id
     connection_type = project_connection.type
-    last_updated_at = project_connection.updated_at
+    old_last_sync_time = project_connection.last_sync_time
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
+    last_sync_time = datetime.datetime.now(datetime.UTC)
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
 
     config = json.loads(project_connection.config)
@@ -44,7 +45,6 @@ def sync_connection(connection_id, db_session_class, mq):
 
     sync_count = 0
     total_count = 0
-    new_updated_at = None
     try:
         # sync discourse
         if connection_type == ConnectionType.DISCOURSE_FORUM.value:
@@ -53,15 +53,13 @@ def sync_connection(connection_id, db_session_class, mq):
             discourse_api_username = config['api_username']
 
             discourse_sync = DiscourseSync(db_session_class)
-            latest_bumped_at, sync_count = discourse_sync.sync(connection_id, forum_url, discourse_api_key, discourse_api_username, last_updated_at, connection_status)
+            sync_count = discourse_sync.sync(connection_id, forum_url, discourse_api_key, discourse_api_username, old_last_sync_time, connection_status)
 
-            new_updated_at = latest_bumped_at if latest_bumped_at else last_updated_at
             total_count = discourse_sync.get_discourse_forum_count(connection_id)
 
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
             server_url = config.get('repository')
             token = config.get('access_token')
-            old_updated_at = project_connection.updated_at
             try:
                 path = urlparse(server_url).path
                 parts = path.strip("/").split("/")
@@ -69,8 +67,7 @@ def sync_connection(connection_id, db_session_class, mq):
             except Exception as e:
                 logger.warning("github repository is invalid: %s", e)
                 return
-            since = old_updated_at.isoformat() + "Z" if old_updated_at else None
-            new_updated_at = datetime.datetime.now(datetime.UTC)
+            since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
             github_issues_sync = GithubIssuesSync(db_session_class)
             sync_count = github_issues_sync.sync(connection_id, token, repo_owner, repo_name, since, connection_status)
             total_count = github_issues_sync.get_github_issues_count(connection_id)
@@ -81,12 +78,10 @@ def sync_connection(connection_id, db_session_class, mq):
         return
 
     # finish sync
-    if not new_updated_at:
-        new_updated_at = last_updated_at
     connection_status['total_records'] = total_count
     connection_status['last_sync_count'] = sync_count
     connection_status['last_sync_status'] = CrawlStatus.COMPLETED
-    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), new_updated_at)
+    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time)
 
     logger.info('Finish sync connection: %s', connection_id)
     msg_content = {

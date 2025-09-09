@@ -1,5 +1,6 @@
 import logging
 import json
+import datetime
 
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -42,8 +43,8 @@ def craw_web(connection_id, db_session_class, mq):
         return
 
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
+    last_sync_time = datetime.datetime.now(datetime.UTC)
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-
     connection_config = json.loads(project_connection.config)
     site_url = connection_config.get('url')
     sitemap_url = connection_config.get('sitemap_url')
@@ -58,7 +59,7 @@ def craw_web(connection_id, db_session_class, mq):
             seaqa_db.update_connection_config(connection_id, json.dumps(connection_config))
 
     try:
-        web_crawl.crawl(connection_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back, failed_crawl_site)
+        web_crawl.crawl(connection_id, site_url, sitemap_url, project_uuid, connection_status, last_sync_time, success_call_back, failed_crawl_site)
     except Exception as e:
         logger.exception('failed to crawl site: %s, error: %s', connection_id, e)
         connection_status['last_sync_status'] = CrawlStatus.FAILED

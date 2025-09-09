@@ -61,7 +61,7 @@ class ProjectConnectionCleaner(object):
     def get_all_deleted_connections(self):
         """get connection deleted"""
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.status, p.uuid as project_uuid, pc.type, pc.updated_at, pc.indexed_at
+            sql = """SELECT pc.id, pc.config, pc.status, p.uuid as project_uuid, pc.type, pc.last_sync_time, pc.indexed_at
              FROM project_connection pc
             INNER JOIN projects p
             ON p.id=pc.project_id WHERE pc.deleted=true """
