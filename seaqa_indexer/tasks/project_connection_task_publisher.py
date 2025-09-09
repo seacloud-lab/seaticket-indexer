@@ -24,14 +24,15 @@ class ProjectConnectionTaskPublisher(object):
         self._enabled = True
         self._logfile = LOG_FILE
         self._loglevel = LOG_LEVEL
-        self._interval = 7 * 24 * 60 * 60
+        self._interval = 24 * 60 * 60
+        self._sync_interval = 3 * 24 * 60 * 60
 
     def start(self):
         if not self.is_enabled():
             logging.warning('Can not start project connection task publisher: it is not enabled!')
             return
 
-        ProjectConnectionTaskPublisherTimer(self._logfile, self._loglevel, self._interval).start()
+        ProjectConnectionTaskPublisherTimer(self._logfile, self._loglevel, self._interval, self._sync_interval).start()
         logging.info('project connection task publisher is started')
 
     def is_enabled(self):
@@ -39,22 +40,33 @@ class ProjectConnectionTaskPublisher(object):
 
 
 class ProjectConnectionTaskPublisherTimer(Thread):
-    def __init__(self, logfile, loglevel, interval):
+    def __init__(self, logfile, loglevel, interval, sync_interval):
         Thread.__init__(self)
         self._logfile = logfile
         self._loglevel = loglevel
         self.finished = Event()
         self._interval = interval
+        self._sync_interval = sync_interval
         self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def get_project_connections_by_page(self, start, limit):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid, pc.type
-             FROM project_connection pc 
-            INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false LIMIT :start, :limit"""
-            project_connections = session.execute(text(sql), {'start': start, 'limit': limit}).fetchall()
+            sql = """
+            SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid, pc.type, pc.last_sync_time
+            FROM project_connection pc
+            INNER JOIN projects p ON p.id = pc.project_id
+            WHERE p.deleted = false
+              AND (
+                    pc.last_sync_time IS NULL
+                    OR TIMESTAMPDIFF(SECOND, pc.last_sync_time, UTC_TIMESTAMP()) > :sync_interval
+                  )
+            LIMIT :start, :limit
+            """
+            project_connections = session.execute(
+                text(sql),
+                {'start': start, 'limit': limit, 'sync_interval': self._sync_interval}
+            ).fetchall()
             return project_connections
 
     def publish_project_connection_tasks(self):
@@ -101,14 +113,14 @@ class ProjectConnectionTaskPublisherTimer(Thread):
         msg_content = {
             'connection_id': connection_id,
         }
-        self.mq.lpush('discourse_sync_task', json.dumps(msg_content))
+        self.mq.lpush('sync_task', json.dumps(msg_content))
 
     def add_github_issues_sync_task(self, connection_id):
         logger.info('add github issues sync task: %s', connection_id)
         msg_content = {
             'connection_id': connection_id,
         }
-        self.mq.lpush('issues_sync_task', json.dumps(msg_content))
+        self.mq.lpush('sync_task', json.dumps(msg_content))
 
     def run(self):
         while not self.finished.is_set():
