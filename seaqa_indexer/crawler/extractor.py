@@ -14,7 +14,7 @@ MIN_EXTRACTED_SIZE = '200'
 
 
 def extract_html(url, file_content, favor_precision=False, favor_recall=False, formatting=True,
-                 include_links=False, include_images=False, include_tables=True, fast=False):
+                 include_links=True, include_images=False, include_tables=True, fast=False):
 
     options = Extractor(
         precision=favor_precision,
