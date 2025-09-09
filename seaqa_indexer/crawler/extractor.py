@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 MIN_EXTRACTED_SIZE = '200'
 
 
-def extract_html(url, file_content, favor_precision=False, favor_recall=False, formatting=False,
+def extract_html(url, file_content, favor_precision=False, favor_recall=False, formatting=True,
                  include_links=False, include_images=False, include_tables=True, fast=False):
 
     options = Extractor(
