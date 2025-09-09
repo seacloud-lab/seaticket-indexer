@@ -68,12 +68,6 @@ class ProjectConnectionTaskPublisherTimer(Thread):
                 {'start': start, 'limit': limit, 'sync_interval': self._sync_interval}
             ).fetchall()
             return project_connections
-    
-    def get_last_sync_time(self, connection_id):
-        with self.db_session_class() as session:
-            sql = """SELECT last_sync_time FROM project_connection WHERE id=:connection_id"""
-            result = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-            return result.last_sync_time
 
     def publish_project_connection_tasks(self):
         start, limit = 0, 1000
@@ -119,14 +113,14 @@ class ProjectConnectionTaskPublisherTimer(Thread):
         msg_content = {
             'connection_id': connection_id,
         }
-        self.mq.lpush('discourse_sync_task', json.dumps(msg_content))
+        self.mq.lpush('sync_task', json.dumps(msg_content))
 
     def add_github_issues_sync_task(self, connection_id):
         logger.info('add github issues sync task: %s', connection_id)
         msg_content = {
             'connection_id': connection_id,
         }
-        self.mq.lpush('issues_sync_task', json.dumps(msg_content))
+        self.mq.lpush('sync_task', json.dumps(msg_content))
 
     def run(self):
         while not self.finished.is_set():

@@ -299,7 +299,6 @@ class DiscourseSync:
 
     def sync(self, connection_id, forum_url, api_key, api_username, last_updated_at, connection_status):
         page = 0
-        latest_bumped_at = None
         should_stop = False
         sync_count = 0
         headers = self._build_api_headers(api_key, api_username)
@@ -310,15 +309,13 @@ class DiscourseSync:
             topics = self.fetch_latest_topics_page(forum_url, headers, page)
 
             if not topics:
-                return latest_bumped_at, sync_count
+                return sync_count
 
             for topic_data in topics:
                 topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
                 if last_updated_at and topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
                     should_stop = True
                     break
-                if not latest_bumped_at or latest_bumped_at < topic_bumped_at:
-                    latest_bumped_at = topic_bumped_at
 
                 topic_id = topic_data.get('id')
 
@@ -333,4 +330,4 @@ class DiscourseSync:
 
             page += 1
             if should_stop:
-                return latest_bumped_at, sync_count
+                return sync_count
