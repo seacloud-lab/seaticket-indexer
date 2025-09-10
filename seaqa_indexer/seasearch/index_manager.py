@@ -53,7 +53,7 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
-    def search(self, project_uuid, connection_ids, keyword, start=0, size=20):
+    def search(self, project_uuid, connection_ids, time_from, time_to, keyword, start=0, size=20):
         result_docs = []
         bulk_search_params = []
 
