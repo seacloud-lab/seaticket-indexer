@@ -148,7 +148,6 @@ def search():
 
     query = data.get('query').strip()
     project_uuid = data.get('project_uuid')
-    connection_types = data.get('connection_types')
     connection_ids = data.get('connection_ids')
 
     if not query:
@@ -162,7 +161,7 @@ def search():
     except:
         count = 20
 
-    results = application.app.index_manager.search(project_uuid, connection_types, connection_ids, query, start=0, size=count)
+    results = application.app.index_manager.search(project_uuid, connection_ids, query, start=0, size=count)
 
     return {'results': results}, 200
 
