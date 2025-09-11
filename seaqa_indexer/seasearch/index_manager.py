@@ -84,11 +84,10 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
-    def search(self, project_uuid, connection_types, connection_ids, keyword, start=0, size=20):
+    def search(self, project_uuid, connection_ids, keyword, start=0, size=20):
         result_docs = []
         bulk_search_params = []
-        connection_type_list = connection_types.split(',') if connection_types \
-            else [connection_type.value for connection_type in ConnectionType]
+        connection_type_list = [connection_type.value for connection_type in ConnectionType]
 
         connection_id_list = connection_ids.split(',') if connection_ids else None
 
