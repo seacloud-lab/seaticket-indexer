@@ -1,6 +1,7 @@
 import re
 import hashlib
 import urllib.parse
+from email.utils import parsedate_to_datetime
 from seaqa_indexer.crawler.extractor import extract_html
 from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
 
@@ -37,6 +38,7 @@ def spider_parse_item(spider, response):
             response_etag = response_etag.decode('utf-8')
         if response_last_modified:
             response_last_modified = response_last_modified.decode('utf-8')
+            response_last_modified = parsedate_to_datetime(response_last_modified).isoformat()
     except UnicodeDecodeError as e:
         spider.logger.debug(f"Failed to decode cache headers for {url}: {e}")
         response_etag = None
@@ -75,12 +77,17 @@ def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api
     """Load the ETag and Last-Modified information of an existing file"""
     if seadb_api is None:
         return
-    sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`
-    FROM `{site_id}`
-    WHERE `{WEB_CRAWL_TABLE.columns.url.name}` IS NOT NULL LIMIT {limit}"""
-    result = seadb_api.query_rows(project_uuid, sql)
-    for row in result.get('results', []):
-        existing_site_info[row.get('url')] = {
-            'etag': row.get('etag'),
-            'last_modified': row.get('last_modified'),
-        }
+    offset = 0
+    while True:
+        sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`
+        FROM `{site_id}`
+        LIMIT {limit} OFFSET {offset}"""
+        result = seadb_api.query_rows(project_uuid, sql)
+        if not result.get('results', []):
+            break
+        for row in result.get('results', []):
+            existing_site_info[row.get('url')] = {
+                'etag': row.get('etag'),
+                'last_modified': row.get('last_modified'),
+            }
+        offset += limit
