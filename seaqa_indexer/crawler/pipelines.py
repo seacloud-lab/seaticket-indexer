@@ -1,7 +1,5 @@
 import json
 
-from email.utils import parsedate_to_datetime
-
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.utils.constants import CrawlStatus, WEB_CRAWL_TABLE
 from seaqa_indexer.utils import need_update_connection_status
@@ -56,8 +54,6 @@ class BatchCrawlPipeline:
         content = item['content']
         etag = item.get('etag') if item else None
         last_modified = item.get('last_modified') if item else None
-        if last_modified:
-            last_modified = parsedate_to_datetime(last_modified).isoformat()
         filename = url_to_filename(url)
         if self.storage is None:
             return

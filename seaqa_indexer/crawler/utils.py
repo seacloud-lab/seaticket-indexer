@@ -1,6 +1,7 @@
 import re
 import hashlib
 import urllib.parse
+from email.utils import parsedate_to_datetime
 from seaqa_indexer.crawler.extractor import extract_html
 from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
 
@@ -37,6 +38,7 @@ def spider_parse_item(spider, response):
             response_etag = response_etag.decode('utf-8')
         if response_last_modified:
             response_last_modified = response_last_modified.decode('utf-8')
+            response_last_modified = parsedate_to_datetime(response_last_modified).isoformat()
     except UnicodeDecodeError as e:
         spider.logger.debug(f"Failed to decode cache headers for {url}: {e}")
         response_etag = None
