@@ -3,7 +3,6 @@ import json
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.utils.constants import CrawlStatus, WEB_CRAWL_TABLE
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.crawler.storage import get_storage
 
 class BatchCrawlPipeline:
     def __init__(self):
