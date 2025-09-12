@@ -15,6 +15,7 @@ from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.utils import time_str_to_utc_time, decrypt_config, encrypt_config
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.utils.discourse_seadb_api import DiscourseSeaDBAPI
 
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ def update_connection_index(connection_id, db_session_class):
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             update_github_issues_index(connection, seasearch_api, db_session_class, seaqa_db)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            update_discourse_forum_index(connection, seasearch_api, db_session_class, seaqa_db)
+            update_discourse_forum_index(connection, seasearch_api, seaqa_db)
     except Exception as e:
         logger.exception('connection: %s update index failed, error: %s', connection_id, e)
         connection_status['last_index_status'] = IndexStatus.FAILED
@@ -142,11 +143,13 @@ def update_github_issues_index(project_connection, seasearch_api, db_session_cla
     seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
 
-def update_discourse_forum_index(project_connection, seasearch_api, db_session_class, seaqa_db):
+def update_discourse_forum_index(project_connection, seasearch_api, seaqa_db):
     connection_id = project_connection.id
     project_uuid = project_connection.project_uuid
     connection_status = json.loads(project_connection.status)
-    discourse_forum_index = DiscourseIndex(seasearch_api, db_session_class)
+
+    discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
+    discourse_forum_index = DiscourseIndex(seasearch_api, discourse_seadb_api)
 
     connection_status['last_index_status'] = IndexStatus.INDEXING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))

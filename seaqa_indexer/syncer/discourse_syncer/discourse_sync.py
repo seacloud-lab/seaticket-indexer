@@ -4,15 +4,56 @@ import time
 import json
 
 from sqlalchemy import text
+from urllib.parse import urljoin
 
 from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_status
+from seaqa_indexer.utils.discourse_seadb_api import DiscourseSeaDBAPI
+from seaqa_indexer.utils.constants import DISCOURSE_TOPICS_TABLE, DISCOURSE_REPLIES_TABLE
+
 
 logger = logging.getLogger(__name__)
 
 
 class DiscourseSync:
-    def __init__(self, db_session_class):
+    def __init__(self, base_id, connection_id, db_session_class, username=''):
+        self.discourse_seadb_api = DiscourseSeaDBAPI(base_id=base_id, username=username)
+        self.connection_id = connection_id
+        self.topics_table = DISCOURSE_TOPICS_TABLE
+        self.replies_table = DISCOURSE_REPLIES_TABLE
         self.db_session_class = db_session_class
+
+    def check_existing_topic(self, topic_id, connection_id):
+        """Check if a topic already exists"""
+        return self.discourse_seadb_api.get_topic_by_id(connection_id, topic_id)
+
+    def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, bumped_at):
+        """Insert a new topic"""
+        topic_data = {
+            self.topics_table.columns.topic_id.name: topic_id,
+            self.topics_table.columns.title.name: title,
+            self.topics_table.columns.slug.name: slug,
+            self.topics_table.columns.views.name: views,
+            self.topics_table.columns.category_id.name: category_id,
+            self.topics_table.columns.connection_id.name: connection_id,
+            self.topics_table.columns.bumped_at.name: bumped_at.isoformat(),
+            self.topics_table.columns.deleted.name: False,
+            self.topics_table.columns.need_index.name: True,
+        }
+        self.discourse_seadb_api.insert_topic(connection_id, topic_data)
+
+    def delete_reply(self, topic_id, post_number, connection_id):
+        """Delete a specific reply"""
+        self.discourse_seadb_api.delete_reply(connection_id, topic_id, post_number)
+
+    def delete_topic_and_replies(self, topic_id, connection_id):
+        """Delete a topic and all its replies"""
+        self.discourse_seadb_api.delete_replies_by_topic(connection_id, topic_id)
+        
+        self.discourse_seadb_api.delete_topic(connection_id, topic_id)
+
+    def get_discourse_forum_count(self, connection_id):
+        """Retrieve the number of discourse topics for the specified connection"""
+        return self.discourse_seadb_api.get_connection_data_count(connection_id)
 
     def handle_topic_update(self, connection_id, topic_id, data):
         topic_data = data.get('topic', {})
@@ -35,19 +76,19 @@ class DiscourseSync:
             self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at)
             logger.debug(f"Created new topic {topic_id}")
 
-    def handle_reply_update(self, forum, topic_id, data):
+    def handle_reply_update(self, connection_id, topic_id, data):
         reply_data = data.get('post', {})
         post_number = reply_data.get('post_number')
 
-        existing_reply = self.check_existing_reply(topic_id, post_number, forum.id)
+        existing_reply = self.check_existing_reply(topic_id, post_number, connection_id)
         content = reply_data.get('cooked', '')
         author = reply_data.get('username', '')
         updated_at = time_str_to_utc_time(reply_data.get('updated_at'))
         if existing_reply:
-            self.update_reply(content, author, topic_id, post_number, updated_at, forum.id)
+            self.update_reply(content, author, topic_id, post_number, updated_at, connection_id)
             logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
         else:
-            self.insert_reply(topic_id, post_number, content, author, updated_at, forum.id)
+            self.insert_reply(topic_id, post_number, content, author, updated_at, connection_id)
             logger.debug(f"Created new reply {post_number} in topic {topic_id}")
 
     def handle_reply_delete(self, connection_id, topic_id, data):
@@ -59,114 +100,48 @@ class DiscourseSync:
 
     def handle_topic_deleted(self, topic_id, connection_id):
         """Mark a topic as deleted instead of physically deleting it"""
-        with self.db_session_class() as session:
-            sql = text("""
-                UPDATE discourse_topics
-                SET deleted = 1
-                WHERE topic_id = :topic_id AND connection_id = :connection_id
-            """)
-            session.execute(sql, {
-                'topic_id': topic_id,
-                'connection_id': connection_id
-            })
-            session.commit()
-
-    def check_existing_topic(self, topic_id, connection_id):
-        """Check if a topic already exists"""
-        with self.db_session_class() as session:
-            sql = """SELECT id FROM discourse_topics 
-                      WHERE topic_id = :topic_id AND connection_id = :connection_id"""
-            return session.execute(text(sql), {'topic_id': topic_id, 'connection_id': connection_id}).fetchone()
-
-    def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, bumped_at):
-        """Insert a new topic"""
-        with self.db_session_class() as session:
-            sql = """INSERT INTO discourse_topics 
-                     (topic_id, title, slug, views, category_id, connection_id, bumped_at) 
-                     VALUES (:topic_id, :title, :slug, :views, :category_id, :connection_id, :bumped_at)"""
-            session.execute(text(sql), {
-                'topic_id': topic_id,
-                'title': title,
-                'slug': slug,
-                'views': views,
-                'category_id': category_id,
-                'connection_id': connection_id,
-                'bumped_at': bumped_at
-            })
-            session.commit()
+        try:
+            self.discourse_seadb_api.delete_topic(connection_id, topic_id)
+            logger.info(f"Deleted topic {topic_id} for connection {connection_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete topic {topic_id}: {e}")
 
     def insert_reply(self, topic_id, post_number, content, author, updated_at, connection_id):
         """Insert a new reply"""
-        with self.db_session_class() as session:
-            sql = """INSERT INTO discourse_replies 
-                     (topic_id, post_number, content, author, updated_at, connection_id) 
-                     VALUES (:topic_id, :post_number, :content, :author, :updated_at, :connection_id)"""
-            session.execute(text(sql), {
-                'topic_id': topic_id,
-                'post_number': post_number,
-                'content': content,
-                'author': author,
-                'updated_at': updated_at,
-                'connection_id': connection_id,
-            })
-            session.commit()
+        reply_data = {
+            self.replies_table.columns.topic_id.name: topic_id,
+            self.replies_table.columns.post_number.name: post_number,
+            self.replies_table.columns.content.name: content,
+            self.replies_table.columns.author.name: author,
+            self.replies_table.columns.updated_at.name: updated_at.isoformat(),
+            self.replies_table.columns.connection_id.name: connection_id
+        }
+        self.discourse_seadb_api.insert_reply(connection_id, reply_data)
 
     def update_topic(self, title, slug, views, category_id, topic_id, connection_id, bumped_at):
         """Update an existing topic"""
-        with self.db_session_class() as session:
-            sql = """UPDATE discourse_topics 
-                       SET title = :title, slug = :slug, views = :views, 
-                           category_id = :category_id, bumped_at = :bumped_at
-                       WHERE topic_id = :topic_id AND connection_id = :connection_id"""
-            session.execute(text(sql), {
-                'title': title,
-                'slug': slug,
-                'views': views,
-                'category_id': category_id,
-                'bumped_at': bumped_at,
-                'topic_id': topic_id,
-                'connection_id': connection_id
-            })
-            session.commit()
+        topic_data = {
+            self.topics_table.columns.title.name: title,
+            self.topics_table.columns.slug.name: slug,
+            self.topics_table.columns.views.name: views,
+            self.topics_table.columns.category_id.name: category_id,
+            self.topics_table.columns.bumped_at.name: bumped_at.isoformat(),
+            self.topics_table.columns.need_index.name: True,
+        }
+        self.discourse_seadb_api.update_topic(connection_id, topic_id, topic_data)
 
     def check_existing_reply(self, topic_id, post_number, connection_id):
         """Check if a reply already exists"""
-        with self.db_session_class() as session:
-            sql = """SELECT id FROM discourse_replies 
-                      WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
-            return session.execute(text(sql), {
-                'topic_id': topic_id,
-                'post_number': post_number,
-                'connection_id': connection_id
-            }).fetchone()
+        return self.discourse_seadb_api.get_reply_by_id(topic_id, connection_id, post_number)
 
     def update_reply(self, content, author, topic_id, post_number, updated_at, connection_id):
         """Update an existing reply"""
-        with self.db_session_class() as session:
-            sql = """UPDATE discourse_replies 
-                       SET content = :content, author = :author, updated_at = updated_at
-                       WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
-            session.execute(text(sql), {
-                'content': content,
-                'author': author,
-                'topic_id': topic_id,
-                'post_number': post_number,
-                'connection_id': connection_id,
-                'updated_at': updated_at
-            })
-            session.commit()
-
-    def delete_reply(self, topic_id, post_number, connection_id):
-        """Delete a specific reply"""
-        with self.db_session_class() as session:
-            sql = """DELETE FROM discourse_replies 
-            WHERE topic_id = :topic_id AND post_number = :post_number AND connection_id = :connection_id"""
-            session.execute(text(sql), {
-                'topic_id': topic_id,
-                'post_number': post_number,
-                'connection_id': connection_id
-            })
-            session.commit()
+        reply_data = {
+            self.replies_table.columns.content.name: content,
+            self.replies_table.columns.author.name: author,
+            self.replies_table.columns.updated_at.name: updated_at.isoformat()
+        }
+        self.discourse_seadb_api.update_reply(connection_id, topic_id, post_number, reply_data)
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
@@ -175,31 +150,14 @@ class DiscourseSync:
             "Api-Username": api_username
         }
 
-    def delete_topic_and_replies(self, topic_id, connection_id):
-        """Delete a topic and all its replies"""
-        with self.db_session_class() as session:
-            # Delete replies first
-            delete_replies_sql = """DELETE FROM discourse_replies 
-            WHERE topic_id = :topic_id AND connection_id = :connection_id"""
-            session.execute(text(delete_replies_sql), {
-                'topic_id': topic_id,
-                'connection_id': connection_id
-            })
-
-            # Delete topic
-            delete_topic_sql = """DELETE FROM discourse_topics 
-                     WHERE topic_id = :topic_id AND connection_id = :connection_id"""
-            session.execute(text(delete_topic_sql), {
-                'topic_id': topic_id,
-                'connection_id': connection_id
-            })
-            session.commit()
-
     def add_or_update_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers):
         """Deletes and recreates an existing topic and its replies to ensure content is up-to-date."""
         # Delete existing topic and its replies
-        self.delete_topic_and_replies(topic_id, connection_id)
-        logger.debug(f"Successfully deleted topic {topic_id} and its replies for updating.")
+        try:
+            self.delete_topic_and_replies(topic_id, connection_id)
+            logger.debug(f"Successfully deleted topic {topic_id} and its replies for updating.")
+        except Exception as e:
+            pass
 
         # Create new topic with replies
         self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
@@ -241,7 +199,7 @@ class DiscourseSync:
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
 
     def fetch_latest_topics_page(self, forum_url, headers, page):
-        url = f"{forum_url}/latest.json?page={page}"
+        url = urljoin(forum_url, f"latest.json?page={page}")
         logger.debug(f"Fetching page {page} from {url}")
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
@@ -251,9 +209,7 @@ class DiscourseSync:
         return topics
 
     def fetch_discourse_topic(self, forum_url, topic_id, headers):
-        if forum_url.endswith('/'):
-            forum_url = forum_url.rstrip('/')
-        url = f"{forum_url}/t/{topic_id}.json"
+        url = urljoin(forum_url, f"t/{topic_id}.json")
         logger.info(f"Fetching topic detail from {url}")
         response = requests.get(url, headers=headers, timeout=30)
         return response
@@ -290,12 +246,6 @@ class DiscourseSync:
         return {
             'replies': replies,
         }
-
-    def get_discourse_forum_count(self, connection_id):
-        with self.db_session_class() as session:
-            sql = """SELECT count(*) FROM discourse_topics WHERE connection_id=:connection_id"""
-            connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-        return connection[0]
 
     def update_connection_status(self, connection_id, status):
         with self.db_session_class() as session:
