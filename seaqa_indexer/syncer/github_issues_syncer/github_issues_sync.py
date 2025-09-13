@@ -18,12 +18,12 @@ class GithubIssuesSync:
         with self.db_session_class() as session:
             sql = text("""
                 INSERT INTO github_issues (
-                    issue_id, issue_number, title, body, state,
-                    created_at, updated_at, closed_at, labels,
+                    issue_id, issue_number, title, body, state, state_reason,
+                    created_at, updated_at, closed_at, labels, assignees, issue_type,
                     comments, connection_id, author, url, need_index
                 ) VALUES (
-                    :issue_id, :issue_number, :title, :body, :state,
-                    :created_at, :updated_at, :closed_at, :labels,
+                    :issue_id, :issue_number, :title, :body, :state, :state_reason,
+                    :created_at, :updated_at, :closed_at, :labels, :assignees, :issue_type,
                     :comments, :connection_id, :author, :url, :need_index
                 )
                 ON DUPLICATE KEY UPDATE
@@ -31,7 +31,10 @@ class GithubIssuesSync:
                     author = VALUES(author),
                     url = VALUES(url),
                     body = VALUES(body),
+                    assignees = VALUES(assignees),
+                    issue_type = VALUES(issue_type),
                     state = VALUES(state),
+                    state_reason = VALUES(state_reason),
                     updated_at = VALUES(updated_at),
                     closed_at = VALUES(closed_at),
                     labels = VALUES(labels),
@@ -42,6 +45,15 @@ class GithubIssuesSync:
             labels = issue.get('labels', [])
             label_names = [label['name'] for label in labels if 'name' in label]
 
+            assignees = issue.get('assignees', [])
+            assignees_list = [assignee['login'] for assignee in assignees if 'login' in assignee]
+
+            types = issue.get('type', None)
+            if types:
+                type_names = types['name']
+            else:
+                type_names = None
+
             session.execute(sql, {
                 'issue_id': issue['id'],
                 'issue_number': issue['number'],
@@ -50,6 +62,7 @@ class GithubIssuesSync:
                 'url': issue.get('html_url', ''),
                 'body': issue.get('body'),
                 'state': issue.get('state'),
+                'state_reason': issue.get('state_reason'),
                 'created_at': datetime.datetime.strptime(issue.get('created_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get
                     ('created_at') else None,
                 'updated_at': datetime.datetime.strptime(issue.get('updated_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get
@@ -57,6 +70,8 @@ class GithubIssuesSync:
                 'closed_at': datetime.datetime.strptime(issue.get('closed_at'), "%Y-%m-%dT%H:%M:%SZ") if issue.get
                     ('closed_at') else None,
                 'labels': json.dumps(label_names),
+                'assignees': json.dumps(assignees_list),
+                'issue_type': type_names,
                 'comments': issue.get('comments'),
                 'connection_id': connection_id,
                 'need_index': 1,
