@@ -34,6 +34,7 @@ def sync_connection(connection_id, db_session_class, mq):
         return
 
     connection_id = project_connection.id
+    project_uuid = project_connection.project_uuid
     connection_type = project_connection.type
     old_last_sync_time = project_connection.last_sync_time
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
@@ -69,7 +70,7 @@ def sync_connection(connection_id, db_session_class, mq):
                 return
             since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
             github_issues_sync = GithubIssuesSync(db_session_class)
-            sync_count = github_issues_sync.sync(connection_id, token, repo_owner, repo_name, since, connection_status)
+            sync_count = github_issues_sync.sync(project_uuid, connection_id, token, repo_owner, repo_name, since, connection_status)
             total_count = github_issues_sync.get_github_issues_count(connection_id)
     except Exception as e:
         logger.exception('connection: %s, sync issues failed, error: %s', connection_id, e)

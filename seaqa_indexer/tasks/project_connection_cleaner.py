@@ -92,11 +92,15 @@ class ProjectConnectionCleaner(object):
             session.execute(text(sql), {'connection_id': connection_id})
             session.commit()
 
-    def delete_issues_from_db(self, connection_id):
-        with self.db_session_class() as session:
-            sql = text("DELETE FROM github_issues WHERE connection_id = :connection_id")
-            session.execute(sql, {'connection_id': connection_id})
-            session.commit()
+    def delete_issues_from_db(self, project_uuid,connection_id):
+        table_name = str(connection_id) + '_github_issues'
+        sql = f"SELECT * FROM `{table_name}` WHERE deleted = True"
+        need_delete = self.seadb_api.query_rows(project_uuid, sql).get('results', [])
+        need_delete_rows = []
+        if need_delete:
+            for issue in need_delete:
+                need_delete_rows.append(issue.get('_pk'))
+        self.seadb_api.delete_rows(project_uuid, table_name, need_delete_rows)
 
     def delete_discourse_data_from_db(self, project_uuid, connection_id):
         """Delete discourse topics and replies from seadb"""
@@ -135,7 +139,7 @@ class ProjectConnectionCleaner(object):
                     if table['name'] == str(connection_id):
                         self.seadb_api.delete_table(project_uuid, table['id'])
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            self.delete_issues_from_db(connection_id)
+            self.delete_issues_from_db(project_uuid, connection_id)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
             self.delete_discourse_data_from_db(project_uuid, connection_id)
 
