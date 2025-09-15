@@ -208,7 +208,7 @@ class GitHubIssuesIndex(object):
             'body': issue_data['body'] or '',
             'comments_body': issue_data.get('comments_body', []),
             'state': issue_data['state'],
-            'labels': [label['name'] for label in issue_data.get('labels', [])]
+            'labels': issue_data.get('labels', [])
         }
 
         bulk_ops = [
@@ -259,32 +259,21 @@ class GitHubIssuesIndex(object):
                 need_delete_rows.append(comment.get('_pk'))
         self.seadb_api.delete_rows(project_uuid, table_name, need_delete_rows)
 
-
-    def update_issues_index_status(self,project_uuid, connection_id, issue_id):
-        table_name = str(connection_id) + '_github_issues'
-        sql = f"SELECT * FROM `{table_name}` WHERE issue_id = {issue_id}"
-        issue = self.seadb_api.query_rows(project_uuid, sql).get('results', [])
-        _pk = issue[0].get('_pk')
-        update_rows = [
-            {
-                "pk": _pk,
-                "row":
-                    {
-                        GITHUB_ISSUES_TABLE.columns.need_index.name: False
-                    }
-            }
-        ]
-        self.seadb_api.update_rows(project_uuid, table_name, update_rows)
-
-    def update(self, index_name, connection_id, project_uuid, repo_owner, repo_name, connection_status, seaqa_db):
+    def update(self, index_name, connection_id, project_uuid, repo_owner, repo_name, connection_status, seaqa_db, indexed_at):
         index_count = 0
         page_size = 1000
         offset = 0
         need_cleared_issues_index_set = set()
+        issues_table_name = str(connection_id) + '_github_issues'
+        comments_table_name = str(connection_id) + '_issue_comments'
+
+        if indexed_at is not None:
+            base_sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{indexed_at}'"
+        else:
+            base_sql = f"SELECT * FROM `{issues_table_name}`"
 
         while True:
-            issues_table_name = str(connection_id) + '_github_issues'
-            sql_issues = f"SELECT * FROM `{issues_table_name}` where need_index=True LIMIT {page_size} OFFSET {offset}"
+            sql_issues = f"{base_sql} LIMIT {page_size} OFFSET {offset}"
             res = self.seadb_api.query_rows(project_uuid, sql_issues)
             issues = res.get('results', [])
             if not issues:
@@ -294,8 +283,7 @@ class GitHubIssuesIndex(object):
             for issue in issues:
                 issue_id = issue.get('issue_id')
                 self.delete_comments_from_db(project_uuid, connection_id, issue_id)
-                comments_table_name = str(connection_id) + '_issue_comments'
-                sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} AND connection_id = {connection_id}"
+                sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id}"
                 comments = self.seadb_api.query_rows(project_uuid, sql_comments).get('results', [])
                 comments_list = []
                 if comments:
@@ -307,7 +295,7 @@ class GitHubIssuesIndex(object):
                     'title': issue.get('title'),
                     'body': issue.get('body'),
                     'state': issue.get('state'),
-                    'labels': [{'name': l} for l in json.loads(issue.get('labels') or "[]")],
+                    'labels': issue.get('labels'),
                     'comments_body': comments_list,
                     'user': {'login': issue.get('author')},
                     'url': issue.get('url'),
@@ -319,7 +307,6 @@ class GitHubIssuesIndex(object):
                     need_cleared_issues_index_set.add(key)
                 else:
                     self.add_or_update_issue(index_name, connection_id, issue_dict)
-                    self.update_issues_index_status(issue_id)
                     index_count += 1
             offset += page_size
 

@@ -18,9 +18,24 @@ class GithubIssuesSync:
         self.seadb_api = SeaDBAPI()
         self.seaqa_db = SeaqaDB(db_session_class)
 
+    def get_current_table_metadata(self, tables, table_name):
+        for table in tables:
+            if table['name'] == table_name:
+                return table
+        return None
+
     def save_or_update_issues_to_db(self,project_uuid, connection_id, issue, is_webhook):
-        labels = issue.get('labels', [])
-        label_names = [label['name'] for label in labels if 'name' in label]
+        labels_data = issue.get('labels', [])
+        label_names = [label['name'] for label in labels_data if 'name' in label]
+
+        assignees_data = issue.get('assignees', [])
+        assignees_list = [assignee['login'] for assignee in assignees_data if 'login' in assignee]
+
+        types = issue.get('type', None)
+        if types:
+            type_names = types['name']
+        else:
+            type_names = None
 
         issue_id = issue['id']
         issue_number = issue['number']
@@ -29,13 +44,12 @@ class GithubIssuesSync:
         url = issue.get('html_url', '')
         body = issue.get('body')
         state = issue.get('state')
+        state_reason = issue.get('state_reason')
+        assignees = json.dumps(assignees_list)
         created_at = issue.get('created_at') if 'created_at' in issue else None
         updated_at = issue.get('updated_at') if issue.get('updated_at') else None
         closed_at = issue.get('closed_at') if issue.get('closed_at') else None
-        labels = json.dumps(label_names)
         comments_count = issue.get('comments')
-        connection_id = int(connection_id)
-        need_index = True
         deleted = False
         insert_rows = [
             {
@@ -46,19 +60,20 @@ class GithubIssuesSync:
                 GITHUB_ISSUES_TABLE.columns.url.name: url,
                 GITHUB_ISSUES_TABLE.columns.body.name: body,
                 GITHUB_ISSUES_TABLE.columns.state.name: state,
+                GITHUB_ISSUES_TABLE.columns.state_reason.name: state_reason,
+                GITHUB_ISSUES_TABLE.columns.assignees.name: assignees,
                 GITHUB_ISSUES_TABLE.columns.created_at.name: created_at,
                 GITHUB_ISSUES_TABLE.columns.updated_at.name: updated_at,
                 GITHUB_ISSUES_TABLE.columns.closed_at.name: closed_at,
-                GITHUB_ISSUES_TABLE.columns.labels.name: labels,
+                GITHUB_ISSUES_TABLE.columns.labels.name: label_names,
+                GITHUB_ISSUES_TABLE.columns.issue_type.name: type_names,
                 GITHUB_ISSUES_TABLE.columns.comments_count.name: comments_count,
-                GITHUB_ISSUES_TABLE.columns.connection_id.name: connection_id,
-                GITHUB_ISSUES_TABLE.columns.need_index.name: need_index,
                 GITHUB_ISSUES_TABLE.columns.deleted.name: deleted,
             }
         ]
         table_name = str(connection_id) + '_github_issues'
         if is_webhook:
-            query_sql = f"SELECT * FROM `{table_name}` WHERE connection_id={connection_id} AND issue_id={issue_id}"
+            query_sql = f"SELECT * FROM `{table_name}` WHERE issue_id={issue_id}"
             res = self.seadb_api.query_rows(project_uuid, query_sql).get('results', [])
             if res:
                 _pk = res[0].get('_pk')
@@ -82,7 +97,6 @@ class GithubIssuesSync:
         updated_at = comment.get('updated_at') if comment.get('updated_at') else None
         comment_id = comment['id']
         issue_id = int(issue_id)
-        connection_id = int(connection_id)
         author = comment.get('user', {}).get('login', '')
         body = comment.get('body', '')
         created_at = created_at
@@ -91,7 +105,6 @@ class GithubIssuesSync:
             {
                 GITHUB_ISSUES_COMMENTS_TABLE.columns.comment_id.name: comment_id,
                 GITHUB_ISSUES_COMMENTS_TABLE.columns.issue_id.name: issue_id,
-                GITHUB_ISSUES_COMMENTS_TABLE.columns.connection_id.name: connection_id,
                 GITHUB_ISSUES_COMMENTS_TABLE.columns.author.name: author,
                 GITHUB_ISSUES_COMMENTS_TABLE.columns.body.name: body,
                 GITHUB_ISSUES_COMMENTS_TABLE.columns.created_at.name: created_at,
@@ -100,7 +113,7 @@ class GithubIssuesSync:
         ]
 
         if is_webhook:
-            query_sql = f"SELECT * FROM `{table_name}` WHERE connection_id={connection_id} AND issue_id={issue_id}"
+            query_sql = f"SELECT * FROM `{table_name}` WHERE issue_id={issue_id}"
             res = self.seadb_api.query_rows(project_uuid, query_sql).get('results', [])
             if res:
                 _pk = res[0].get('_pk')
@@ -148,23 +161,26 @@ class GithubIssuesSync:
         ]
         self.seadb_api.update_rows(project_uuid, table_name, update_rows)
 
-    def update_issue_record(self, connection_id, issue_id, updated_at, comments_count):
+    def update_issue_record(self, connection_id, issue_id, updated_at, comments_count=None):
         project_connection = self.seaqa_db.get_project_connection_by_id(connection_id)
         project_uuid = project_connection.project_uuid
         table_name = str(connection_id) + '_github_issues'
         sql = f"SELECT * FROM `{table_name}` WHERE issue_id = {issue_id}"
         issue = self.seadb_api.query_rows(project_uuid, sql).get('results', [])
         _pk = issue[0].get('_pk')
-        comments_count = int(comments_count)
+
+        row = {
+            GITHUB_ISSUES_TABLE.columns.updated_at.name: updated_at,
+        }
+
+        if comments_count is not None:
+            comments_count = int(comments_count)
+            row[GITHUB_ISSUES_TABLE.columns.comments_count.name] = comments_count
+
         update_rows = [
             {
                 "pk": _pk,
-                "row":
-                    {
-                        GITHUB_ISSUES_TABLE.columns.updated_at.name: updated_at,
-                        GITHUB_ISSUES_TABLE.columns.comments_count.name: comments_count,
-                        GITHUB_ISSUES_TABLE.columns.need_index.name: True,
-                    }
+                "row":row
             }
         ]
         self.seadb_api.update_rows(project_uuid, table_name, update_rows)
@@ -188,6 +204,31 @@ class GithubIssuesSync:
         per_page = 100  # max 100
         sync_count = 0
         github_api = GitHubAPI(token, repo_owner, repo_name, connection_id)
+        table_name = str(connection_id) + '_github_issues'
+        metadata = self.seadb_api.get_base_metadata(project_uuid)
+        tables_metadata = metadata.get('tables') or []
+        issues_labels = github_api.get_issues_labels(page, per_page)
+        table_metadata = self.get_current_table_metadata(tables_metadata, str(table_name))
+        table_id = table_metadata.get('id')
+        columns_metadata = table_metadata.get("columns", [])
+
+        for column in columns_metadata:
+            if column.get('name') == 'labels':
+                option_names = {opt['name'] for opt in column['data']['options']}
+                for issues_label in issues_labels:
+                    if issues_label.get('name') not in option_names:
+                        column_key = column.get('key')
+                        create_select = {
+                                        'table_id': table_id,
+                                        'column_key': column_key,
+                                        'option_name':issues_label.get('name'),
+                                    }
+                        try:
+                            self.seadb_api.add_column_option(project_uuid, create_select)
+                        except Exception as e:
+                            logging.error(e)
+                            return sync_count
+
         while True:
             issues = github_api.list_issues(since=since, state='all', per_page=per_page, page=page)
             if not issues:

@@ -93,14 +93,27 @@ class ProjectConnectionCleaner(object):
             session.commit()
 
     def delete_issues_from_db(self, project_uuid,connection_id):
-        table_name = str(connection_id) + '_github_issues'
-        sql = f"SELECT * FROM `{table_name}` WHERE deleted = True"
-        need_delete = self.seadb_api.query_rows(project_uuid, sql).get('results', [])
+        issues_table_name = str(connection_id) + '_github_issues'
+        sql_issues = f"SELECT * FROM `{issues_table_name}` WHERE deleted = True"
+        need_delete = self.seadb_api.query_rows(project_uuid, sql_issues).get('results', [])
         need_delete_rows = []
+        need_delete_issue_comments = []
         if need_delete:
             for issue in need_delete:
                 need_delete_rows.append(issue.get('_pk'))
-        self.seadb_api.delete_rows(project_uuid, table_name, need_delete_rows)
+                need_delete_issue_comments.append(issue.get('issue_id'))
+        self.seadb_api.delete_rows(project_uuid, issues_table_name, need_delete_rows)
+
+        comments_table_name = str(connection_id) + '_issue_comments'
+        need_delete_comments_pk = []
+        for issue_id in need_delete_issue_comments:
+            sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id}"
+            need_delete_comments_row = self.seadb_api.query_rows(project_uuid, sql_comments).get('results', [])
+
+            for comment in need_delete_comments_row:
+                need_delete_comments_pk.append(comment.get('_pk'))
+
+        self.seadb_api.delete_rows(project_uuid, comments_table_name, need_delete_comments_pk)
 
     def delete_discourse_data_from_db(self, project_uuid, connection_id):
         """Delete discourse topics and replies from seadb"""
