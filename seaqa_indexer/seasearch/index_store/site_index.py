@@ -1,6 +1,8 @@
+import datetime
 import json
 import os
 import logging
+import pytz
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
@@ -283,17 +285,12 @@ class SiteIndex(object):
                 break
         return site_id_to_site_info
 
-    def update(self, site_index_name, connection_id, project_uuid, connection_status, seaqa_db):
-        index_id_to_site_info = self.get_all_id_to_site_info_by_site_id(site_index_name, connection_id)
-        old_index_ids_set = set(index_id_to_site_info.keys())
+    def update(self, site_index_name, connection_id, project_uuid, connection_status, seaqa_db, last_indexed_at):
         new_index_ids_set = set()
+        deleted_index_id_set = set()
+        deleted_seadb_pk_set = set()
 
         index_count = 0
-        if not self.storage:
-            connection_status['last_indexed_count'] = index_count
-            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-            return index_count
-
         page_size = 1000
         offset = 0
         bulk_params = []
@@ -304,9 +301,13 @@ class SiteIndex(object):
                 self.seasearch_api.bulk(site_index_name, bulk_params)
                 bulk_params = []
 
+        if not last_indexed_at:
+            last_indexed_at = datetime.datetime(1970, 1, 1)
+
+        last_indexed_at = last_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
         while True:
-            sql = f"""SELECT * FROM `{connection_id}`
-                ORDER BY url LIMIT {page_size} OFFSET {offset}"""
+            sql = f"""SELECT * FROM `{connection_id}` WHERE updated_at > '{last_indexed_at}'
+                            ORDER BY updated_at LIMIT {page_size} OFFSET {offset}"""
             result = self.seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])
             if not rows:
@@ -317,17 +318,17 @@ class SiteIndex(object):
                 etag = row.get('etag')
                 last_modified = row.get('last_modified')
                 title = row.get('title')
+                deleted = row.get('deleted')
+                pk = row.get('_pk')
                 key = self.gen_index_id(connection_id, url)
-                new_index_ids_set.add(key)
+                if deleted:
+                    deleted_index_id_set.add(key)
+                    deleted_seadb_pk_set.add(pk)
+                    continue
+                else:
+                    new_index_ids_set.add(key)
 
                 logger.debug('start to update url: %s', url)
-                indexed_site_info = index_id_to_site_info.get(key)
-
-                if indexed_site_info and (
-                    (etag and indexed_site_info.get('etag') == etag) or
-                    (last_modified and indexed_site_info.get('last_modified') == last_modified)
-                ):
-                    continue
 
                 filename = url_to_filename(url)
                 file_json = self.storage.read_json(connection_id, project_uuid, filename)
@@ -355,7 +356,9 @@ class SiteIndex(object):
             offset += page_size
 
         _flush_bulk_if_needed(force=True)
-        # clear deleted site crawled url
-        need_cleared_site_id_set = old_index_ids_set - new_index_ids_set
-        self.delete_indexes_by_ids(site_index_name, need_cleared_site_id_set)
+        # delete deleted index record
+        self.delete_indexes_by_ids(site_index_name, deleted_index_id_set)
+        if deleted_index_id_set:
+            # delete deleted seadb data
+            self.seadb_api.delete_rows(project_uuid, str(connection_id), list(deleted_seadb_pk_set))
         return index_count
