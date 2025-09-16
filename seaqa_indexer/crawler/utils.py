@@ -73,10 +73,8 @@ def spider_parse_item(spider, response):
     }
 
 
-def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api=None, limit=1000):
+def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api, limit=1000):
     """Load the ETag and Last-Modified information of an existing file"""
-    if seadb_api is None:
-        return
     offset = 0
     while True:
         sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`

@@ -63,16 +63,16 @@ def update_site_index(project_connection, seasearch_api, seaqa_db):
 
     connection_id = project_connection.id
     project_uuid = project_connection.project_uuid
+    old_indexed_at = project_connection.indexed_at
 
     site_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
     site_index.create_index_if_missing(site_index_name)
 
-    index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db)
+    index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db, old_indexed_at)
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
     indexed_at = datetime.datetime.now(datetime.UTC)
     seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
-
 
 
 def update_seafile_index(project_connection, seasearch_api, seaqa_db):
