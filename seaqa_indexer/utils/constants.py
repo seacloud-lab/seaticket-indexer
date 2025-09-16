@@ -59,12 +59,9 @@ class PropertyTypes:
     SINGLE_SELECT = 'single-select'
     MULTIPLE_SELECT = 'multiple-select'
     BOOL = 'bool'
- 
+
 
 class WebCrawlTable(object):
-    def __init__(self, table_id, name):
-        self.id = table_id
-        self.name = name
 
     @property
     def columns(self):
@@ -77,6 +74,8 @@ class WebCrawlColumns(object):
         self.title = WebCrawlColumn('title', PropertyTypes.TEXT)
         self.etag = WebCrawlColumn('etag', PropertyTypes.TEXT)
         self.last_modified = WebCrawlColumn('last_modified', PropertyTypes.DATETIME)
+        self.updated_at = WebCrawlColumn('updated_at', PropertyTypes.DATETIME)
+        self.deleted = WebCrawlColumn('deleted', PropertyTypes.BOOL)
 
 class WebCrawlColumn(object):
     def __init__(self, name, type, data=None):
@@ -97,10 +96,12 @@ class WebCrawlColumn(object):
 
         return column_data
 
-WEB_CRAWL_TABLE = WebCrawlTable('0000', 'Table1')
+WEB_CRAWL_TABLE = WebCrawlTable()
 WEB_CRAWL_COLUMNS = [
     WEB_CRAWL_TABLE.columns.url.to_dict(),
     WEB_CRAWL_TABLE.columns.title.to_dict(),
     WEB_CRAWL_TABLE.columns.etag.to_dict(),
     WEB_CRAWL_TABLE.columns.last_modified.to_dict(),
+    WEB_CRAWL_TABLE.columns.updated_at.to_dict(),
+    WEB_CRAWL_TABLE.columns.deleted.to_dict(),
 ]
