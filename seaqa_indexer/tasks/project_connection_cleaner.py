@@ -13,7 +13,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils.discourse_seadb_api import DiscourseSeaDBAPI
+from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 
 logger = logging.getLogger(__name__)
 

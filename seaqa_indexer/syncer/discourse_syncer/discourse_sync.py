@@ -2,22 +2,21 @@ import logging
 import requests
 import time
 import json
+import datetime
 
 from sqlalchemy import text
 from urllib.parse import urljoin
 
 from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_status
-from seaqa_indexer.utils.discourse_seadb_api import DiscourseSeaDBAPI
-from seaqa_indexer.utils.constants import DISCOURSE_TOPICS_TABLE, DISCOURSE_REPLIES_TABLE
-
+from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
+from seaqa_indexer.seadb_models.models import DISCOURSE_TOPICS_TABLE, DISCOURSE_REPLIES_TABLE
 
 logger = logging.getLogger(__name__)
 
 
 class DiscourseSync:
-    def __init__(self, base_id, connection_id, db_session_class, username=''):
+    def __init__(self, base_id, db_session_class, username=''):
         self.discourse_seadb_api = DiscourseSeaDBAPI(base_id=base_id, username=username)
-        self.connection_id = connection_id
         self.topics_table = DISCOURSE_TOPICS_TABLE
         self.replies_table = DISCOURSE_REPLIES_TABLE
         self.db_session_class = db_session_class
@@ -34,10 +33,9 @@ class DiscourseSync:
             self.topics_table.columns.slug.name: slug,
             self.topics_table.columns.views.name: views,
             self.topics_table.columns.category_id.name: category_id,
-            self.topics_table.columns.connection_id.name: connection_id,
             self.topics_table.columns.bumped_at.name: bumped_at.isoformat(),
             self.topics_table.columns.deleted.name: False,
-            self.topics_table.columns.need_index.name: True,
+            self.topics_table.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
         self.discourse_seadb_api.insert_topic(connection_id, topic_data)
 
@@ -114,7 +112,6 @@ class DiscourseSync:
             self.replies_table.columns.content.name: content,
             self.replies_table.columns.author.name: author,
             self.replies_table.columns.updated_at.name: updated_at.isoformat(),
-            self.replies_table.columns.connection_id.name: connection_id
         }
         self.discourse_seadb_api.insert_reply(connection_id, reply_data)
 
@@ -126,7 +123,7 @@ class DiscourseSync:
             self.topics_table.columns.views.name: views,
             self.topics_table.columns.category_id.name: category_id,
             self.topics_table.columns.bumped_at.name: bumped_at.isoformat(),
-            self.topics_table.columns.need_index.name: True,
+            self.topics_table.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
         self.discourse_seadb_api.update_topic(connection_id, topic_id, topic_data)
 

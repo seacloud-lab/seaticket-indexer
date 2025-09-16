@@ -15,7 +15,7 @@ from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.utils import time_str_to_utc_time, decrypt_config, encrypt_config
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.discourse_seadb_api import DiscourseSeaDBAPI
+from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 
 
 logger = logging.getLogger(__name__)
@@ -146,6 +146,7 @@ def update_github_issues_index(project_connection, seasearch_api, db_session_cla
 def update_discourse_forum_index(project_connection, seasearch_api, seaqa_db):
     connection_id = project_connection.id
     project_uuid = project_connection.project_uuid
+    last_sync_time = project_connection.last_sync_time
     connection_status = json.loads(project_connection.status)
 
     discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
@@ -156,8 +157,9 @@ def update_discourse_forum_index(project_connection, seasearch_api, seaqa_db):
     discourse_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
     discourse_forum_index.create_index_if_missing(discourse_index_name)
 
-    index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db)
+    new_last_sync_time = datetime.datetime.now(datetime.UTC)
+    index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, last_sync_time, seaqa_db)
     indexed_at = datetime.datetime.now(datetime.UTC)
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
-    seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
+    seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status), last_sync_time=new_last_sync_time)

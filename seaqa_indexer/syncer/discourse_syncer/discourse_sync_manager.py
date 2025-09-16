@@ -48,7 +48,7 @@ class DiscourseSyncManager:
         """Handle complete webhook request processing with connection validation"""
         project_connection = self.get_project_connection_by_id(connection_id)
         project_uuid = project_connection.project_uuid
-        discourse_sync = DiscourseSync(project_uuid, connection_id, self.db_session_class)
+        discourse_sync = DiscourseSync(project_uuid, self.db_session_class)
         if not project_connection:
             raise ForumNotFoundException()
 
