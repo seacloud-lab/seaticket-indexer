@@ -42,7 +42,8 @@ class BatchCrawlPipeline:
 
         spider.connection_status['total_records'] = len(spider.processed_urls)
         spider.connection_status['last_sync_status'] = CrawlStatus.COMPLETED
-        spider.update_connection_status(self.site_id, json.dumps(spider.connection_status), spider.last_sync_time)
+        last_sync_time = datetime.datetime.now(datetime.UTC)
+        spider.update_connection_status(self.site_id, json.dumps(spider.connection_status), last_sync_time)
 
         spider.logger.info(f"Update completed: processed {len(spider.processed_urls)} URLs, deleted {len(urls_to_delete)} removed pages")
 
@@ -51,7 +52,7 @@ class BatchCrawlPipeline:
         spider.crawled_count += 1
         spider.connection_status['last_sync_count'] = spider.crawled_count
         if need_update_connection_status(spider.crawled_count):
-            spider.update_connection_status(self.site_id, json.dumps(spider.connection_status), spider.last_sync_time)
+            spider.update_connection_status(self.site_id, json.dumps(spider.connection_status))
         return item
 
     def save_content(self, item):

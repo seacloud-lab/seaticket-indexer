@@ -37,7 +37,6 @@ def sync_connection(connection_id, db_session_class, mq):
     connection_type = project_connection.type
     old_last_sync_time = project_connection.last_sync_time
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
-    last_sync_time = datetime.datetime.now(datetime.UTC)
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
 
     config = json.loads(project_connection.config)
@@ -81,6 +80,7 @@ def sync_connection(connection_id, db_session_class, mq):
     connection_status['total_records'] = total_count
     connection_status['last_sync_count'] = sync_count
     connection_status['last_sync_status'] = CrawlStatus.COMPLETED
+    last_sync_time = datetime.datetime.now(datetime.UTC)
     seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time)
 
     logger.info('Finish sync connection: %s', connection_id)
