@@ -82,7 +82,7 @@ class WebCrawl:
         logger.info(f"No sitemap found for site {url}")
         return None
 
-    def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, last_sync_time, success_call_back,
+    def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back,
               fail_call_back):
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
@@ -92,14 +92,13 @@ class WebCrawl:
             sitemap_url,
             project_uuid,
             connection_status,
-            last_sync_time,
             success_call_back,
             fail_call_back,
         )
 
         d.addCallback(self.start_crawl)
 
-    def prepare_crawler(self, site_id, site_url, sitemap_url, project_uuid, connection_status, last_sync_time, success_call_back,
+    def prepare_crawler(self, site_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back,
                         fail_call_back):
         """Prepare crawler parameters, execute in thread pool"""
         return {
@@ -108,7 +107,6 @@ class WebCrawl:
             'sitemap_url': sitemap_url,
             'project_uuid': project_uuid,
             'connection_status': connection_status,
-            'last_sync_time': last_sync_time,
             'success_call_back': success_call_back,
             'fail_call_back': fail_call_back,
         }
@@ -120,7 +118,6 @@ class WebCrawl:
         sitemap_url = crawler_params['sitemap_url']
         project_uuid = crawler_params['project_uuid']
         connection_status = crawler_params['connection_status']
-        last_sync_time = crawler_params['last_sync_time']
         success_call_back = crawler_params['success_call_back']
         fail_call_back = crawler_params['fail_call_back']
 
@@ -133,7 +130,6 @@ class WebCrawl:
                 site_id,
                 sitemap_url,
                 connection_status,
-                last_sync_time,
                 update_connection_status=self.update_connection_status,
                 seadb_api=self.seadb_api,
                 storage=self.storage
@@ -145,7 +141,6 @@ class WebCrawl:
                 project_uuid=project_uuid,
                 site_id=site_id,
                 connection_status=connection_status,
-                last_sync_time=last_sync_time,
                 update_connection_status=self.update_connection_status,
                 seadb_api=self.seadb_api,
                 storage=self.storage
