@@ -22,7 +22,6 @@ class DiscourseSyncManager:
     def __init__(self):
         self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
-        self.discourse_sync = DiscourseSync(self.db_session_class)
 
     def get_project_connection_by_id(self, pc_id, conn_type='discourse_forum'):
         with self.db_session_class() as session:
@@ -48,6 +47,8 @@ class DiscourseSyncManager:
     def handle_webhook(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
         project_connection = self.get_project_connection_by_id(connection_id)
+        project_uuid = project_connection.project_uuid
+        discourse_sync = DiscourseSync(project_uuid, self.db_session_class)
         if not project_connection:
             raise ForumNotFoundException()
 
@@ -58,13 +59,13 @@ class DiscourseSyncManager:
 
         topic_id = request_data.get('topic', {}).get('id')
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
-            self.discourse_sync.handle_topic_update(connection_id, topic_id, request_data)
+            discourse_sync.handle_topic_update(connection_id, topic_id, request_data)
         elif event_type in ['post_created', 'post_edited', 'post_recovered']:
-            self.discourse_sync.handle_reply_update(connection_id, topic_id, request_data)
+            discourse_sync.handle_reply_update(connection_id, topic_id, request_data)
         elif event_type == 'topic_destroyed':
-            self.discourse_sync.handle_topic_deleted(topic_id, connection_id)
+            discourse_sync.handle_topic_deleted(topic_id, connection_id)
         elif event_type == 'post_destroyed':
-            self.discourse_sync.handle_reply_delete(connection_id, topic_id, request_data)
+            discourse_sync.handle_reply_delete(connection_id, topic_id, request_data)
         else:
             logger.warning(f"Unknown event type: {event_type}")
         self.add_discourse_index_task(connection_id)

@@ -1,13 +1,12 @@
 import logging
 import json
-from sqlalchemy.sql import text
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
 
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 SEASEARCH_BULK_OPETATE_LIMIT = 100
 
 
@@ -67,9 +66,9 @@ class DiscourseIndex(object):
         }
     }
 
-    def __init__(self, seasearch_api, db_session_class, shard_num=1):
+    def __init__(self, seasearch_api, discourse_seadb_api, shard_num=1):
         self.seasearch_api = seasearch_api
-        self.db_session_class = db_session_class
+        self.discourse_seadb_api = discourse_seadb_api
         self.shard_num = shard_num
         self.lang = LANG
 
@@ -258,42 +257,65 @@ class DiscourseIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def get_all_need_index_topics_from_db(self, connection_id):
-        with self.db_session_class() as session:
-            sql = """
-                   SELECT topic_id, title, slug, category_id, deleted, 
-                   bumped_at
-                   FROM discourse_topics
-                   WHERE connection_id = :connection_id AND need_index = 1
-               """
-            rows = session.execute(text(sql), {'connection_id': connection_id}).fetchall()
-        return rows
+    def get_all_need_index_topics_from_db(self, connection_id, last_sync_time):
+        """From seadb obtain the topics that need to be indexed"""
+        try:
+            topics = self.discourse_seadb_api.get_topics_by_connection_id(
+                connection_id=connection_id,
+                update_at_gt=last_sync_time,
+            )
+            
+            result = []
+            for topic in topics:
+                class TopicRow:
+                    def __init__(self, data):
+                        self.topic_id = data['topic_id']
+                        self.title = data['title']
+                        self.slug = data['slug']
+                        self.category_id = data['category_id']
+                        self.deleted = data['deleted']
+                        self.bumped_at = data['bumped_at']
+                        self.updated_at = data['updated_at']
+                
+                result.append(TopicRow(topic))
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error getting topics from seadb: {e}")
+            return []
 
     def delete_topic_from_db(self, topic_id, connection_id):
-        """Physically delete topic from database"""
-        with self.db_session_class() as session:
-            sql = text("DELETE FROM discourse_topics WHERE topic_id = :topic_id AND connection_id = :connection_id")
-            session.execute(sql, {'topic_id': topic_id, 'connection_id': connection_id})
-            session.commit()
-
-    def update_topic_index_status(self, topic_id, connection_id):
-        with self.db_session_class() as session:
-            sql = text("UPDATE discourse_topics SET need_index = 0 WHERE topic_id = :topic_id AND connection_id = :connection_id")
-            session.execute(sql, {'topic_id': topic_id, 'connection_id': connection_id})
-            session.commit()
+        """Delete topic from seadb physically"""
+        try:
+            self.discourse_seadb_api.delete_topic(connection_id, topic_id)
+            logger.debug(f"Deleted topic {topic_id} from seadb")
+        except Exception as e:
+            logger.error(f"Error deleting topic {topic_id} from seadb: {e}")
 
     def get_replies_for_topic(self, connection_id, topic_id):
-        with self.db_session_class() as session:
-            sql = """
-                   SELECT post_number, content
-                   FROM discourse_replies
-                   WHERE connection_id = :connection_id AND topic_id = :topic_id
-               """
-            rows = session.execute(text(sql), {'connection_id': connection_id, 'topic_id': topic_id}).fetchall()
-        return rows
+        """Get the reply to the topic from seadb"""
+        try:
+            replies = self.discourse_seadb_api.get_replies_by_topic(
+                connection_id=connection_id,
+                topic_id=topic_id
+            )
+            
+            result = []
+            for reply in replies:
+                class ReplyRow:
+                    def __init__(self, data):
+                        self.post_number = data['post_number']
+                        self.content = data['content']
+                
+                result.append(ReplyRow(reply))
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error getting replies from seadb: {e}")
+            return []
 
-    def update(self, index_name, connection_id, connection_status, seaqa_db):
-        topics = self.get_all_need_index_topics_from_db(connection_id)
+    def update(self, index_name, connection_id, connection_status, last_sync_time, seaqa_db):
+        topics = self.get_all_need_index_topics_from_db(connection_id, last_sync_time)
         index_count = 0
         need_cleared_topic_id_set = set()
         need_cleared_topic_index_id_set = set()
@@ -307,15 +329,15 @@ class DiscourseIndex(object):
                 'slug': topic.slug,
                 'category_id': topic.category_id,
                 'bumped_at': topic.bumped_at,
+                'updated_at': topic.updated_at,
             }
 
-            if topic.deleted == 1:
+            if topic.deleted == True:
                 need_cleared_topic_id_set.add(topic.topic_id)
                 key = self.gen_index_id(connection_id, topic.topic_id)
                 need_cleared_topic_index_id_set.add(key)
             else:
                 self.add_or_update_topic_with_replies(index_name, connection_id, topic_data, replies)
-                self.update_topic_index_status(topic.topic_id, connection_id)
                 index_count += 1
 
             if need_update_connection_status(index_count):
