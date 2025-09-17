@@ -77,6 +77,7 @@ class WebCrawlColumns(object):
         self.updated_at = WebCrawlColumn('updated_at', PropertyTypes.DATETIME)
         self.deleted = WebCrawlColumn('deleted', PropertyTypes.BOOL)
 
+
 class WebCrawlColumn(object):
     def __init__(self, name, type, data=None):
         self.name = name

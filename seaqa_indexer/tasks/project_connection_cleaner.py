@@ -13,7 +13,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-
+from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 
 logger = logging.getLogger(__name__)
 
@@ -92,18 +92,16 @@ class ProjectConnectionCleaner(object):
             session.execute(sql, {'connection_id': connection_id})
             session.commit()
 
-    def delete_discourse_data_from_db(self, connection_id):
-        """Delete discourse topics and replies from database"""
-        with self.db_session_class() as session:
-            # Delete discourse replies first (due to foreign key constraints)
-            sql_replies = text("DELETE FROM discourse_replies WHERE connection_id = :connection_id")
-            session.execute(sql_replies, {'connection_id': connection_id})
-            
-            # Delete discourse topics
-            sql_topics = text("DELETE FROM discourse_topics WHERE connection_id = :connection_id")
-            session.execute(sql_topics, {'connection_id': connection_id})
-            
-            session.commit()
+    def delete_discourse_data_from_db(self, project_uuid, connection_id):
+        """Delete discourse topics and replies from seadb"""
+        try:
+            discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
+
+            deleted_count = discourse_seadb_api.delete_all_data_by_connection_id(connection_id)
+            logger.info(f"Deleted {deleted_count} discourse records for connection {connection_id} from seadb")
+        except Exception as e:
+            logger.error(f"Error deleting discourse data from seadb for connection {connection_id}: {e}")
+            raise
 
     def clear_deleted_project(self, project_uuid):
         # delete project index
@@ -132,7 +130,7 @@ class ProjectConnectionCleaner(object):
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             self.delete_issues_from_db(connection_id)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            self.delete_discourse_data_from_db(connection_id)
+            self.delete_discourse_data_from_db(project_uuid, connection_id)
 
         # delete db record
         self.delete_deleted_connection(connection_id)
