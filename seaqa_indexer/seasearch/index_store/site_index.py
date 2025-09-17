@@ -1,6 +1,5 @@
 import datetime
 import json
-import os
 import logging
 import pytz
 
@@ -44,7 +43,7 @@ class SiteIndex(object):
             },
             'last_modified': {
                 'type': 'text'
-            }
+            },
         }
     }
 

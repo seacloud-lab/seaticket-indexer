@@ -59,6 +59,7 @@ class BatchCrawlPipeline:
         url = item['url']
         title = item['title']
         content = item['content']
+        hash = item.get('hash') if item else None
         etag = item.get('etag') if item else None
         last_modified = item.get('last_modified') if item else None
         filename = url_to_filename(url)
@@ -76,6 +77,7 @@ class BatchCrawlPipeline:
                         WEB_CRAWL_TABLE.columns.etag.name: etag,
                         WEB_CRAWL_TABLE.columns.last_modified.name: last_modified,
                         WEB_CRAWL_TABLE.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        WEB_CRAWL_TABLE.columns.hash.name: hash,
                     }
                 }
             ]
@@ -88,6 +90,7 @@ class BatchCrawlPipeline:
                     WEB_CRAWL_TABLE.columns.etag.name: etag,
                     WEB_CRAWL_TABLE.columns.last_modified.name: last_modified,
                     WEB_CRAWL_TABLE.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                    WEB_CRAWL_TABLE.columns.hash.name: hash,
                 }
             ]
             self.seadb_api.insert_rows(self.project_uuid, str(self.site_id), rows)
