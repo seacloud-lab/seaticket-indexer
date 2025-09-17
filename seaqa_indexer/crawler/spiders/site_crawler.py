@@ -11,7 +11,7 @@ class SiteCrawlerSpider(CrawlSpider):
         Rule(LinkExtractor(), callback='parse_item', follow=True),
     )
 
-    def __init__(self, site_url, project_uuid, site_id, connection_status, last_sync_time, update_connection_status, seadb_api, storage, *args, **kwargs):
+    def __init__(self, site_url, project_uuid, site_id, connection_status, update_connection_status, seadb_api, storage, *args, **kwargs):
         super(SiteCrawlerSpider, self).__init__(*args, **kwargs)
         self.start_urls = [site_url]
         parsed_uri = urlparse(site_url)
@@ -20,7 +20,6 @@ class SiteCrawlerSpider(CrawlSpider):
         self.project_uuid = project_uuid
         self.site_id = site_id
         self.connection_status = connection_status
-        self.last_sync_time = last_sync_time
         self.update_connection_status = update_connection_status
         self.crawled_count = 0
         self.processed_urls = set()
