@@ -128,7 +128,7 @@ class DiscourseIndex(object):
             query_map['bool']['filter'].append({'terms': {'connection_id': connection_ids}})
         return query_map
 
-    def get_search_param(self, project_uuid, keyword, start=0, size=10, connection_ids=None, search_title_only=False):
+    def get_search_param(self, index_name, keyword, start=0, size=10, connection_ids=None, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
@@ -152,7 +152,7 @@ class DiscourseIndex(object):
         }
 
         repo_query_info = {
-            'index': project_uuid,
+            'index': index_name,
             'query': data
         }
 
@@ -191,7 +191,7 @@ class DiscourseIndex(object):
         return discourse_posts
 
     def add_or_update_topic_with_replies(self, index_name, connection_id, topic_data, replies_data):
-        _id = self.gen_index_id(connection_id, topic_data['topic_id'])
+        _id = self.gen_index_id(topic_data['topic_id'])
 
         body_content = ''
         for reply in replies_data:
@@ -218,8 +218,8 @@ class DiscourseIndex(object):
 
         self.seasearch_api.bulk(index_name, bulk_ops)
 
-    def gen_index_id(self, connection_id, topic_id):
-        return md5(f"{connection_id}{topic_id}")
+    def gen_index_id(self, topic_id):
+        return md5(f"{topic_id}")
 
     def query_data_by_connection_id(self, index_name, connection_id, start, size):
         dsl = {
@@ -334,7 +334,7 @@ class DiscourseIndex(object):
 
             if topic.deleted == True:
                 need_cleared_topic_id_set.add(topic.topic_id)
-                key = self.gen_index_id(connection_id, topic.topic_id)
+                key = self.gen_index_id(topic.topic_id)
                 need_cleared_topic_index_id_set.add(key)
             else:
                 self.add_or_update_topic_with_replies(index_name, connection_id, topic_data, replies)
