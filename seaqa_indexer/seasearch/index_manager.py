@@ -213,7 +213,7 @@ class IndexManager:
                 }
                 result_docs.append(r)
 
-        logger.debug('all type index search keyword: %s, in project: %s , \\nsearch result: %s', keyword,
+        logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
                         project_uuid, result_docs)
 
         return result_docs
