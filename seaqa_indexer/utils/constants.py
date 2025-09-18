@@ -76,6 +76,7 @@ class WebCrawlColumns(object):
         self.last_modified = WebCrawlColumn('last_modified', PropertyTypes.DATETIME)
         self.updated_at = WebCrawlColumn('updated_at', PropertyTypes.DATETIME)
         self.deleted = WebCrawlColumn('deleted', PropertyTypes.BOOL)
+        self.hash = WebCrawlColumn('hash', PropertyTypes.TEXT)
 
 
 class WebCrawlColumn(object):
@@ -105,4 +106,5 @@ WEB_CRAWL_COLUMNS = [
     WEB_CRAWL_TABLE.columns.last_modified.to_dict(),
     WEB_CRAWL_TABLE.columns.updated_at.to_dict(),
     WEB_CRAWL_TABLE.columns.deleted.to_dict(),
+    WEB_CRAWL_TABLE.columns.hash.to_dict(),
 ]

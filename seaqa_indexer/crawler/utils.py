@@ -1,9 +1,9 @@
 import re
-import hashlib
 import urllib.parse
 from email.utils import parsedate_to_datetime
 from seaqa_indexer.crawler.extractor import extract_html
 from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
+from seaqa_indexer.utils import md5
 
 
 def url_to_filename(url):
@@ -64,12 +64,22 @@ def spider_parse_item(spider, response):
 
     # Extract page body content
     body_content = extract_html(url, response.text)
+    try:
+        content_hash = md5(body_content) if body_content else None
+    except Exception as e:
+        spider.logger.debug(f"Failed to compute content hash for {url}: {e}")
+        content_hash = None
+    if content_hash == cache_info.get('hash', ''):
+        spider.logger.info(f"No changes detected for {url}")
+        return
+
     return {
         'url': url,
         'title': title,
         'content': body_content,
+        'hash': content_hash,
         'etag': response_etag,
-        'last_modified': response_last_modified
+        'last_modified': response_last_modified,
     }
 
 
@@ -77,7 +87,7 @@ def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api
     """Load the ETag and Last-Modified information of an existing file"""
     offset = 0
     while True:
-        sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`
+        sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`, `{WEB_CRAWL_TABLE.columns.hash.name}`
         FROM `{site_id}`
         LIMIT {limit} OFFSET {offset}"""
         result = seadb_api.query_rows(project_uuid, sql)
@@ -87,5 +97,6 @@ def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api
             existing_site_info[row.get('url')] = {
                 'etag': row.get('etag'),
                 'last_modified': row.get('last_modified'),
+                'hash': row.get('hash')
             }
         offset += limit
