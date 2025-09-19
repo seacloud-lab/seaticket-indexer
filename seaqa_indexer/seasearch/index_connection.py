@@ -154,7 +154,7 @@ def update_discourse_forum_index(project_connection, seasearch_api, seaqa_db):
 
     connection_status['last_index_status'] = IndexStatus.INDEXING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-    discourse_index_name = gen_index_name_by_type(project_uuid, project_connection.type)
+    discourse_index_name = gen_index_name_by_type(project_uuid, project_connection.type, connection_id)
     discourse_forum_index.create_index_if_missing(discourse_index_name)
 
     new_last_sync_time = datetime.datetime.now(datetime.UTC)
