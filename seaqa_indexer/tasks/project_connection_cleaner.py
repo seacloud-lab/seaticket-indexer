@@ -23,7 +23,7 @@ class ProjectConnectionCleaner(object):
         self.db_session_class = init_db_session_class()
         self.index_manager = IndexManager()
         self.should_stop = threading.Event()
-        self.clear_interval = 10 * 60
+        self.clear_interval = 24 * 60 * 60
 
         self.LOCK_TIMEOUT = 1800  # 30 minutes
         self.locked_keys = set()
@@ -110,7 +110,7 @@ class ProjectConnectionCleaner(object):
         # delete crawled file folder
         if self.storage is not None:
             self.storage.delete_project(project_uuid)
-        
+
         self.seadb_api.delete_base(project_uuid)
         # delete db record
         self.delete_deleted_project(project_uuid)
