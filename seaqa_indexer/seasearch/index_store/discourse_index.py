@@ -118,21 +118,10 @@ class DiscourseIndex(object):
             query_map['bool']['filter'] = []
         return query_map
 
-    def _add_connection_id_filter(self, query_map, connection_ids):
-        if connection_ids is None:
-            return query_map
-
-        query_map = self._ensure_filter_exists(query_map)
-
-        if isinstance(connection_ids, list):
-            query_map['bool']['filter'].append({'terms': {'connection_id': connection_ids}})
-        return query_map
-
-    def get_search_param(self, index_name, keyword, start=0, size=10, connection_ids=None, search_title_only=False):
+    def get_search_param(self, index_name, keyword, start=0, size=10, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
-        query_map = self._add_connection_id_filter(query_map, connection_ids)
 
         data = {
             'query': query_map,
@@ -158,9 +147,9 @@ class DiscourseIndex(object):
 
         return repo_query_info
 
-    def search(self, project_uuid, keyword, start, size, connection_ids=None, search_filename_only=False):
+    def search(self, index_name, keyword, start, size, search_filename_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(project_uuid, keyword, start, size, connection_ids, search_filename_only)
+        search_param = self.get_search_param(index_name, keyword, start, size, search_filename_only)
         bulk_search_params.append(search_param)
 
         query_body = json.dumps({
@@ -187,7 +176,7 @@ class DiscourseIndex(object):
             }
             discourse_posts.append(post)
 
-        logger.debug(f"Discourse search: {keyword} in {project_uuid}, found {len(discourse_posts)} results")
+        logger.debug(f"Discourse search: {keyword} in {index_name}, found {len(discourse_posts)} results")
         return discourse_posts
 
     def add_or_update_topic_with_replies(self, index_name, connection_id, topic_data, replies_data):
@@ -221,24 +210,6 @@ class DiscourseIndex(object):
     def gen_index_id(self, topic_id):
         return md5(f"{topic_id}")
 
-    def query_data_by_connection_id(self, index_name, connection_id, start, size):
-        dsl = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {"term": {"connection_id": connection_id}}
-                    ]
-                }
-            },
-            "from": start,
-            "size": size,
-            "_source": False,
-            "sort": ["@topic_id"],
-        }
-
-        hits, total = self.normal_search(index_name, dsl)
-        return hits, total
-
     def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
         total = doc_item['hits']['total']['value']
@@ -257,14 +228,14 @@ class DiscourseIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def get_all_need_index_topics_from_db(self, connection_id, last_sync_time):
+    def get_all_need_index_topics_from_db(self, connection_id, last_indexed_at):
         """From seadb obtain the topics that need to be indexed"""
         try:
             topics = self.discourse_seadb_api.get_topics_by_connection_id(
                 connection_id=connection_id,
-                update_at_gt=last_sync_time,
+                update_at_gt=last_indexed_at,
             )
-            
+
             result = []
             for topic in topics:
                 class TopicRow:
@@ -276,9 +247,9 @@ class DiscourseIndex(object):
                         self.deleted = data['deleted']
                         self.bumped_at = data['bumped_at']
                         self.updated_at = data['updated_at']
-                
+
                 result.append(TopicRow(topic))
-            
+
             return result
         except Exception as e:
             logger.error(f"Error getting topics from seadb: {e}")
@@ -299,23 +270,23 @@ class DiscourseIndex(object):
                 connection_id=connection_id,
                 topic_id=topic_id
             )
-            
+
             result = []
             for reply in replies:
                 class ReplyRow:
                     def __init__(self, data):
                         self.post_number = data['post_number']
                         self.content = data['content']
-                
+
                 result.append(ReplyRow(reply))
-            
+
             return result
         except Exception as e:
             logger.error(f"Error getting replies from seadb: {e}")
             return []
 
-    def update(self, index_name, connection_id, connection_status, last_sync_time, seaqa_db):
-        topics = self.get_all_need_index_topics_from_db(connection_id, last_sync_time)
+    def update(self, index_name, connection_id, connection_status, seaqa_db, last_indexed_at):
+        topics = self.get_all_need_index_topics_from_db(connection_id, last_indexed_at)
         index_count = 0
         need_cleared_topic_id_set = set()
         need_cleared_topic_index_id_set = set()

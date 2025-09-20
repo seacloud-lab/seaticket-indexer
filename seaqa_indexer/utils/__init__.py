@@ -5,7 +5,7 @@ import atexit
 import subprocess
 import hashlib
 import json
-import uuid 
+import uuid
 from datetime import datetime, timezone
 from copy import deepcopy
 from seaqa_indexer.utils.hasher import AESPasswordHasher
@@ -144,3 +144,9 @@ def uuid_str_to_36_chars(uuid_str):
         return str(uuid.UUID(uuid_str))
     else:
         return uuid_str
+
+def uuid_str_to_32_chars(project_uuid):
+    if len(project_uuid) == 36:
+        return uuid.UUID(project_uuid).hex
+    else:
+        return project_uuid
