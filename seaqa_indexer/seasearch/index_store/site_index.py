@@ -28,13 +28,12 @@ class SiteIndex(object):
             },
             'title': {
                 'type': 'text',
+                'analyzer': 'gse_standard_analyzer',
                 'fields': {
-                    'ngram': {
-                        'type': 'text',
-                        'index': True,
-                        'analyzer': 'site_title_ngram_analyzer',
-                    },
-                },
+                    'keyword': {
+                        'type': 'keyword'
+                    }
+                }
             },
             'content': {
                 'type': 'text',
@@ -50,13 +49,6 @@ class SiteIndex(object):
     index_settings = {
         'analysis': {
             'analyzer': {
-                'site_title_ngram_analyzer': {
-                    'type': 'custom',
-                    'tokenizer': 'site_title_ngram_tokenizer',
-                    'filter': [
-                        'lowercase',
-                    ],
-                },
                 'gse_standard_analyzer': {
                     'type': 'gse_standard',
                     "char_filter": [
@@ -69,17 +61,6 @@ class SiteIndex(object):
                     "type": "mapping",
                     "mappings": [
                         "\n =>  "
-                    ]
-                }
-            },
-            'tokenizer': {
-                'site_title_ngram_tokenizer': {
-                    'type': 'ngram',
-                    'min_gram': 4,
-                    'max_gram': 4,
-                    'token_chars': [
-                        'letter',
-                        'digit'
                     ]
                 }
             }
@@ -119,14 +100,6 @@ class SiteIndex(object):
 
         searches = []
         searches.append(_make_match_query('title', keyword, **match_query_kwargs))
-        searches.append({
-            'match': {
-                'title.ngram': {
-                    'query': keyword,
-                    'minimum_should_match': '80%',
-                }
-            }
-        })
         if not search_title_only:
             searches.append(_make_match_query('content', keyword, **match_query_kwargs))
 
@@ -147,7 +120,7 @@ class SiteIndex(object):
             query_map['bool']['filter'].append({'terms': {'connection_id': connection_ids}})
         return query_map
 
-    def get_search_param(self, project_uuid, keyword, start, size, connection_ids=None, search_title_only=False):
+    def get_search_param(self, index_name, keyword, start, size, connection_ids=None, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
@@ -165,16 +138,16 @@ class SiteIndex(object):
                 'fields': {'content': {}},
             }
         }
-        index_name = project_uuid
+
         site_query_info = {
             'index': index_name,
             'query': data
         }
         return site_query_info
 
-    def search(self, project_uuid, keyword, start, size, search_title_only=False):
+    def search(self, index_name, keyword, start, size, search_title_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(project_uuid, keyword, start, size, search_title_only)
+        search_param = self.get_search_param(index_name, keyword, start, size, search_title_only)
         bulk_search_params.append(search_param)
         query_body = json.dumps({
             'index_queries': bulk_search_params
@@ -204,19 +177,19 @@ class SiteIndex(object):
             #     r.update(content=highlight_content)
             site_docs.append(r)
 
-        logger.debug('search keyword: %s, in project: %s , \nsearch result: %s', keyword, project_uuid, site_docs)
+        logger.debug('search keyword: %s, in project: %s , \nsearch result: %s', keyword, index_name, site_docs)
 
         return site_docs
 
     def update_document(self, index_name, connection_id, content, url, etag, title, last_modified):
         self.add_document(index_name, connection_id, content, url, etag, title, last_modified)
 
-    def gen_index_id(self, connection_id, url):
-        return md5(str(connection_id) + url)
+    def gen_index_id(self, url):
+        return md5(url)
 
     def add_document(self, index_name, connection_id, content, url, etag, title, last_modified):
         bulk_add_params = []
-        index_info = {'index': {'_index': index_name, '_id': self.gen_index_id(connection_id, url)}}
+        index_info = {'index': {'_index': index_name, '_id': self.gen_index_id(url)}}
         doc_info = {
             'connection_id': connection_id,
             'content': content,
@@ -229,24 +202,6 @@ class SiteIndex(object):
         bulk_add_params.append(index_info)
         bulk_add_params.append(doc_info)
         self.seasearch_api.bulk(index_name, bulk_add_params)
-
-    def query_data_by_connection_id(self, index_name, connection_id, start, size):
-        dsl = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {"term": {"connection_id": connection_id}}
-                    ]
-                }
-            },
-            "from": start,
-            "size": size,
-            "_source": ["url", "last_modified", "etag"],
-            "sort": ["@url"],
-        }
-
-        hits, total = self.normal_search(index_name, dsl)
-        return hits, total
 
     def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
@@ -267,24 +222,7 @@ class SiteIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def get_all_id_to_site_info_by_site_id(self, site_index_name, connection_id):
-        per_size = 1000
-        start = 0
-        site_id_to_site_info = {}
-        while True:
-            hits, total = self.query_data_by_connection_id(site_index_name, connection_id, start, per_size)
-            for hit in hits:
-                source = hit['_source']
-                url = source['url']
-                index_id = self.gen_index_id(connection_id, url)
-                site_id_to_site_info[index_id] = source
-
-            start += per_size
-            if len(hits) < per_size:
-                break
-        return site_id_to_site_info
-
-    def update(self, site_index_name, connection_id, project_uuid, connection_status, seaqa_db, last_indexed_at):
+    def update(self, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_indexed_at):
         new_index_ids_set = set()
         deleted_index_id_set = set()
         deleted_seadb_pk_set = set()
@@ -297,7 +235,7 @@ class SiteIndex(object):
         def _flush_bulk_if_needed(force=False):
             nonlocal bulk_params
             if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
-                self.seasearch_api.bulk(site_index_name, bulk_params)
+                self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 
         if not last_indexed_at:
@@ -319,7 +257,7 @@ class SiteIndex(object):
                 title = row.get('title')
                 deleted = row.get('deleted')
                 pk = row.get('_pk')
-                key = self.gen_index_id(connection_id, url)
+                key = self.gen_index_id(url)
                 if deleted:
                     deleted_index_id_set.add(key)
                     deleted_seadb_pk_set.add(pk)
@@ -333,7 +271,7 @@ class SiteIndex(object):
                 file_json = self.storage.read_json(connection_id, project_uuid, filename)
                 content = file_json.get('content')
 
-                index_info = {'index': {'_index': site_index_name, '_id': key}}
+                index_info = {'index': {'_index': index_name, '_id': key}}
                 doc_info = {
                     'connection_id': connection_id,
                     'content': content,
@@ -356,7 +294,7 @@ class SiteIndex(object):
 
         _flush_bulk_if_needed(force=True)
         # delete deleted index record
-        self.delete_indexes_by_ids(site_index_name, deleted_index_id_set)
+        self.delete_indexes_by_ids(index_name, deleted_index_id_set)
         if deleted_index_id_set:
             # delete deleted seadb data
             self.seadb_api.delete_rows(project_uuid, str(connection_id), list(deleted_seadb_pk_set))

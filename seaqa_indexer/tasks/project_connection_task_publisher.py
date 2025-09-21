@@ -53,9 +53,9 @@ class ProjectConnectionTaskPublisherTimer(Thread):
     def get_project_connections_by_page(self, start, limit):
         with self.db_session_class() as session:
             sql = """
-            SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid, pc.type, pc.last_sync_time
+            SELECT pc.id, pc.config, pc.project_uuid, pc.status, p.uuid, pc.type, pc.last_sync_time
             FROM project_connection pc
-            INNER JOIN projects p ON p.id = pc.project_id
+            INNER JOIN projects p ON p.uuid = pc.project_uuid
             WHERE p.deleted = false
               AND (
                     pc.last_sync_time IS NULL

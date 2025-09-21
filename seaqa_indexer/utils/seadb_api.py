@@ -31,13 +31,13 @@ class SeaDBAPI:
         }
         token = jwt.encode(payload, self.secret_key, algorithm='HS256')
         return {"Authorization": "Bearer %s" % token}
-    
-    
+
+
     def ping(self):
         url = f'{self.server_url}/ping'
         response = requests.get(url, timeout=self.timeout)
         return parse_response(response)
-    
+
     # base
     def create_base(self, base_id):
         base_id = uuid_str_to_36_chars(base_id)
@@ -45,21 +45,28 @@ class SeaDBAPI:
         url = f'{self.server_url}/api/v1/{base_id}/base'
         response = requests.post(url, headers=headers, timeout=self.timeout)
         return parse_response(response)
-    
+
     def get_base_info(self, base_id):
         base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/base-info'
         response = requests.get(url, headers=headers, timeout=self.timeout)
         return parse_response(response)
-    
+
+    def get_base_metadata(self, base_id):
+        base_id = uuid_str_to_36_chars(base_id)
+        headers = self.gen_headers(base_id)
+        url = f'{self.server_url}/api/v1/{base_id}/metadata'
+        response = requests.get(url, headers=headers, timeout=self.timeout)
+        return parse_response(response)
+
     def delete_base(self, base_id):
         base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/base'
         response = requests.delete(url, headers=headers, timeout=self.timeout)
         return parse_response(response)
-    
+
     # table
     def create_table(self, base_id, table_name):
         base_id = uuid_str_to_36_chars(base_id)
@@ -80,7 +87,7 @@ class SeaDBAPI:
         }
         response = requests.delete(url, headers=headers, json=params, timeout=self.timeout)
         return parse_response(response)
-    
+
     # rows
     def insert_rows(self, base_id, table_name, rows):
         base_id = uuid_str_to_36_chars(base_id)
@@ -92,7 +99,7 @@ class SeaDBAPI:
             }
         response = requests.post(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
-    
+
 
     def update_rows(self, base_id, table_name, rows):
         base_id = uuid_str_to_36_chars(base_id)

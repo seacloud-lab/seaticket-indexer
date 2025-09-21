@@ -1,6 +1,5 @@
 import logging
 import json
-from sqlalchemy.sql import text
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT
@@ -13,6 +12,7 @@ from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
+from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 
 logger = logging.getLogger(__name__)
@@ -27,58 +27,25 @@ class IndexManager:
         self.github_issues_index = GitHubIssuesIndex(self.seasearch_api, self.db_session_class)
         self.discourse_index = DiscourseIndex(self.seasearch_api, self.db_session_class)
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
-
-    def get_project_connection_by_id(self, connection_id):
-        with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.type, pc.last_sync_time, pc.indexed_at, pc.is_active
-            FROM project_connection pc 
-            INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
-            connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-        return connection
+        self.seaqa_db = SeaqaDB(self.db_session_class)
 
     def delete_index_by_project(self, project_uuid):
-        # delete seafile index
-        seafile_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
-        self.seafile_index.delete_index_by_index_name(seafile_index_name)
+        project_connections = self.seaqa_db.get_connections_by_project_uuid(project_uuid)
+        for project_connection in project_connections:
+            connection_id = project_connection.id
+            connection_type = project_connection.type
+            self.delete_index_by_connection(connection_id, connection_type)
 
-        # delete site index
-        site_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
-        self.site_index.delete_index_by_index_name(site_index_name)
-
-        #delete issues index
-        issues_index_name = gen_index_name_by_type(project_uuid,ConnectionType.GITHUB_ISSUE.value)
-        self.github_issues_index.delete_index_by_index_name(issues_index_name)
-
-        # delete discourse index
-        connections = self.get_project_connections_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
-        for connection in connections:
-            discourse_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value, connection.id)
-            self.discourse_index.delete_index_by_index_name(discourse_index_name)
-
-    def delete_index_by_connection(self, project_uuid, connection_id, connection_type):
-        index_name = gen_index_name_by_type(project_uuid, connection_type, connection_id)
-        index = None
+    def delete_index_by_connection(self, connection_id, connection_type):
+        index_name = gen_index_name_by_type(connection_id, connection_type)
         if connection_type == ConnectionType.SITE.value:
-            index = self.site_index
+            self.site_index.delete_index_by_index_name(index_name)
         elif connection_type == ConnectionType.SEAFILE.value:
-            index = self.seafile_index
+            self.seafile_index.delete_index_by_index_name(index_name)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            index = self.github_issues_index
+            self.github_issues_index.delete_index_by_index_name(index_name)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            index = self.discourse_index
-        start = 0
-        per_size = 100
-        while True:
-            hits, total = index.query_data_by_connection_id(index_name, connection_id, start, per_size)
-            if not hits:
-                return
-            ids = []
-            for hit in hits:
-                _id = hit['_id']
-                ids.append(_id)
-
-            index.delete_indexes_by_ids(index_name, ids)
+            self.discourse_index.delete_index_by_index_name(index_name)
 
     def add_connection_index_task(self, connection_id):
         msg_content = {
@@ -89,38 +56,31 @@ class IndexManager:
     def search(self, project_uuid, connection_ids, keyword, start=0, size=20):
         result_docs = []
         bulk_search_params = []
-        connection_type_list = [connection_type.value for connection_type in ConnectionType]
 
         connection_id_list = connection_ids.split(',') if connection_ids else None
+        if not connection_id_list:
+            return []
+        project_connections = self.seaqa_db.get_connection_by_ids(connection_id_list)
 
-        with self.db_session_class() as session:
-            for connection_type in connection_type_list:
-                if connection_type == ConnectionType.SEAFILE.value:
-                    seafile_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SEAFILE.value)
-                    seafile_search_param = self.seafile_index.get_search_param(seafile_index_name, keyword, start, size, connection_id_list)
-                    bulk_search_params.append(seafile_search_param)
-                elif connection_type == ConnectionType.SITE.value:
-                    site_index_name = gen_index_name_by_type(project_uuid, ConnectionType.SITE.value)
-                    site_search_param = self.site_index.get_search_param(site_index_name, keyword, start, size, connection_id_list)
-                    bulk_search_params.append(site_search_param)
-                elif connection_type == ConnectionType.EMAIL.value:
-                    pass
-                elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                    issues_index_name = gen_index_name_by_type(project_uuid, ConnectionType.GITHUB_ISSUE.value)
-                    issues_search_param = self.github_issues_index.get_search_param(issues_index_name, keyword, start, size, connection_id_list)
-                    bulk_search_params.append(issues_search_param)
-                elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                    if connection_id_list:
-                        for connection_id in connection_id_list:
-                            discourse_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value, connection_id)
-                            discourse_search_param = self.discourse_index.get_search_param(discourse_index_name, keyword, start, size, [connection_id])
-                            bulk_search_params.append(discourse_search_param)
-                    else:
-                        connections = self.get_project_connections_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value)
-                        for connection in connections:
-                            discourse_index_name = gen_index_name_by_type(project_uuid, ConnectionType.DISCOURSE_FORUM.value, connection.id)
-                            discourse_search_param = self.discourse_index.get_search_param(discourse_index_name, keyword, start, size, [connection.id])
-                            bulk_search_params.append(discourse_search_param)
+        for project_connection in project_connections:
+            connection_type = project_connection.type
+            connection_id = project_connection.id
+            index_name = gen_index_name_by_type(connection_id, connection_type)
+
+            if connection_type == ConnectionType.SEAFILE.value:
+                seafile_search_param = self.seafile_index.get_search_param(index_name, keyword, start, size)
+                bulk_search_params.append(seafile_search_param)
+            elif connection_type == ConnectionType.SITE.value:
+                site_search_param = self.site_index.get_search_param(index_name, keyword, start, size)
+                bulk_search_params.append(site_search_param)
+            elif connection_type == ConnectionType.EMAIL.value:
+                pass
+            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                issues_search_param = self.github_issues_index.get_search_param(index_name, keyword, start, size)
+                bulk_search_params.append(issues_search_param)
+            elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+                discourse_search_param = self.discourse_index.get_search_param(index_name, keyword, start, size)
+                bulk_search_params.append(discourse_search_param)
 
         if not bulk_search_params:
             return []
@@ -145,7 +105,7 @@ class IndexManager:
                 connection_id = source['connection_id']
                 repo_cache_info = redis_cache.get(repo_id)
                 if not repo_cache_info:
-                    project_connection = self.get_project_connection_by_id(connection_id)
+                    project_connection = self.seaqa_db.get_project_connection_by_id(connection_id)
                     if not project_connection:
                         continue
                     repo_name = json.loads(project_connection.config).get('repo_name')
@@ -217,12 +177,3 @@ class IndexManager:
                         project_uuid, result_docs)
 
         return result_docs
-
-    def get_project_connections_by_type(self, project_uuid, connection_type):
-        with self.db_session_class() as session:
-            sql = """SELECT pc.id
-            FROM project_connection pc
-            INNER JOIN projects p
-            ON p.id=pc.project_id WHERE p.uuid=:project_uuid AND pc.type=:connection_type AND p.deleted=false AND pc.deleted=false"""
-            connections = session.execute(text(sql), {'project_uuid': project_uuid, 'connection_type': connection_type}).fetchall()
-        return connections

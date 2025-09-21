@@ -13,6 +13,8 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
+from seaqa_indexer.utils.constants import ConnectionType
+
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 
 logger = logging.getLogger(__name__)
@@ -64,7 +66,7 @@ class ProjectConnectionCleaner(object):
             sql = """SELECT pc.id, pc.config, pc.status, p.uuid as project_uuid, pc.type, pc.last_sync_time, pc.indexed_at
              FROM project_connection pc
             INNER JOIN projects p
-            ON p.id=pc.project_id WHERE pc.deleted=true """
+            ON p.uuid=pc.project_uuid WHERE pc.deleted=true """
             connections = session.execute(text(sql)).fetchall()
             return connections
 
@@ -75,6 +77,10 @@ class ProjectConnectionCleaner(object):
             return connections
 
     def delete_deleted_project(self, project_uuid):
+        with self.db_session_class() as session:
+            sql = """DELETE FROM project_connection WHERE project_uuid=:project_uuid"""
+            session.execute(text(sql), {'project_uuid': project_uuid})
+            session.commit()
         with self.db_session_class() as session:
             sql = """DELETE FROM deleted_projects WHERE project_uuid=:project_uuid"""
             session.execute(text(sql), {'project_uuid': project_uuid})
@@ -108,25 +114,26 @@ class ProjectConnectionCleaner(object):
         self.index_manager.delete_index_by_project(project_uuid)
 
         # delete crawled file folder
-        if self.storage is not None:
-            self.storage.delete_project(project_uuid)
+        self.storage.delete_project(project_uuid)
 
         self.seadb_api.delete_base(project_uuid)
         # delete db record
         self.delete_deleted_project(project_uuid)
+        logger.info('Clear project %s success', project_uuid)
 
     def clear_deleted_connection(self, project_uuid, connection_id, connection_type):
-        from seaqa_indexer.utils.constants import ConnectionType
         # delete connection index
-        self.index_manager.delete_index_by_connection(project_uuid, connection_id, connection_type)
+        self.index_manager.delete_index_by_connection(connection_id, connection_type)
 
         if connection_type == ConnectionType.SITE.value:
-            if self.storage is not None:
-                self.storage.delete_site(connection_id, project_uuid)
-            base_info = self.seadb_api.get_base_info(project_uuid)
-            tables = base_info['tables']
-            table_id = [table['id'] for table in tables if table['name'] == str(connection_id)][0]
-            self.seadb_api.delete_table(project_uuid, table_id)
+            self.storage.delete_site(connection_id, project_uuid)
+
+            base_metadata = self.seadb_api.get_base_metadata(project_uuid)
+            tables = base_metadata.get('tables')
+            if tables:
+                for table in tables:
+                    if table['name'] == str(connection_id):
+                        self.seadb_api.delete_table(project_uuid, table['id'])
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             self.delete_issues_from_db(connection_id)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
@@ -134,15 +141,19 @@ class ProjectConnectionCleaner(object):
 
         # delete db record
         self.delete_deleted_connection(connection_id)
+        logger.info('Clear connection %s success', connection_id)
 
     def clear_project_connections(self):
         # delete connection
         deleted_projects = self.get_all_deleted_projects()
         for project in deleted_projects:
             project_uuid = project.project_uuid
-            logger.info('start clean project: %s', project_uuid)
-            self.clear_deleted_project(project_uuid)
-            logger.info('finish clean project: %s', project_uuid)
+            logger.info('Start clean project %s', project_uuid)
+            try:
+                self.clear_deleted_project(project_uuid)
+            except Exception as e:
+                logger.exception('Fail to clear project %s, error: %s', project_uuid, e)
+            logger.info('Finish clean project %s success', project_uuid)
 
         # delete connections
         deleted_connections = self.get_all_deleted_connections()
@@ -153,18 +164,21 @@ class ProjectConnectionCleaner(object):
 
             if self.mq.set(self._get_index_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
                 # get lock
-                logger.info('%s cron start deleted connection: %s' % (self.tname, connection_id))
+                logger.info('%s Start deleting connection %s' % (self.tname, connection_id))
                 lock_key = self._get_index_lock_key(connection_id)
                 self.locked_keys.add(lock_key)
-                self.clear_deleted_connection(project_uuid, connection_id, connection_type)
+                try:
+                    self.clear_deleted_connection(project_uuid, connection_id, connection_type)
+                except Exception as e:
+                    logger.exception('Fail to clear deleted connection, project_uuid: %s, connection_id: %s, error: %s', project_uuid, connection_id, e)
                 try:
                     self.locked_keys.remove(lock_key)
                 except KeyError:
                     logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                 self.mq.delete(lock_key)
-                logger.info('%s cron finish deleted connection: %s' % (self.tname, connection_id))
+                logger.info('Thread %s Delete connection %s completed' % (self.tname, connection_id))
             else:
-                logger.warning('cron deleted connection: %s pass, because of update index is running.', connection_id)
+                logger.warning('Delete connection %s pass, because of update index is running.', connection_id)
 
     def clear(self):
         if not self.mq:
@@ -192,7 +206,7 @@ class ProjectConnectionCleaner(object):
 
 def start():
     project_connection_cleaner = ProjectConnectionCleaner()
-    logger.info("project connection cleaner process initialized.")
+    logger.info("Project connection cleaner process initialized.")
     try:
         project_connection_cleaner.start()
     except Exception as e:

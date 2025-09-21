@@ -29,13 +29,12 @@ class SeafileIndex(object):
             },
             'filename': {
                 'type': 'text',
+                'analyzer': 'gse_standard_analyzer',
                 'fields': {
-                    'ngram': {
-                        'type': 'text',
-                        'index': True,
-                        'analyzer': 'seafile_file_name_ngram_analyzer',
-                    },
-                },
+                    'keyword': {
+                        'type': 'keyword'
+                    }
+                }
             },
             'content': {
                 'type': 'text',
@@ -52,13 +51,6 @@ class SeafileIndex(object):
     index_settings = {
         'analysis': {
             'analyzer': {
-                'seafile_file_name_ngram_analyzer': {
-                    'type': 'custom',
-                    'tokenizer': 'seafile_file_name_ngram_tokenizer',
-                    'filter': [
-                        'lowercase',
-                    ],
-                },
                 'gse_standard_analyzer': {
                     'type': 'gse_standard',
                     "char_filter": [
@@ -71,17 +63,6 @@ class SeafileIndex(object):
                     "type": "mapping",
                     "mappings": [
                         "\n =>  "
-                    ]
-                }
-            },
-            'tokenizer': {
-                'seafile_file_name_ngram_tokenizer': {
-                    'type': 'ngram',
-                    'min_gram': 4,
-                    'max_gram': 4,
-                    'token_chars': [
-                        'letter',
-                        'digit'
                     ]
                 }
             }
@@ -118,15 +99,7 @@ class SeafileIndex(object):
             return {'match': {field: q}}
 
         searches = []
-        searches.append(_make_match_query('title', keyword, **match_query_kwargs))
-        searches.append({
-            'match': {
-                'title.ngram': {
-                    'query': keyword,
-                    'minimum_should_match': '80%',
-                }
-            }
-        })
+        searches.append(_make_match_query('filename', keyword, **match_query_kwargs))
         if not search_filename_only:
             searches.append(_make_match_query('content', keyword, **match_query_kwargs))
 
@@ -137,21 +110,10 @@ class SeafileIndex(object):
             query_map['bool']['filter'] = []
         return query_map
 
-    def _add_connection_id_filter(self, query_map, connection_ids):
-        if connection_ids is None:
-            return query_map
-
-        query_map = self._ensure_filter_exists(query_map)
-
-        if isinstance(connection_ids, list):
-            query_map['bool']['filter'].append({'terms': {'connection_id': connection_ids}})
-        return query_map
-
-    def get_search_param(self, project_uuid, keyword, start, size, connection_ids=None, search_filename_only=False):
+    def get_search_param(self, index_name, keyword, start, size, search_filename_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_filename_only)
         query_map['bool']['should'] = searches
-        query_map = self._add_connection_id_filter(query_map, connection_ids)
 
         data = {
             'query': query_map,
@@ -165,16 +127,15 @@ class SeafileIndex(object):
                 'fields': {'content': {}},
             }
         }
-        index_name = project_uuid
         repo_query_info = {
             'index': index_name,
             'query': data
         }
         return repo_query_info
 
-    def search(self, project_uuid, keyword, start, size, connection_ids=None, search_filename_only=False):
+    def search(self, index_name, keyword, start, size, search_filename_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(project_uuid, keyword, start, size, connection_ids, search_filename_only)
+        search_param = self.get_search_param(index_name, keyword, start, size, search_filename_only)
         bulk_search_params.append(search_param)
         query_body = json.dumps({
             'index_queries': bulk_search_params
@@ -205,19 +166,19 @@ class SeafileIndex(object):
             #     r.update(content=highlight_content)
             seafile_docs.append(r)
 
-        logger.debug('seafile index search keyword: %s, in project: %s , \nsearch result: %s', keyword, project_uuid, seafile_docs)
+        logger.debug('seafile index search keyword: %s, in project: %s , \nsearch result: %s', keyword, index_name, seafile_docs)
 
         return seafile_docs
 
     def update_document(self, index_name, connection_id, content, repo_id, parent_dir, filename, mtime):
         self.add_document(index_name, connection_id, content, repo_id, parent_dir, filename, mtime)
 
-    def gen_index_id(self, connection_id, repo_id, parent_dir, filename):
-        return md5(str(connection_id) + repo_id + parent_dir + filename)
+    def gen_index_id(self, repo_id, parent_dir, filename):
+        return md5(repo_id + parent_dir + filename)
 
     def add_document(self, index_name, connection_id, content, repo_id, parent_dir, filename, mtime):
         bulk_add_params = []
-        _id = self.gen_index_id(connection_id, repo_id, parent_dir, filename)
+        _id = self.gen_index_id(repo_id, parent_dir, filename)
         index_info = {'index': {'_index': index_name, '_id': _id}}
         doc_info = {
             'connection_id': connection_id,
@@ -232,14 +193,10 @@ class SeafileIndex(object):
         bulk_add_params.append(doc_info)
         self.seasearch_api.bulk(index_name, bulk_add_params)
 
-    def query_data_by_connection_id(self, index_name, connection_id, start, size):
+    def query_all_data(self, index_name, start, size):
         dsl = {
             "query": {
-                "bool": {
-                    "must": [
-                        {"term": {"connection_id": connection_id}}
-                    ]
-                }
+                "match_all": {}
             },
             "from": start,
             "size": size,
@@ -269,19 +226,19 @@ class SeafileIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def get_path_to_index_info_by_connection_id(self, index_name, connection_id):
+    def get_path_to_index_info(self, index_name):
         per_size = 1000
         start = 0
         path_to_index_info = {}
         while True:
-            hits, total = self.query_data_by_connection_id(index_name, connection_id, start, per_size)
+            hits, total = self.query_all_data(index_name, start, per_size)
             for hit in hits:
                 source = hit['_source']
                 # _id = hit['_id']
                 repo_id = source['repo_id']
                 path = source['path']  # parent_dir
                 filename = source['filename']
-                index_id = self.gen_index_id(connection_id, repo_id, path, filename)
+                index_id = self.gen_index_id(repo_id, path, filename)
                 path_to_index_info[index_id] = source
 
             start += per_size
@@ -290,7 +247,7 @@ class SeafileIndex(object):
         return path_to_index_info
 
     def update(self, seafile_index_name, connection_id, repo_id, seahub_api, connection_status, seaqa_db):
-        index_id_to_index_info = self.get_path_to_index_info_by_connection_id(seafile_index_name, connection_id)
+        index_id_to_index_info = self.get_path_to_index_info(seafile_index_name)
         old_index_ids_set = set(index_id_to_index_info.keys())
         new_index_ids_set = set()
 
@@ -303,7 +260,7 @@ class SeafileIndex(object):
             mtime = dirent.get('mtime')
             size = dirent.get('size')
 
-            key = self.gen_index_id(connection_id, repo_id, parent_dir, dirent_name)
+            key = self.gen_index_id(repo_id, parent_dir, dirent_name)
             new_index_ids_set.add(key)
             index_info = index_id_to_index_info.get(key, {})
 
