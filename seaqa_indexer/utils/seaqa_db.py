@@ -1,5 +1,6 @@
 import logging
 from sqlalchemy import text
+from seaqa_indexer.utils import uuid_str_to_32_chars
 
 
 logger = logging.getLogger('__name__')
@@ -11,16 +12,32 @@ class SeaqaDB(object):
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_id, pc.status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.is_active
+            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.is_active
             FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.id=pc.project_id WHERE p.deleted=false AND pc.id=:connection_id"""
+            ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
+            return connection
+
+    def get_connection_by_ids(self, connection_ids):
+        with self.db_session_class() as session:
+            sql = """SELECT pc.id, pc.type
+            FROM project_connection pc 
+            INNER JOIN projects p 
+            ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.id in :connection_ids AND pc.deleted=false"""
+            connection = session.execute(text(sql), {'connection_ids': connection_ids}).fetchall()
+            return connection
+
+    def get_connections_by_project_uuid(self, project_uuid):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = """SELECT id, type FROM project_connection WHERE project_uuid=:project_uuid"""
+            connection = session.execute(text(sql), {'project_uuid': project_uuid}).fetchall()
             return connection
 
     def update_connection_status(self, connection_id, status):
         with self.db_session_class() as session:
-            cmd = "UPDATE project_connection SET status = :status WHERE id = :connection_id"
+            cmd = "UPDATE project_connection SET status=:status WHERE id=:connection_id"
             session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
             session.commit()
 

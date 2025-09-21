@@ -123,21 +123,10 @@ class GitHubIssuesIndex(object):
             query_map['bool']['filter'] = []
         return query_map
 
-    def _add_connection_id_filter(self, query_map, connection_ids):
-        if connection_ids is None:
-            return query_map
-
-        query_map = self._ensure_filter_exists(query_map)
-
-        if isinstance(connection_ids, list):
-            query_map['bool']['filter'].append({'terms': {'connection_id': connection_ids}})
-        return query_map
-
-    def get_search_param(self, project_uuid, keyword, start, size, connection_ids=None, search_title_only=False):
+    def get_search_param(self, index_name, keyword, start, size, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
-        query_map = self._add_connection_id_filter(query_map, connection_ids)
 
         data = {
             'query': query_map,
@@ -157,15 +146,15 @@ class GitHubIssuesIndex(object):
         }
 
         repo_query_info = {
-            'index': project_uuid,
+            'index': index_name,
             'query': data
         }
 
         return repo_query_info
 
-    def search(self, project_uuid, keyword, start, size, connection_ids=None, search_filename_only=False):
+    def search(self, index_name, keyword, start, size, search_filename_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(project_uuid, keyword, start, size, connection_ids, search_filename_only)
+        search_param = self.get_search_param(index_name, keyword, start, size, search_filename_only)
         bulk_search_params.append(search_param)
 
         query_body = json.dumps({
@@ -196,11 +185,11 @@ class GitHubIssuesIndex(object):
             }
             issues.append(issue)
 
-        logger.debug(f"GitHub issue search: {keyword} in {project_uuid}, found {len(issues)} results")
+        logger.debug(f"GitHub issue search: {keyword} in {index_name}, found {len(issues)} results")
         return issues
 
     def add_or_update_issue(self, index_name, connection_id, issue_data):
-        _id = self.gen_index_id(connection_id, issue_data['id'])
+        _id = self.gen_index_id(issue_data['id'])
 
         doc = {
             'connection_id': connection_id,
@@ -224,26 +213,8 @@ class GitHubIssuesIndex(object):
 
         self.seasearch_api.bulk(index_name, bulk_ops)
 
-    def gen_index_id(self, connection_id, issue_id):
-        return md5(f"{connection_id}{issue_id}")
-
-    def query_data_by_connection_id(self, index_name, connection_id, start, size):
-        dsl = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {"term": {"connection_id": connection_id}}
-                    ]
-                }
-            },
-            "from": start,
-            "size": size,
-            "_source": False,
-            "sort": ["@url"],
-        }
-
-        hits, total = self.normal_search(index_name, dsl)
-        return hits, total
+    def gen_index_id(self, issue_id):
+        return md5(f"{issue_id}")
 
     def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
@@ -307,7 +278,7 @@ class GitHubIssuesIndex(object):
                 'repo_name': repo_name,
             }
             if issue.deleted == 1:
-                key = self.gen_index_id(connection_id, issue_id)
+                key = self.gen_index_id(issue_id)
                 need_cleared_issues_index_set.add(key)
             else:
                 self.add_or_update_issue(index_name, connection_id, issue_dict)
