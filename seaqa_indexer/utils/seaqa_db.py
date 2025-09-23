@@ -19,14 +19,19 @@ class SeaqaDB(object):
             connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
             return connection
 
-    def get_connection_by_ids(self, connection_ids):
+    def get_connection_by_ids(self, project_uuid, connection_ids):
         with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.type
             FROM project_connection pc 
             INNER JOIN projects p 
-            ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.id in :connection_ids AND pc.deleted=false"""
-            connection = session.execute(text(sql), {'connection_ids': connection_ids}).fetchall()
-            return connection
+            ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.deleted=false AND pc.project_uuid=:project_uuid"""
+
+            params = {'project_uuid': project_uuid}
+            if connection_ids:
+                sql += " AND pc.id in :connection_ids"
+                params['connection_ids'] = connection_ids
+
+            return session.execute(text(sql), params).fetchall()
 
     def get_connections_by_project_uuid(self, project_uuid):
         project_uuid = uuid_str_to_32_chars(project_uuid)
