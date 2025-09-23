@@ -20,6 +20,7 @@ class SeaqaDB(object):
             return connection
 
     def get_connection_by_ids(self, project_uuid, connection_ids):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.type
             FROM project_connection pc 
