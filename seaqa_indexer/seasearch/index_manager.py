@@ -58,8 +58,6 @@ class IndexManager:
         bulk_search_params = []
 
         connection_id_list = connection_ids.split(',') if connection_ids else None
-        if not connection_id_list:
-            return []
         project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
 
         for project_connection in project_connections:
