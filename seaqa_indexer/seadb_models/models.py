@@ -81,3 +81,32 @@ class WebCrawlTable(BaseModel):
     updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     hash = MappedColumn('hash', PropertyTypes.TEXT)
+
+
+class GithubIssuesTable(BaseModel):
+    issue_id = MappedColumn('issue_id', PropertyTypes.INT)
+    issue_number = MappedColumn('issue_number', PropertyTypes.INT)
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    body = MappedColumn('body', PropertyTypes.TEXT)
+    state = MappedColumn('state', PropertyTypes.SINGLE_SELECT)
+    state_reason = MappedColumn('state_reason', PropertyTypes.SINGLE_SELECT)
+    labels = MappedColumn('labels', PropertyTypes.MULTIPLE_SELECT)
+    issue_type = MappedColumn('issue_type', PropertyTypes.SINGLE_SELECT)
+    author = MappedColumn('author', PropertyTypes.TEXT)
+    assignees = MappedColumn('assignees', PropertyTypes.TEXT)
+    url = MappedColumn('url', PropertyTypes.TEXT)
+    created_at = MappedColumn('created_at', PropertyTypes.DATETIME)
+    updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+    closed_at = MappedColumn('closed_at', PropertyTypes.DATETIME)
+    comments_count = MappedColumn('comments_count', PropertyTypes.INT)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+
+
+class GithubIssueCommentsTable(BaseModel):
+    comment_id = MappedColumn('comment_id', PropertyTypes.INT)
+    issue_id = MappedColumn('issue_id', PropertyTypes.INT)
+    author = MappedColumn('author', PropertyTypes.TEXT)
+    body = MappedColumn('body', PropertyTypes.TEXT)
+    created_at = MappedColumn('created_at', PropertyTypes.DATETIME)
+    updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)

@@ -23,16 +23,17 @@ class GithubIssuesSyncManager:
         project_connection = self.seaqa_db.get_project_connection_by_id(connection_id)
         project_uuid = project_connection.project_uuid
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
+        github_issues_sync = GithubIssuesSync(project_uuid, self.db_session_class)
 
         if event == "issues":
             logger.info(f"Received webhook for issue #{issue_id}, action: {action}, event: {event}")
             updated_at = update_data.get("updated_at")
             if action == 'deleted':
                 github_seadb_api.tag_issue_deleted(connection_id, issue_id)
-                github_seadb_api.update_issue_record(connection_id, issue_id, updated_at)
+                github_issues_sync.update_issue_record(connection_id, issue_id, updated_at)
                 self.add_issues_index_task(connection_id)
                 return
-            github_seadb_api.save_or_update_issues_to_db(connection_id, update_data, is_webhook=True)
+            github_issues_sync.save_or_update_issues_to_db(connection_id, update_data, is_webhook=True)
 
         elif event == "issue_comment":
             logger.info(f"Received webhook for issue_comment #{issue_id}, action: {action}, event: {event}")
@@ -44,12 +45,12 @@ class GithubIssuesSyncManager:
             if action == 'deleted':
                 comment_id = comment_data['id']
                 github_seadb_api.tag_comment_deleted(connection_id, comment_id)
-                github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, comment_count)
+                github_issues_sync.update_issue_record(connection_id, issue_id, updated_at, comment_count)
                 self.add_issues_index_task(connection_id)
                 return
 
-            github_seadb_api.save_or_update_issue_comments_to_db(connection_id, issue_id, comment_data, is_webhook=True)
-            github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, comment_count)
+            github_issues_sync.save_or_update_issue_comments_to_db(connection_id, issue_id, comment_data, is_webhook=True)
+            github_issues_sync.update_issue_record(connection_id, issue_id, updated_at, comment_count)
 
         self.add_issues_index_task(connection_id)
 
