@@ -2,7 +2,8 @@ import json
 import datetime
 
 from seaqa_indexer.crawler.utils import url_to_filename
-from seaqa_indexer.utils.constants import CrawlStatus, WEB_CRAWL_TABLE
+from seaqa_indexer.utils.constants import CrawlStatus
+from seaqa_indexer.seadb_models.models import WebCrawlTable
 from seaqa_indexer.utils import need_update_connection_status
 
 
@@ -30,8 +31,8 @@ class BatchCrawlPipeline:
                 row = {
                     "pk": result.get('_pk'),
                     "row": {
-                        WEB_CRAWL_TABLE.columns.deleted.name: True,
-                        WEB_CRAWL_TABLE.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        WebCrawlTable.deleted.name: True,
+                        WebCrawlTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     }
                 }
                 rows.append(row)
@@ -73,11 +74,11 @@ class BatchCrawlPipeline:
                 {
                     "pk": results[0].get('_pk'),
                     "row": {
-                        WEB_CRAWL_TABLE.columns.title.name: title,
-                        WEB_CRAWL_TABLE.columns.etag.name: etag,
-                        WEB_CRAWL_TABLE.columns.last_modified.name: last_modified,
-                        WEB_CRAWL_TABLE.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                        WEB_CRAWL_TABLE.columns.hash.name: hash,
+                        WebCrawlTable.title.name: title,
+                        WebCrawlTable.etag.name: etag,
+                        WebCrawlTable.last_modified.name: last_modified,
+                        WebCrawlTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        WebCrawlTable.hash.name: hash,
                     }
                 }
             ]
@@ -85,12 +86,12 @@ class BatchCrawlPipeline:
         else:
             rows = [
                 {
-                    WEB_CRAWL_TABLE.columns.url.name: url,
-                    WEB_CRAWL_TABLE.columns.title.name: title,
-                    WEB_CRAWL_TABLE.columns.etag.name: etag,
-                    WEB_CRAWL_TABLE.columns.last_modified.name: last_modified,
-                    WEB_CRAWL_TABLE.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                    WEB_CRAWL_TABLE.columns.hash.name: hash,
+                    WebCrawlTable.url.name: url,
+                    WebCrawlTable.title.name: title,
+                    WebCrawlTable.etag.name: etag,
+                    WebCrawlTable.last_modified.name: last_modified,
+                    WebCrawlTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                    WebCrawlTable.hash.name: hash,
                 }
             ]
             self.seadb_api.insert_rows(self.project_uuid, str(self.site_id), rows)
