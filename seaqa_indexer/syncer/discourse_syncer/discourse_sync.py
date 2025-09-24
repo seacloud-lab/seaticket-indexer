@@ -3,15 +3,37 @@ import requests
 import time
 import json
 import datetime
+import random
 
 from sqlalchemy import text
 from urllib.parse import urljoin
+from functools import wraps
 
 from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_status
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.models import DISCOURSE_TOPICS_TABLE, DISCOURSE_REPLIES_TABLE
 
 logger = logging.getLogger(__name__)
+
+
+def retry_with_exponential_backoff(max_retries=5, base_delay=3, max_delay=60):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt < max_retries:
+                        delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                        logger.warning(f"Request failed: {str(e)}, retrying in {delay:.2f} seconds (attempt {attempt + 1}/{max_retries + 1})")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        logger.error(f"Request failed after {max_retries} retries: {str(e)}")
+                        raise
+        return wrapper
+    return decorator
 
 
 class DiscourseSync:
@@ -195,6 +217,7 @@ class DiscourseSync:
             self.insert_reply(topic_id, post_number, content, author, updated_at, connection_id)
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
 
+    @retry_with_exponential_backoff()
     def fetch_latest_topics_page(self, forum_url, headers, page):
         url = urljoin(forum_url, f"latest.json?page={page}")
         logger.debug(f"Fetching page {page} from {url}")
@@ -205,6 +228,7 @@ class DiscourseSync:
         topics = data.get("topic_list", {}).get("topics", [])
         return topics
 
+    @retry_with_exponential_backoff()
     def fetch_discourse_topic(self, forum_url, topic_id, headers):
         url = urljoin(forum_url, f"t/{topic_id}.json")
         logger.info(f"Fetching topic detail from {url}")
