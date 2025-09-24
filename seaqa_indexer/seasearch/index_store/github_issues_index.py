@@ -4,7 +4,6 @@ import logging
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.utils.constants import GITHUB_ISSUES_TABLE
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
@@ -78,9 +77,9 @@ class GitHubIssuesIndex(object):
         }
     }
 
-    def __init__(self, seasearch_api, db_session_class, shard_num=1):
+    def __init__(self, seasearch_api, github_seadb_api, shard_num=1):
         self.seasearch_api = seasearch_api
-        self.db_session_class = db_session_class
+        self.github_seadb_api = github_seadb_api
         self.shard_num = shard_num
         self.lang = LANG
         self.seadb_api = SeaDBAPI()
@@ -239,26 +238,6 @@ class GitHubIssuesIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def delete_issues_from_db(self, project_uuid,connection_id):
-        table_name = str(connection_id) + '_github_issues'
-        sql = f"SELECT * FROM `{table_name}` WHERE deleted = True"
-        need_delete = self.seadb_api.query_rows(project_uuid, sql).get('results', [])
-        need_delete_rows = []
-        if need_delete:
-            for issue in need_delete:
-                need_delete_rows.append(issue.get('_pk'))
-        self.seadb_api.delete_rows(project_uuid, table_name, need_delete_rows)
-
-    def delete_comments_from_db(self,project_uuid, connection_id, issue_id):
-        table_name = str(connection_id) + '_issue_comments'
-        sql = f"SELECT * FROM `{table_name}` WHERE _pk = {issue_id} AND deleted = True"
-        need_delete = self.seadb_api.query_rows(project_uuid, sql).get('results', [])
-        need_delete_rows = []
-        if need_delete:
-            for comment in need_delete:
-                need_delete_rows.append(comment.get('_pk'))
-        self.seadb_api.delete_rows(project_uuid, table_name, need_delete_rows)
-
     def update(self, index_name, connection_id, project_uuid, repo_owner, repo_name, connection_status, seaqa_db, indexed_at):
         index_count = 0
         page_size = 1000
@@ -282,7 +261,7 @@ class GitHubIssuesIndex(object):
 
             for issue in issues:
                 issue_id = issue.get('issue_id')
-                self.delete_comments_from_db(project_uuid, connection_id, issue_id)
+                self.github_seadb_api.delete_comments_from_db(connection_id, issue_id)
                 sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id}"
                 comments = self.seadb_api.query_rows(project_uuid, sql_comments).get('results', [])
                 comments_list = []
@@ -316,6 +295,6 @@ class GitHubIssuesIndex(object):
 
         if need_cleared_issues_index_set:
             self.delete_indexes_by_ids(index_name, need_cleared_issues_index_set)
-            self.delete_issues_from_db(project_uuid, connection_id)
+            self.github_seadb_api.delete_issues_from_db(connection_id)
 
         return index_count
