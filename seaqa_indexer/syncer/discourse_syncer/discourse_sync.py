@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 
 from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_status
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
-from seaqa_indexer.seadb_models.models import DISCOURSE_TOPICS_TABLE, DISCOURSE_REPLIES_TABLE
+from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 class DiscourseSync:
     def __init__(self, base_id, db_session_class, username=''):
         self.discourse_seadb_api = DiscourseSeaDBAPI(base_id=base_id, username=username)
-        self.topics_table = DISCOURSE_TOPICS_TABLE
-        self.replies_table = DISCOURSE_REPLIES_TABLE
+        self.topics_table = DiscourseTopicsTable
+        self.replies_table = DiscourseRepliesTable
         self.db_session_class = db_session_class
 
     def check_existing_topic(self, topic_id, connection_id):
@@ -28,14 +28,14 @@ class DiscourseSync:
     def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, bumped_at):
         """Insert a new topic"""
         topic_data = {
-            self.topics_table.columns.topic_id.name: topic_id,
-            self.topics_table.columns.title.name: title,
-            self.topics_table.columns.slug.name: slug,
-            self.topics_table.columns.views.name: views,
-            self.topics_table.columns.category_id.name: category_id,
-            self.topics_table.columns.bumped_at.name: bumped_at.isoformat(),
-            self.topics_table.columns.deleted.name: False,
-            self.topics_table.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            self.topics_table.topic_id.name: topic_id,
+            self.topics_table.title.name: title,
+            self.topics_table.slug.name: slug,
+            self.topics_table.views.name: views,
+            self.topics_table.category_id.name: category_id,
+            self.topics_table.bumped_at.name: bumped_at.isoformat(),
+            self.topics_table.deleted.name: False,
+            self.topics_table.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
         self.discourse_seadb_api.insert_topic(connection_id, topic_data)
 
@@ -46,7 +46,7 @@ class DiscourseSync:
     def delete_topic_and_replies(self, topic_id, connection_id):
         """Delete a topic and all its replies"""
         self.discourse_seadb_api.delete_replies_by_topic(connection_id, topic_id)
-        
+
         self.discourse_seadb_api.delete_topic(connection_id, topic_id)
 
     def get_discourse_forum_count(self, connection_id):
@@ -107,23 +107,23 @@ class DiscourseSync:
     def insert_reply(self, topic_id, post_number, content, author, updated_at, connection_id):
         """Insert a new reply"""
         reply_data = {
-            self.replies_table.columns.topic_id.name: topic_id,
-            self.replies_table.columns.post_number.name: post_number,
-            self.replies_table.columns.content.name: content,
-            self.replies_table.columns.author.name: author,
-            self.replies_table.columns.updated_at.name: updated_at.isoformat(),
+            self.replies_table.topic_id.name: topic_id,
+            self.replies_table.post_number.name: post_number,
+            self.replies_table.content.name: content,
+            self.replies_table.author.name: author,
+            self.replies_table.updated_at.name: updated_at.isoformat(),
         }
         self.discourse_seadb_api.insert_reply(connection_id, reply_data)
 
     def update_topic(self, title, slug, views, category_id, topic_id, connection_id, bumped_at):
         """Update an existing topic"""
         topic_data = {
-            self.topics_table.columns.title.name: title,
-            self.topics_table.columns.slug.name: slug,
-            self.topics_table.columns.views.name: views,
-            self.topics_table.columns.category_id.name: category_id,
-            self.topics_table.columns.bumped_at.name: bumped_at.isoformat(),
-            self.topics_table.columns.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            self.topics_table.title.name: title,
+            self.topics_table.slug.name: slug,
+            self.topics_table.views.name: views,
+            self.topics_table.category_id.name: category_id,
+            self.topics_table.bumped_at.name: bumped_at.isoformat(),
+            self.topics_table.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
         self.discourse_seadb_api.update_topic(connection_id, topic_id, topic_data)
 
@@ -134,9 +134,9 @@ class DiscourseSync:
     def update_reply(self, content, author, topic_id, post_number, updated_at, connection_id):
         """Update an existing reply"""
         reply_data = {
-            self.replies_table.columns.content.name: content,
-            self.replies_table.columns.author.name: author,
-            self.replies_table.columns.updated_at.name: updated_at.isoformat()
+            self.replies_table.content.name: content,
+            self.replies_table.author.name: author,
+            self.replies_table.updated_at.name: updated_at.isoformat()
         }
         self.discourse_seadb_api.update_reply(connection_id, topic_id, post_number, reply_data)
 

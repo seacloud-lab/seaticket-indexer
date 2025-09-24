@@ -1,8 +1,9 @@
 import re
+import hashlib
 import urllib.parse
 from email.utils import parsedate_to_datetime
 from seaqa_indexer.crawler.extractor import extract_html
-from seaqa_indexer.utils.constants import WEB_CRAWL_TABLE
+from seaqa_indexer.seadb_models.models import WebCrawlTable
 from seaqa_indexer.utils import md5
 
 
@@ -87,7 +88,7 @@ def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api
     """Load the ETag and Last-Modified information of an existing file"""
     offset = 0
     while True:
-        sql = f"""SELECT `{WEB_CRAWL_TABLE.columns.url.name}`, `{WEB_CRAWL_TABLE.columns.etag.name}`, `{WEB_CRAWL_TABLE.columns.last_modified.name}`, `{WEB_CRAWL_TABLE.columns.hash.name}`
+        sql = f"""SELECT `{WebCrawlTable.url.name}`, `{WebCrawlTable.etag.name}`, `{WebCrawlTable.last_modified.name}`, `{WebCrawlTable.hash.name}`
         FROM `{site_id}`
         LIMIT {limit} OFFSET {offset}"""
         result = seadb_api.query_rows(project_uuid, sql)

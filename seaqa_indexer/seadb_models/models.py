@@ -1,48 +1,15 @@
-from seaqa_indexer.utils.constants import PropertyTypes
+
+class PropertyTypes:
+    TEXT = 'text'
+    DATETIME = 'datetime'
+    INT = 'int64'
+    FLOAT = 'float64'
+    SINGLE_SELECT = 'single-select'
+    MULTIPLE_SELECT = 'multiple-select'
+    BOOL = 'bool'
 
 
-class DiscourseTopicsTable(object):
-    def __init__(self, table_id, name):
-        self.id = table_id
-        self.name = name
-
-    @property
-    def columns(self):
-        return DiscourseTopicsColumns()
-
-
-class DiscourseTopicsColumns(object):
-    def __init__(self):
-        self.topic_id = DiscourseColumn('topic_id', PropertyTypes.INT)
-        self.title = DiscourseColumn('title', PropertyTypes.TEXT)
-        self.slug = DiscourseColumn('slug', PropertyTypes.TEXT)
-        self.views = DiscourseColumn('views', PropertyTypes.INT)
-        self.category_id = DiscourseColumn('category_id', PropertyTypes.INT)
-        self.bumped_at = DiscourseColumn('bumped_at', PropertyTypes.DATETIME)
-        self.deleted = DiscourseColumn('deleted', PropertyTypes.BOOL)
-        self.updated_at = DiscourseColumn('updated_at', PropertyTypes.DATETIME)
-
-
-class DiscourseRepliesTable(object):
-    def __init__(self, table_id, name):
-        self.id = table_id
-        self.name = name
-
-    @property
-    def columns(self):
-        return DiscourseRepliesColumns()
-
-
-class DiscourseRepliesColumns(object):
-    def __init__(self):
-        self.topic_id = DiscourseColumn('topic_id', PropertyTypes.INT)
-        self.post_number = DiscourseColumn('post_number', PropertyTypes.INT)
-        self.content = DiscourseColumn('content', PropertyTypes.TEXT)
-        self.author = DiscourseColumn('author', PropertyTypes.TEXT)
-        self.updated_at = DiscourseColumn('updated_at', PropertyTypes.DATETIME)
-
-
-class DiscourseColumn(object):
+class MappedColumn(object):
     def __init__(self, name, type, data=None):
         self.name = name
         self.type = type
@@ -62,25 +29,54 @@ class DiscourseColumn(object):
         return column_data
 
 
-# discourse table instances
-DISCOURSE_TOPICS_TABLE = DiscourseTopicsTable('0000', 'DiscourseTopics')
-DISCOURSE_REPLIES_TABLE = DiscourseRepliesTable('0000', 'DiscourseReplies')
+class BaseModel:
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._meta = {
+            'fields': []
+        }
 
-DISCOURSE_TOPICS_COLUMNS = [
-    DISCOURSE_TOPICS_TABLE.columns.topic_id.to_dict(),
-    DISCOURSE_TOPICS_TABLE.columns.title.to_dict(),
-    DISCOURSE_TOPICS_TABLE.columns.slug.to_dict(),
-    DISCOURSE_TOPICS_TABLE.columns.views.to_dict(),
-    DISCOURSE_TOPICS_TABLE.columns.category_id.to_dict(),
-    DISCOURSE_TOPICS_TABLE.columns.bumped_at.to_dict(),
-    DISCOURSE_TOPICS_TABLE.columns.deleted.to_dict(),
-    DISCOURSE_TOPICS_TABLE.columns.updated_at.to_dict(),
-]
+        for name, attr in cls.__dict__.items():
+            if isinstance(attr, MappedColumn):
+                cls._meta['fields'].append(attr)
 
-DISCOURSE_REPLIES_COLUMNS = [
-    DISCOURSE_REPLIES_TABLE.columns.topic_id.to_dict(),
-    DISCOURSE_REPLIES_TABLE.columns.post_number.to_dict(),
-    DISCOURSE_REPLIES_TABLE.columns.content.to_dict(),
-    DISCOURSE_REPLIES_TABLE.columns.author.to_dict(),
-    DISCOURSE_REPLIES_TABLE.columns.updated_at.to_dict(),
-]
+    @classmethod
+    def get_fields(cls):
+        return cls._meta['fields'].copy()
+
+    def __init__(self, **kwargs):
+        for field in self.__class__._meta['fields']:
+            setattr(self, field.name, field)
+
+    def __repr__(self):
+        fields = ", ".join([f"{k}={v!r}" for k, v in self.__dict__.items()])
+        return f"{self.__class__.__name__}({fields})"
+
+
+class DiscourseTopicsTable(BaseModel):
+    topic_id = MappedColumn('topic_id', PropertyTypes.INT)
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    slug = MappedColumn('slug', PropertyTypes.TEXT)
+    views = MappedColumn('views', PropertyTypes.INT)
+    category_id = MappedColumn('category_id', PropertyTypes.INT)
+    bumped_at = MappedColumn('bumped_at', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+
+
+class DiscourseRepliesTable(BaseModel):
+    topic_id = MappedColumn('topic_id', PropertyTypes.INT)
+    post_number = MappedColumn('post_number', PropertyTypes.INT)
+    content = MappedColumn('content', PropertyTypes.TEXT)
+    author = MappedColumn('author', PropertyTypes.TEXT)
+    updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+
+
+class WebCrawlTable(BaseModel):
+    url = MappedColumn('url', PropertyTypes.TEXT)
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    etag = MappedColumn('etag', PropertyTypes.TEXT)
+    last_modified = MappedColumn('last_modified', PropertyTypes.DATETIME)
+    updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    hash = MappedColumn('hash', PropertyTypes.TEXT)
