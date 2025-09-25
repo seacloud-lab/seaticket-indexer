@@ -166,6 +166,7 @@ class IndexManager:
                     'slug': source['slug'],
                     'score': score,
                     'bumped_at': source['bumped_at'],
+                    'created_at': source['created_at'],
                     '_id': _id,
                     'type': 'discourse_forum',
                 }
