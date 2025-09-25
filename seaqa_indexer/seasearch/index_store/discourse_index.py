@@ -42,6 +42,9 @@ class DiscourseIndex(object):
             'bumped_at': {
                 'type': 'date'
             },
+            'created_at': {
+                'type': 'date'
+            },
         }
     }
 
@@ -127,7 +130,7 @@ class DiscourseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'topic_id', 'title', 'body', 'slug', 'bumped_at'],
+            '_source': ['connection_id', 'topic_id', 'title', 'body', 'slug', 'bumped_at', 'created_at'],
             'sort': [
                 '_score'
             ],
@@ -173,6 +176,7 @@ class DiscourseIndex(object):
                 'category_id': source.get('category_id'),
                 'slug': source['slug'],
                 'bumped_at': source['bumped_at'],
+                'created_at': source['created_at'],
             }
             discourse_posts.append(post)
 
@@ -198,6 +202,7 @@ class DiscourseIndex(object):
             'category_id': topic_data.get('category_id'),
             'slug': topic_data.get('slug', ''),
             'bumped_at': topic_data.get('bumped_at'),
+            'created_at': topic_data.get('created_at'),
         }
 
         bulk_ops = [
@@ -247,6 +252,7 @@ class DiscourseIndex(object):
                         self.deleted = data['deleted']
                         self.bumped_at = data['bumped_at']
                         self.updated_at = data['updated_at']
+                        self.created_at = data['created_at']
 
                 result.append(TopicRow(topic))
 
@@ -301,6 +307,7 @@ class DiscourseIndex(object):
                 'category_id': topic.category_id,
                 'bumped_at': topic.bumped_at,
                 'updated_at': topic.updated_at,
+                'created_at': topic.created_at,
             }
 
             if topic.deleted == True:

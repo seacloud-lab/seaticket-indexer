@@ -25,7 +25,7 @@ class DiscourseSync:
         """Check if a topic already exists"""
         return self.discourse_seadb_api.get_topic_by_id(connection_id, topic_id)
 
-    def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, bumped_at):
+    def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at):
         """Insert a new topic"""
         topic_data = {
             self.topics_table.topic_id.name: topic_id,
@@ -36,7 +36,7 @@ class DiscourseSync:
             self.topics_table.bumped_at.name: bumped_at.isoformat(),
             self.topics_table.deleted.name: False,
             self.topics_table.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
-        }
+            self.topics_table.created_at.name: topic_created_at.isoformat(),}
         self.discourse_seadb_api.insert_topic(connection_id, topic_data)
 
     def delete_reply(self, topic_id, post_number, connection_id):
@@ -67,11 +67,12 @@ class DiscourseSync:
             logger.debug(f"Updated existing topic {topic_id}")
         else:
             # When using webhook, the returned value does not have a bumped_at.
+            topic_created_at = time_str_to_utc_time(topic_data.get('created_at'))
             if topic_data.get('bumped_at'):
                 bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
             else:
                 bumped_at = time_str_to_utc_time(topic_data.get('last_posted_at'))
-            self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at)
+            self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at)
             logger.debug(f"Created new topic {topic_id}")
 
     def handle_reply_update(self, connection_id, topic_id, data):
@@ -181,8 +182,9 @@ class DiscourseSync:
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
         bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
+        topic_created_at = time_str_to_utc_time(topic_data.get('created_at'))
 
-        self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at)
+        self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at)
 
     def _insert_topic_replies(self, topic_replies_data, topic_id, connection_id):
         """Insert topic replies into database"""

@@ -62,6 +62,7 @@ class DiscourseTopicsTable(BaseModel):
     bumped_at = MappedColumn('bumped_at', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+    created_at = MappedColumn('created_at', PropertyTypes.DATETIME)
 
 
 class DiscourseRepliesTable(BaseModel):
