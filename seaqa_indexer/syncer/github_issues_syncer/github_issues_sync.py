@@ -37,7 +37,7 @@ class GithubIssuesSync:
             session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
             session.commit()
 
-    def save_or_update_issues_to_db(self, connection_id, issue, is_webhook):
+    def save_or_update_issue_to_db(self, connection_id, issue, is_webhook):
         labels_data = issue.get('labels', [])
         label_names = [label['name'] for label in labels_data if 'name' in label]
 
@@ -68,7 +68,7 @@ class GithubIssuesSync:
         if body and len(body) > MAX_BODY_LENGTH:
             body = body[:MAX_BODY_LENGTH]
 
-        insert_rows = {
+        insert_row = {
             self.issues_table.issue_id.name:issue_id,
             self.issues_table.issue_number.name: issue_number,
             self.issues_table.title.name: title,
@@ -85,31 +85,31 @@ class GithubIssuesSync:
         }
 
         if state_reason is not None:
-            insert_rows[self.issues_table.state_reason.name] = state_reason
+            insert_row[self.issues_table.state_reason.name] = state_reason
 
         if label_names is not None:
-            insert_rows[self.issues_table.labels.name] = label_names
+            insert_row[self.issues_table.labels.name] = label_names
 
         if type_name is not None:
-            insert_rows[self.issues_table.issue_type.name] = type_name
+            insert_row[self.issues_table.issue_type.name] = type_name
 
         if is_webhook:
             res = self.github_seadb_api.query_issue(connection_id, issue_id)
             if res:
                 _pk = res[0].get('_pk')
-                update_rows = [
+                update_row = [
                     {
                     "pk":_pk,
-                    "row":insert_rows,
+                    "row":insert_row,
                     }
                 ]
-                self.github_seadb_api.update_issues_to_db(connection_id, update_rows)
+                self.github_seadb_api.update_issue_to_db(connection_id, update_row)
             else:
-                self.github_seadb_api.save_issues_to_db(connection_id, insert_rows)
+                self.github_seadb_api.save_issue_to_db(connection_id, insert_row)
         else:
-            self.github_seadb_api.save_issues_to_db(connection_id, insert_rows)
+            self.github_seadb_api.save_issue_to_db(connection_id, insert_row)
 
-    def save_or_update_issue_comments_to_db(self, connection_id, issue_id, comment, is_webhook):
+    def save_or_update_issue_comment_to_db(self, connection_id, issue_id, comment, is_webhook):
 
         created_at = comment.get('created_at') if 'created_at' in comment else None
         updated_at = comment.get('updated_at') if comment.get('updated_at') else None
@@ -120,7 +120,7 @@ class GithubIssuesSync:
         if body and len(body) > MAX_BODY_LENGTH:
             body = body[:MAX_BODY_LENGTH]
 
-        insert_rows = {
+        insert_row = {
             GithubIssueCommentsTable.comment_id.name: comment_id,
             GithubIssueCommentsTable.issue_id.name: issue_id,
             GithubIssueCommentsTable.author.name: author,
@@ -133,18 +133,18 @@ class GithubIssuesSync:
             res = self.github_seadb_api.query_issue_comment(connection_id, comment_id)
             if res:
                 _pk = res[0].get('_pk')
-                update_rows = [
+                update_row = [
                     {
                     "pk":_pk,
-                    "row":insert_rows,
+                    "row":insert_row,
                     }
                 ]
 
-                self.github_seadb_api.update_issue_comments_to_db(connection_id, update_rows)
+                self.github_seadb_api.update_issue_comment_to_db(connection_id, update_row)
             else:
-                self.github_seadb_api.save_issue_comments_to_db(connection_id, insert_rows)
+                self.github_seadb_api.save_issue_comment_to_db(connection_id, insert_row)
         else:
-            self.github_seadb_api.save_issue_comments_to_db(connection_id, insert_rows)
+            self.github_seadb_api.save_issue_comment_to_db(connection_id, insert_row)
 
     def update_issue_record(self, connection_id, issue_id, updated_at, comments_count=None):
         row = {
@@ -200,7 +200,7 @@ class GithubIssuesSync:
                 if 'pull_request' in issue:
                     continue
                 sync_count += 1
-                self.save_or_update_issues_to_db(connection_id, issue, is_webhook=False)
+                self.save_or_update_issue_to_db(connection_id, issue, is_webhook=False)
                 if need_update_connection_status(sync_count):
                     connection_status['last_sync_count'] = sync_count
                     self.update_connection_status(connection_id, json.dumps(connection_status))
@@ -212,7 +212,7 @@ class GithubIssuesSync:
                         break
                     for comment in comments:
                         sync_count += 1
-                        self.save_or_update_issue_comments_to_db(connection_id, issue['id'], comment, is_webhook=False)
+                        self.save_or_update_issue_comment_to_db(connection_id, issue['id'], comment, is_webhook=False)
 
             if len(issues) < per_page:
                 return sync_count

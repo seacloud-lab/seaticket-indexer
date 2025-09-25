@@ -33,7 +33,7 @@ class GithubIssuesSyncManager:
                 github_issues_sync.update_issue_record(connection_id, issue_id, updated_at)
                 self.add_issues_index_task(connection_id)
                 return
-            github_issues_sync.save_or_update_issues_to_db(connection_id, update_data, is_webhook=True)
+            github_issues_sync.save_or_update_issue_to_db(connection_id, update_data, is_webhook=True)
 
         elif event == "issue_comment":
             logger.info(f"Received webhook for issue_comment #{issue_id}, action: {action}, event: {event}")
@@ -49,7 +49,7 @@ class GithubIssuesSyncManager:
                 self.add_issues_index_task(connection_id)
                 return
 
-            github_issues_sync.save_or_update_issue_comments_to_db(connection_id, issue_id, comment_data, is_webhook=True)
+            github_issues_sync.save_or_update_issue_comment_to_db(connection_id, issue_id, comment_data, is_webhook=True)
             github_issues_sync.update_issue_record(connection_id, issue_id, updated_at, comment_count)
 
         self.add_issues_index_task(connection_id)

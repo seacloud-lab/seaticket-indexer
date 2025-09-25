@@ -12,23 +12,23 @@ class GitHubSeaDBAPI:
     def _get_issue_comments_table_name(self, connection_id):
         return f"{connection_id}_issue_comments"
 
-    def save_issues_to_db(self, connection_id, insert_rows):
-        insert_rows_data = [insert_rows]
+    def save_issue_to_db(self, connection_id, insert_row):
+        insert_row_data = [insert_row]
         table_name = self._get_issues_table_name(connection_id)
-        self.seadb_api.insert_rows(self.base_id, table_name, insert_rows_data)
+        self.seadb_api.insert_rows(self.base_id, table_name, insert_row_data)
 
-    def update_issues_to_db(self, connection_id, update_rows):
+    def update_issue_to_db(self, connection_id, update_row):
         table_name = self._get_issues_table_name(connection_id)
-        self.seadb_api.update_rows(self.base_id, table_name, update_rows)
+        self.seadb_api.update_rows(self.base_id, table_name, update_row)
 
-    def save_issue_comments_to_db(self, connection_id, insert_rows):
-        insert_rows_data = [insert_rows]
+    def save_issue_comment_to_db(self, connection_id, insert_row):
+        insert_row_data = [insert_row]
         table_name = self._get_issue_comments_table_name(connection_id)
-        self.seadb_api.insert_rows(self.base_id, table_name, insert_rows_data)
+        self.seadb_api.insert_rows(self.base_id, table_name, insert_row_data)
 
-    def update_issue_comments_to_db(self, connection_id, update_rows):
+    def update_issue_comment_to_db(self, connection_id, update_row):
         table_name = self._get_issue_comments_table_name(connection_id)
-        self.seadb_api.update_rows(self.base_id, table_name, update_rows)
+        self.seadb_api.update_rows(self.base_id, table_name, update_row)
 
     def query_issue(self, connection_id, issue_id):
         table_name = self._get_issues_table_name(connection_id)
@@ -37,52 +37,52 @@ class GitHubSeaDBAPI:
 
     def query_issue_comment(self, connection_id, comment_id):
         table_name = self._get_issue_comments_table_name(connection_id)
-        query_sql = f"SELECT * FROM `{table_name}` WHERE comment_id={comment_id}"
-        return self.seadb_api.query_rows(self.base_id, query_sql).get('results', [])
+        sql = f"SELECT * FROM `{table_name}` WHERE comment_id={comment_id}"
+        return self.seadb_api.query_rows(self.base_id, sql).get('results', [])
 
     def tag_comment_deleted(self, connection_id, comment_id):
         table_name = self._get_issue_comments_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE comment_id = {comment_id}"
         issue = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         _pk = issue[0].get('_pk')
-        update_rows = [
-                {
+        update_row = [
+            {
                 "pk":_pk,
                 "row":
                     {
                         GithubIssueCommentsTable.deleted.name: True,
                     }
-                }
-            ]
-        self.seadb_api.update_rows(self.base_id, table_name, update_rows)
+            }
+        ]
+        self.seadb_api.update_rows(self.base_id, table_name, update_row)
 
     def tag_issue_deleted(self, connection_id, issue_id):
         table_name = self._get_issues_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE issue_id = {issue_id}"
         issue = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         _pk = issue[0].get('_pk')
-        update_rows = [
+        update_row = [
             {
-            "pk":_pk,
-            "row":
-                {
-                    GithubIssueCommentsTable.deleted.name: True,
-                }
+                "pk":_pk,
+                "row":
+                    {
+                        GithubIssueCommentsTable.deleted.name: True,
+                    }
             }
         ]
-        self.seadb_api.update_rows(self.base_id, table_name, update_rows)
+        self.seadb_api.update_rows(self.base_id, table_name, update_row)
 
     def update_issue_record(self, connection_id, issue_id, row):
         issue = self.query_issue(connection_id, issue_id)
         _pk = issue[0].get('_pk')
         table_name = self._get_issues_table_name(connection_id)
-        update_rows = [
+        update_row = [
             {
                 "pk": _pk,
                 "row":row
             }
         ]
-        self.seadb_api.update_rows(self.base_id, table_name, update_rows)
+        self.seadb_api.update_rows(self.base_id, table_name, update_row)
 
     def get_github_issues_count(self, connection_id):
         table_name = self._get_issues_table_name(connection_id)
