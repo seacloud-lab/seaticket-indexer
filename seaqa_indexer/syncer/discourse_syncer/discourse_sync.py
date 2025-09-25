@@ -235,12 +235,12 @@ class DiscourseSync:
         url = urljoin(forum_url, f"t/{topic_id}.json")
         logger.info(f"Fetching topic detail from {url}")
         response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
         return response
 
     def get_discourse_topic_replies(self, forum_url, topic_id, headers):
         """Fetch detailed topic content including all replies"""
         response = self.fetch_discourse_topic(forum_url, topic_id, headers)
-        response.raise_for_status()
 
         topic_data = response.json()
         replies = []
