@@ -93,16 +93,6 @@ class ProjectConnectionCleaner(object):
             session.execute(text(sql), {'connection_id': connection_id})
             session.commit()
 
-    def delete_issues_data_from_db(self, project_uuid,connection_id):
-        try:
-            github_seadb_api = GitHubSeaDBAPI(project_uuid)
-
-            deleted_count = github_seadb_api.delete_all_data_by_connection_id(connection_id)
-            logger.info(f"Deleted {deleted_count} github issues records for connection {connection_id} from seadb")
-        except Exception as e:
-            logger.error(f"Error deleting github issues data from seadb for connection {connection_id}: {e}")
-            raise
-
     def delete_discourse_data_from_db(self, project_uuid, connection_id):
         """Delete discourse topics and replies from seadb"""
         try:
@@ -130,17 +120,19 @@ class ProjectConnectionCleaner(object):
         # delete connection index
         self.index_manager.delete_index_by_connection(connection_id, connection_type)
 
+        base_metadata = self.seadb_api.get_base_metadata(project_uuid)
+        tables = base_metadata.get('tables')
         if connection_type == ConnectionType.SITE.value:
             self.storage.delete_site(connection_id, project_uuid)
-
-            base_metadata = self.seadb_api.get_base_metadata(project_uuid)
-            tables = base_metadata.get('tables')
             if tables:
                 for table in tables:
                     if table['name'] == str(connection_id):
                         self.seadb_api.delete_table(project_uuid, table['id'])
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            self.delete_issues_data_from_db(project_uuid, connection_id)
+            if tables:
+                for table in tables:
+                    if table['name'] == str(connection_id) + '_github_issues' or table['name'] == str(connection_id) + '_issue_comments':
+                        self.seadb_api.delete_table(project_uuid, table['id'])
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
             self.delete_discourse_data_from_db(project_uuid, connection_id)
 

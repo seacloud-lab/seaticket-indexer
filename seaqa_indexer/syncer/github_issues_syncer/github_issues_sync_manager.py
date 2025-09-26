@@ -29,11 +29,10 @@ class GithubIssuesSyncManager:
             logger.info(f"Received webhook for issue #{issue_id}, action: {action}, event: {event}")
             updated_at = update_data.get("updated_at")
             if action == 'deleted':
-                github_seadb_api.tag_issue_deleted(connection_id, issue_id)
-                github_issues_sync.update_issue_record(connection_id, issue_id, updated_at)
+                github_issues_sync.update_issue_record(connection_id, issue_id, updated_at, deleted=True)
                 self.add_issues_index_task(connection_id)
                 return
-            github_issues_sync.save_or_update_issue_to_db(connection_id, update_data, is_webhook=True)
+            github_issues_sync.save_or_update_issue_to_db(connection_id, update_data)
 
         elif event == "issue_comment":
             logger.info(f"Received webhook for issue_comment #{issue_id}, action: {action}, event: {event}")
@@ -49,7 +48,7 @@ class GithubIssuesSyncManager:
                 self.add_issues_index_task(connection_id)
                 return
 
-            github_issues_sync.save_or_update_issue_comment_to_db(connection_id, issue_id, comment_data, is_webhook=True)
+            github_issues_sync.save_or_update_issue_comment_to_db(connection_id, issue_id, comment_data)
             github_issues_sync.update_issue_record(connection_id, issue_id, updated_at, comment_count)
 
         self.add_issues_index_task(connection_id)

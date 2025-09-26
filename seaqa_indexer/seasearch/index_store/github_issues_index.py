@@ -1,5 +1,7 @@
+import datetime
 import json
 import logging
+import pytz
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
@@ -238,7 +240,7 @@ class GitHubIssuesIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, index_name, connection_id, project_uuid, repo_owner, repo_name, connection_status, seaqa_db, indexed_at):
+    def update(self, index_name, connection_id, project_uuid, repo_owner, repo_name, connection_status, seaqa_db, last_indexed_at):
         index_count = 0
         page_size = 1000
         offset = 0
@@ -246,10 +248,11 @@ class GitHubIssuesIndex(object):
         issues_table_name = str(connection_id) + '_github_issues'
         comments_table_name = str(connection_id) + '_issue_comments'
 
-        if indexed_at is not None:
-            base_sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{indexed_at}'"
-        else:
-            base_sql = f"SELECT * FROM `{issues_table_name}`"
+        if not last_indexed_at:
+            last_indexed_at = datetime.datetime(1970, 1, 1)
+        last_indexed_at = last_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
+
+        base_sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{last_indexed_at}'"
 
         while True:
             sql_issues = f"{base_sql} LIMIT {page_size} OFFSET {offset}"
@@ -262,8 +265,15 @@ class GitHubIssuesIndex(object):
             for issue in issues:
                 issue_id = issue.get('issue_id')
                 self.github_seadb_api.delete_comments_from_db(connection_id, issue_id)
-                sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id}"
-                comments = self.seadb_api.query_rows(project_uuid, sql_comments).get('results', [])
+                comments = []
+                comments_offset = 0
+                while True:
+                    sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {comments_offset}"
+                    comments_data = self.seadb_api.query_rows(project_uuid, sql_comments).get('results', [])
+                    comments.extend(comments_data)
+                    comments_offset += page_size
+                    if not comments_data:
+                        break
                 comments_list = []
                 if comments:
                     for comment in comments:

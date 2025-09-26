@@ -9,6 +9,60 @@ class PropertyTypes:
     BOOL = 'bool'
 
 
+class SelectTypes:
+    state = {
+      "options": [
+        {
+          "id": "0001",
+          "name": "open"
+        },
+        {
+          "id": "0002",
+          "name": "closed"
+        }
+      ]
+    }
+
+    state_reason = {
+      "options": [
+        {
+          "id": "0001",
+          "name": "completed"
+        },
+        {
+          "id": "0002",
+          "name": "not_planned"
+        },
+        {
+          "id": "0003",
+          "name": "duplicate"
+        },
+        {
+          "id": "0004",
+          "name": "reopened"
+        }
+      ]
+    }
+
+    issue_type = {
+      "options": [
+        {
+          "id": "0001",
+          "name": "Bug",
+        },
+        {
+          "id": "0002",
+          "name": "Feature"
+        },
+        {
+          "id": "0003",
+          "name": "Task"
+        }
+      ]
+    }
+
+
+
 class MappedColumn(object):
     def __init__(self, name, type, data=None):
         self.name = name
@@ -88,10 +142,10 @@ class GithubIssuesTable(BaseModel):
     issue_number = MappedColumn('issue_number', PropertyTypes.INT)
     title = MappedColumn('title', PropertyTypes.TEXT)
     body = MappedColumn('body', PropertyTypes.TEXT)
-    state = MappedColumn('state', PropertyTypes.SINGLE_SELECT)
-    state_reason = MappedColumn('state_reason', PropertyTypes.SINGLE_SELECT)
+    state = MappedColumn('state', PropertyTypes.SINGLE_SELECT, SelectTypes.state)
+    state_reason = MappedColumn('state_reason', PropertyTypes.SINGLE_SELECT, SelectTypes.state_reason)
     labels = MappedColumn('labels', PropertyTypes.MULTIPLE_SELECT)
-    issue_type = MappedColumn('issue_type', PropertyTypes.SINGLE_SELECT)
+    issue_type = MappedColumn('issue_type', PropertyTypes.SINGLE_SELECT, SelectTypes.issue_type)
     author = MappedColumn('author', PropertyTypes.TEXT)
     assignees = MappedColumn('assignees', PropertyTypes.TEXT)
     url = MappedColumn('url', PropertyTypes.TEXT)

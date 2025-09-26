@@ -1,11 +1,12 @@
 import logging
 import json
 
+from soupsieve.css_types import pickle_register
 from sqlalchemy.sql import text
 
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.seadb_models.models import GithubIssuesTable, GithubIssueCommentsTable
-from seaqa_indexer.utils import need_update_connection_status
+from seaqa_indexer.utils import need_update_connection_status, time_str_to_utc_time
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -37,7 +38,7 @@ class GithubIssuesSync:
             session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
             session.commit()
 
-    def save_or_update_issue_to_db(self, connection_id, issue, is_webhook):
+    def save_or_update_issue_to_db(self, connection_id, issue):
         labels_data = issue.get('labels', [])
         label_names = [label['name'] for label in labels_data if 'name' in label]
 
@@ -59,9 +60,9 @@ class GithubIssuesSync:
         state = issue.get('state')
         state_reason = issue.get('state_reason')
         assignees = json.dumps(assignees_list)
-        created_at = issue.get('created_at') if 'created_at' in issue else None
-        updated_at = issue.get('updated_at') if issue.get('updated_at') else None
-        closed_at = issue.get('closed_at') if issue.get('closed_at') else None
+        created_at = time_str_to_utc_time(issue.get('created_at')).isoformat()
+        updated_at = time_str_to_utc_time(issue.get('updated_at')).isoformat()
+        closed_at = time_str_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None
         comments_count = issue.get('comments')
         deleted = False
 
@@ -93,26 +94,23 @@ class GithubIssuesSync:
         if type_name is not None:
             insert_row[self.issues_table.issue_type.name] = type_name
 
-        if is_webhook:
-            res = self.github_seadb_api.query_issue(connection_id, issue_id)
-            if res:
-                _pk = res[0].get('_pk')
-                update_row = [
-                    {
-                    "pk":_pk,
-                    "row":insert_row,
-                    }
-                ]
-                self.github_seadb_api.update_issue_to_db(connection_id, update_row)
-            else:
-                self.github_seadb_api.save_issue_to_db(connection_id, insert_row)
+        res = self.github_seadb_api.query_issue(connection_id, issue_id)
+        if res:
+            _pk = res[0].get('_pk')
+            update_row = [
+                {
+                "pk":_pk,
+                "row":insert_row,
+                }
+            ]
+            self.github_seadb_api.update_issue_to_db(connection_id, update_row)
         else:
             self.github_seadb_api.save_issue_to_db(connection_id, insert_row)
 
-    def save_or_update_issue_comment_to_db(self, connection_id, issue_id, comment, is_webhook):
+    def save_or_update_issue_comment_to_db(self, connection_id, issue_id, comment):
 
-        created_at = comment.get('created_at') if 'created_at' in comment else None
-        updated_at = comment.get('updated_at') if comment.get('updated_at') else None
+        created_at = time_str_to_utc_time(comment.get('created_at')).isoformat()
+        updated_at = time_str_to_utc_time(comment.get('updated_at')).isoformat()
         comment_id = comment['id']
         issue_id = int(issue_id)
         author = comment.get('user', {}).get('login', '')
@@ -129,24 +127,21 @@ class GithubIssuesSync:
             GithubIssueCommentsTable.updated_at.name: updated_at,
         }
 
-        if is_webhook:
-            res = self.github_seadb_api.query_issue_comment(connection_id, comment_id)
-            if res:
-                _pk = res[0].get('_pk')
-                update_row = [
-                    {
-                    "pk":_pk,
-                    "row":insert_row,
-                    }
-                ]
-
-                self.github_seadb_api.update_issue_comment_to_db(connection_id, update_row)
-            else:
-                self.github_seadb_api.save_issue_comment_to_db(connection_id, insert_row)
+        res = self.github_seadb_api.query_issue_comment(connection_id, comment_id)
+        if res:
+            _pk = res[0].get('_pk')
+            update_row = [
+                {
+                "pk":_pk,
+                "row":insert_row,
+                }
+            ]
+            self.github_seadb_api.update_issue_comment_to_db(connection_id, update_row)
         else:
             self.github_seadb_api.save_issue_comment_to_db(connection_id, insert_row)
 
-    def update_issue_record(self, connection_id, issue_id, updated_at, comments_count=None):
+    def update_issue_record(self, connection_id, issue_id, updated_at, comments_count=None, deleted=False):
+        updated_at = time_str_to_utc_time(updated_at).isoformat()
         row = {
             GithubIssuesTable.updated_at.name: updated_at,
         }
@@ -154,7 +149,8 @@ class GithubIssuesSync:
         if comments_count is not None:
             comments_count = int(comments_count)
             row[GithubIssuesTable.comments_count.name] = comments_count
-
+        if deleted:
+            row[GithubIssuesTable.deleted.name] = deleted
         self.github_seadb_api.update_issue_record(connection_id, issue_id, row)
 
     def sync(self, project_uuid, connection_id, token, repo_owner, repo_name, since, connection_status):
@@ -179,17 +175,16 @@ class GithubIssuesSync:
                         option_names = None
                     if option_names is None or issues_label.get('name') not in option_names:
                         column_key = column.get('key')
-                        create_select = {
+                        column_option = {
                             'table_id': table_id,
                             'column_key': column_key,
                             'option_name': issues_label.get('name'),
                         }
                         try:
-                            self.seadb_api.add_column_option(project_uuid, create_select)
+                            self.seadb_api.add_column_option(project_uuid, column_option)
                         except Exception as e:
                             logging.error(e)
                             return sync_count
-
 
         while True:
             issues = github_api.list_issues(since=since, state='all', per_page=per_page, page=page)
@@ -200,7 +195,7 @@ class GithubIssuesSync:
                 if 'pull_request' in issue:
                     continue
                 sync_count += 1
-                self.save_or_update_issue_to_db(connection_id, issue, is_webhook=False)
+                self.save_or_update_issue_to_db(connection_id, issue)
                 if need_update_connection_status(sync_count):
                     connection_status['last_sync_count'] = sync_count
                     self.update_connection_status(connection_id, json.dumps(connection_status))
@@ -212,7 +207,7 @@ class GithubIssuesSync:
                         break
                     for comment in comments:
                         sync_count += 1
-                        self.save_or_update_issue_comment_to_db(connection_id, issue['id'], comment, is_webhook=False)
+                        self.save_or_update_issue_comment_to_db(connection_id, issue['id'], comment)
 
             if len(issues) < per_page:
                 return sync_count
