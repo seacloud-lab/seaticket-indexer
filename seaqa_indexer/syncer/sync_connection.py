@@ -4,6 +4,7 @@ import datetime
 
 from urllib.parse import urlparse
 
+from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync import GithubIssuesSync
@@ -34,10 +35,12 @@ def sync_connection(connection_id, db_session_class, mq):
         return
 
     connection_id = project_connection.id
+    project_uuid = project_connection.project_uuid
     connection_type = project_connection.type
     old_last_sync_time = project_connection.last_sync_time
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
@@ -68,9 +71,9 @@ def sync_connection(connection_id, db_session_class, mq):
                 logger.warning("github repository is invalid: %s", e)
                 return
             since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
-            github_issues_sync = GithubIssuesSync(db_session_class)
-            sync_count = github_issues_sync.sync(connection_id, token, repo_owner, repo_name, since, connection_status)
-            total_count = github_issues_sync.get_github_issues_count(connection_id)
+            github_issues_sync = GithubIssuesSync(project_uuid, db_session_class)
+            sync_count = github_issues_sync.sync(project_uuid, connection_id, token, repo_owner, repo_name, since, connection_status)
+            total_count = github_seadb_api.get_github_issues_count(connection_id)
     except Exception as e:
         logger.exception('connection: %s, sync issues failed, error: %s', connection_id, e)
         connection_status['last_sync_status'] = CrawlStatus.FAILED

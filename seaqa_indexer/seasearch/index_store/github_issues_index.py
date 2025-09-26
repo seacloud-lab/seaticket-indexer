@@ -1,11 +1,12 @@
+import datetime
 import json
 import logging
-from datetime import datetime
+import pytz
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
-from sqlalchemy.sql import text
 from seaqa_indexer.utils import need_update_connection_status
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,9 @@ class GitHubIssuesIndex(object):
             'labels': {
                 'type': 'keyword',
             },
-            'comments_count': {
-                'type': 'integer',
+            'comments_body': {
+                'type': 'text',
+                'analyzer': 'gse_standard_analyzer',
             }
         }
     }
@@ -77,11 +79,12 @@ class GitHubIssuesIndex(object):
         }
     }
 
-    def __init__(self, seasearch_api, db_session_class, shard_num=1):
+    def __init__(self, seasearch_api, github_seadb_api, shard_num=1):
         self.seasearch_api = seasearch_api
-        self.db_session_class = db_session_class
+        self.github_seadb_api = github_seadb_api
         self.shard_num = shard_num
         self.lang = LANG
+        self.seadb_api = SeaDBAPI()
 
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
@@ -115,6 +118,7 @@ class GitHubIssuesIndex(object):
         if not search_title_only:
             searches.append(_make_match_query('body', keyword, **match_query_kwargs))
             searches.append(_make_match_query('labels', keyword, **match_query_kwargs))
+            searches.append(_make_match_query('comments_body', keyword, **match_query_kwargs))
 
         return searches
 
@@ -132,7 +136,8 @@ class GitHubIssuesIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'body', 'state', 'labels', 'url'],
+            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'body', 'comments_body',
+                        'state', 'labels', 'url'],
             'sort': [
                 '_score'
             ],
@@ -178,6 +183,7 @@ class GitHubIssuesIndex(object):
                 'title': source.get('title'),
                 'connection_id': source.get('connection_id'),
                 'body': source.get('body'),
+                'comments_body': source.get('comments_body', []),
                 'state': source.get('state'),
                 'labels': source.get('labels', []),
                 'score': hit.get('_score'),
@@ -201,9 +207,9 @@ class GitHubIssuesIndex(object):
             'author': issue_data.get('user', {}).get('login', ''),
             'url': issue_data.get('url', ''),
             'body': issue_data['body'] or '',
+            'comments_body': issue_data.get('comments_body', []),
             'state': issue_data['state'],
-            'labels': [label['name'] for label in issue_data.get('labels', [])],
-            'comments_count': issue_data['comments']
+            'labels': issue_data.get('labels', [])
         }
 
         bulk_ops = [
@@ -234,64 +240,76 @@ class GitHubIssuesIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def get_all_need_index_issues_from_db(self, issues_sync_id):
-        with self.db_session_class() as session:
-            sql = """
-                   SELECT id, issue_number, title, body, state, created_at,
-                          updated_at, closed_at, labels, comments, author, url, deleted
-                   FROM github_issues
-                   WHERE connection_id = :connection_id AND need_index = 1
-               """
-            rows = session.execute(text(sql), {'connection_id': issues_sync_id}).fetchall()
-        return rows
-
-    def delete_issue_from_db(self, issue_id):
-        with self.db_session_class() as session:
-            sql = text("DELETE FROM github_issues WHERE id = :id")
-            session.execute(sql, {'id': issue_id})
-            session.commit()
-
-    def update_issues_index_status(self, issue_id):
-        with self.db_session_class() as session:
-            sql = text("UPDATE github_issues SET need_index = 0 WHERE id = :id")
-            session.execute(sql, {'id': issue_id})
-            session.commit()
-
-    def update(self, index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db):
-        issues = self.get_all_need_index_issues_from_db(connection_id)
+    def update(self, index_name, connection_id, project_uuid, repo_owner, repo_name, connection_status, seaqa_db, last_indexed_at):
         index_count = 0
+        page_size = 1000
+        offset = 0
         need_cleared_issues_index_set = set()
+        need_cleared_issues_pk_set = set()
+        need_cleared_issues_id_set = set()
+        issues_table_name = str(connection_id) + '_github_issues'
+        comments_table_name = str(connection_id) + '_issue_comments'
 
-        for issue in issues:
-            issue_id = issue.id
-            issue_dict = {
-                'id': issue_id,
-                'number': issue.issue_number,
-                'title': issue.title,
-                'body': issue.body,
-                'state': issue.state,
-                'labels': [{'name': l} for l in json.loads(issue.labels or "[]")],
-                'comments': issue.comments,
-                'user': {'login': issue.author},
-                'url': issue.url,
-                'repo_owner': repo_owner,
-                'repo_name': repo_name,
-            }
-            if issue.deleted == 1:
-                key = self.gen_index_id(issue_id)
-                need_cleared_issues_index_set.add(key)
-            else:
-                self.add_or_update_issue(index_name, connection_id, issue_dict)
-                self.update_issues_index_status(issue_id)
-                index_count += 1
+        if not last_indexed_at:
+            last_indexed_at = datetime.datetime(1970, 1, 1)
+        last_indexed_at = last_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
 
-            if need_update_connection_status(index_count):
-                connection_status['last_indexed_count'] = index_count
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        base_sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{last_indexed_at}'"
+
+        while True:
+            sql_issues = f"{base_sql} LIMIT {page_size} OFFSET {offset}"
+            res = self.seadb_api.query_rows(project_uuid, sql_issues)
+            issues = res.get('results', [])
+            if not issues:
+                break
+            index_count += len(issues)
+
+            for issue in issues:
+                issue_id = issue.get('issue_id')
+                self.github_seadb_api.delete_comments_from_db(connection_id, issue_id)
+                comments = []
+                comments_offset = 0
+                comments_page_size = 1000
+                while True:
+                    sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {comments_offset}"
+                    comments_data = self.seadb_api.query_rows(project_uuid, sql_comments).get('results', [])
+                    comments.extend(comments_data)
+                    comments_offset += comments_page_size
+                    if not comments_data:
+                        break
+                comments_list = []
+                if comments:
+                    for comment in comments:
+                        comments_list.append(comment.get('body'))
+                issue_dict = {
+                    'id': issue_id,
+                    'number': issue.get('issue_number'),
+                    'title': issue.get('title'),
+                    'body': issue.get('body'),
+                    'state': issue.get('state'),
+                    'labels': issue.get('labels'),
+                    'comments_body': comments_list,
+                    'user': {'login': issue.get('author')},
+                    'url': issue.get('url'),
+                    'repo_owner': repo_owner,
+                    'repo_name': repo_name,
+                }
+                if issue.get('deleted'):
+                    key = self.gen_index_id(issue_id)
+                    need_cleared_issues_index_set.add(key)
+                    need_cleared_issues_pk_set.add(issue_id)
+                    need_cleared_issues_id_set.add(issue.get('_pk'))
+                else:
+                    self.add_or_update_issue(index_name, connection_id, issue_dict)
+                    index_count += 1
+            offset += page_size
+
+        if need_update_connection_status(index_count):
+            connection_status['last_indexed_count'] = index_count
+            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
 
         if need_cleared_issues_index_set:
             self.delete_indexes_by_ids(index_name, need_cleared_issues_index_set)
-            for issue_id in need_cleared_issues_index_set:
-                self.delete_issue_from_db(issue_id)
+            self.github_seadb_api.delete_issues_from_db(connection_id, need_cleared_issues_pk_set, need_cleared_issues_id_set)
 
         return index_count
