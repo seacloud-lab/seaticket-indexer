@@ -245,6 +245,8 @@ class GitHubIssuesIndex(object):
         page_size = 1000
         offset = 0
         need_cleared_issues_index_set = set()
+        need_cleared_issues_pk_set = set()
+        need_cleared_issues_id_set = set()
         issues_table_name = str(connection_id) + '_github_issues'
         comments_table_name = str(connection_id) + '_issue_comments'
 
@@ -267,11 +269,12 @@ class GitHubIssuesIndex(object):
                 self.github_seadb_api.delete_comments_from_db(connection_id, issue_id)
                 comments = []
                 comments_offset = 0
+                comments_page_size = 1000
                 while True:
                     sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {comments_offset}"
                     comments_data = self.seadb_api.query_rows(project_uuid, sql_comments).get('results', [])
                     comments.extend(comments_data)
-                    comments_offset += page_size
+                    comments_offset += comments_page_size
                     if not comments_data:
                         break
                 comments_list = []
@@ -294,6 +297,8 @@ class GitHubIssuesIndex(object):
                 if issue.get('deleted'):
                     key = self.gen_index_id(issue_id)
                     need_cleared_issues_index_set.add(key)
+                    need_cleared_issues_pk_set.add(issue_id)
+                    need_cleared_issues_id_set.add(issue.get('_pk'))
                 else:
                     self.add_or_update_issue(index_name, connection_id, issue_dict)
                     index_count += 1
@@ -305,6 +310,6 @@ class GitHubIssuesIndex(object):
 
         if need_cleared_issues_index_set:
             self.delete_indexes_by_ids(index_name, need_cleared_issues_index_set)
-            self.github_seadb_api.delete_issues_from_db(connection_id)
+            self.github_seadb_api.delete_issues_from_db(connection_id, need_cleared_issues_pk_set, need_cleared_issues_id_set)
 
         return index_count

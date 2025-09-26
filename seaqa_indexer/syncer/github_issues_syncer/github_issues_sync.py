@@ -1,7 +1,6 @@
 import logging
 import json
 
-from soupsieve.css_types import pickle_register
 from sqlalchemy.sql import text
 
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
@@ -180,11 +179,7 @@ class GithubIssuesSync:
                             'column_key': column_key,
                             'option_name': issues_label.get('name'),
                         }
-                        try:
-                            self.seadb_api.add_column_option(project_uuid, column_option)
-                        except Exception as e:
-                            logging.error(e)
-                            return sync_count
+                        self.seadb_api.add_column_option(project_uuid, column_option)
 
         while True:
             issues = github_api.list_issues(since=since, state='all', per_page=per_page, page=page)

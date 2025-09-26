@@ -62,20 +62,12 @@ class GitHubSeaDBAPI:
         issues_count = self.seadb_api.query_rows(self.base_id, sql).get('results', [])[0]
         return issues_count
 
-    def delete_issues_from_db(self, connection_id):
+    def delete_issues_from_db(self, connection_id, need_delete_issue_pks, need_deleted_comment_issue_ids):
         table_name = self._get_issues_table_name(connection_id)
-        query_sql = f"SELECT * FROM `{table_name}` WHERE deleted = True"
-        need_delete = self.seadb_api.query_rows(self.base_id, query_sql).get('results', [])
-        need_delete_issue_rows = []
-        need_delete_issue_comments = []
-        if need_delete:
-            for issue in need_delete:
-                need_delete_issue_rows.append(issue.get('_pk'))
-                need_delete_issue_comments.append(issue.get('issue_id'))
-        self.seadb_api.delete_rows(self.base_id, table_name, need_delete_issue_rows)
+        self.seadb_api.delete_rows(self.base_id, table_name, need_delete_issue_pks)
 
         comments_table_name = self._get_issue_comments_table_name(connection_id)
-        for issue_id in need_delete_issue_comments:
+        for issue_id in need_deleted_comment_issue_ids:
             delete_sql = f"DELETE FROM `{comments_table_name}` WHERE issue_id = {issue_id}"
             self.seadb_api.query_rows(self.base_id, delete_sql)
 
