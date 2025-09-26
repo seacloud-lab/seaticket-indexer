@@ -8,6 +8,7 @@ from sqlalchemy.sql import text
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
+from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.seasearch.index_manager import IndexManager
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
@@ -92,12 +93,6 @@ class ProjectConnectionCleaner(object):
             session.execute(text(sql), {'connection_id': connection_id})
             session.commit()
 
-    def delete_issues_from_db(self, connection_id):
-        with self.db_session_class() as session:
-            sql = text("DELETE FROM github_issues WHERE connection_id = :connection_id")
-            session.execute(sql, {'connection_id': connection_id})
-            session.commit()
-
     def delete_discourse_data_from_db(self, project_uuid, connection_id):
         """Delete discourse topics and replies from seadb"""
         try:
@@ -125,17 +120,19 @@ class ProjectConnectionCleaner(object):
         # delete connection index
         self.index_manager.delete_index_by_connection(connection_id, connection_type)
 
+        base_metadata = self.seadb_api.get_base_metadata(project_uuid)
+        tables = base_metadata.get('tables')
         if connection_type == ConnectionType.SITE.value:
             self.storage.delete_site(connection_id, project_uuid)
-
-            base_metadata = self.seadb_api.get_base_metadata(project_uuid)
-            tables = base_metadata.get('tables')
             if tables:
                 for table in tables:
                     if table['name'] == str(connection_id):
                         self.seadb_api.delete_table(project_uuid, table['id'])
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            self.delete_issues_from_db(connection_id)
+            if tables:
+                for table in tables:
+                    if table['name'] == str(connection_id) + '_github_issues' or table['name'] == str(connection_id) + '_issue_comments':
+                        self.seadb_api.delete_table(project_uuid, table['id'])
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
             self.delete_discourse_data_from_db(project_uuid, connection_id)
 
