@@ -226,7 +226,7 @@ class SeafileIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, seafile_index_name, connection_id, repo_id, seahub_api, connection_status, seaqa_db, last_indexed_at):
+    def update(self, seafile_index_name, connection_id, repo_id, seahub_api, connection_status, seaqa_db, last_indexed_at, is_first_update):
         need_deleted_index_ids_set = set()
 
         index_count = 0
@@ -276,6 +276,8 @@ class SeafileIndex(object):
         page = 1
         per_page = 1000
         while True:
+            if is_first_update:
+                break
             resp = seahub_api.get_recently_deleted_files(since, page, per_page)
             recently_deleted_files = resp.get('files', [])
             if not recently_deleted_files:

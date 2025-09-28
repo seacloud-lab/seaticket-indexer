@@ -98,9 +98,11 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
 
     new_last_modified = time_str_to_utc_time(new_last_modified)
     new_last_sync_time = datetime.datetime.now(datetime.UTC)
+    is_first_update = False
 
     if not old_indexed_at:
         old_indexed_at = datetime.datetime(1970, 1, 1)
+        is_first_update = True
 
     # convert to utc aware time
     old_indexed_at = old_indexed_at.replace(tzinfo=datetime.timezone.utc)
@@ -114,7 +116,7 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
 
     seafile_index_name = gen_index_name_by_type(connection_id, connection_type)
     seafile_index.create_index_if_missing(seafile_index_name)
-    index_count, total_records = seafile_index.update(seafile_index_name, connection_id, new_repo_id, seahub_api, connection_status, seaqa_db, old_indexed_at)
+    index_count, total_records = seafile_index.update(seafile_index_name, connection_id, new_repo_id, seahub_api, connection_status, seaqa_db, old_indexed_at, is_first_update)
 
     # finish index
     config['repo_id'] = new_repo_id
