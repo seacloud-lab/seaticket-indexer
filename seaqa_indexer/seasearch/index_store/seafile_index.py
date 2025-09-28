@@ -226,82 +226,74 @@ class SeafileIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def get_path_to_index_info(self, index_name):
-        per_size = 1000
-        start = 0
-        path_to_index_info = {}
-        while True:
-            hits, total = self.query_all_data(index_name, start, per_size)
-            for hit in hits:
-                source = hit['_source']
-                # _id = hit['_id']
-                repo_id = source['repo_id']
-                path = source['path']  # parent_dir
-                filename = source['filename']
-                index_id = self.gen_index_id(repo_id, path, filename)
-                path_to_index_info[index_id] = source
+    def update(self, seafile_index_name, connection_id, repo_id, seahub_api, connection_status, seaqa_db, last_indexed_at, is_first_update):
+        need_deleted_index_ids_set = set()
 
-            start += per_size
-            if len(hits) < per_size:
-                break
-        return path_to_index_info
-
-    def update(self, seafile_index_name, connection_id, repo_id, seahub_api, connection_status, seaqa_db):
-        index_id_to_index_info = self.get_path_to_index_info(seafile_index_name)
-        old_index_ids_set = set(index_id_to_index_info.keys())
-        new_index_ids_set = set()
-
-        item_info = seahub_api.list_items_in_dir('/', 'f')
         index_count = 0
-        dirent_list = item_info.get('dirent_list')
-        for dirent in dirent_list:
-            parent_dir = dirent.get('parent_dir')
-            dirent_name = dirent.get('name')
-            mtime = dirent.get('mtime')
-            size = dirent.get('size')
+        since = last_indexed_at.isoformat()
+        page = 1
+        per_page = 1000
+        while True:
+            resp = seahub_api.get_recently_changed_files(since, page, per_page)
+            recently_changed_files = resp.get('files', [])
+            if not recently_changed_files:
+                break
 
-            key = self.gen_index_id(repo_id, parent_dir, dirent_name)
-            new_index_ids_set.add(key)
-            index_info = index_id_to_index_info.get(key, {})
+            for file in recently_changed_files:
+                parent_dir = file.get('_parent_dir')
+                dirent_name = file.get('_name')
+                mtime = file.get('_mtime')
+                size = file.get('_size')
 
-            logger.debug('start to connection: %s repo_id: %s, parent_dir: %s, name: %s', connection_id, repo_id,
-                         parent_dir, dirent_name)
+                logger.debug('start to connection: %s repo_id: %s, parent_dir: %s, name: %s', connection_id, repo_id,
+                             parent_dir, dirent_name)
 
-            old_mtime = index_info.get('mtime')
-            timestamp_mtime = datetime.datetime.fromisoformat(mtime).timestamp()
-            if old_mtime:
-                old_mtime = old_mtime / 1000
-
-            if timestamp_mtime == old_mtime:
-                logger.debug('connection: %s, repo_id: %s, parent_dir: %s, name: %s is not change.',
-                             connection_id, repo_id, parent_dir, dirent_name)
-                continue
-
-            content = None
-            if size > REPO_FILE_SIZE_LIMIT:
-                self.update_document(seafile_index_name, connection_id, content, repo_id, parent_dir,
-                                                   dirent_name, timestamp_mtime)
-                continue
-
-            file_path = os.path.join(parent_dir, dirent_name)
-            extractor = ExtractorFactory.get_extractor(dirent_name)
-            if extractor:
-                try:
-                    download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
-                except FileNotFoundException:
-                    logger.warning('connection: %s, repo_id: %s, parent_dir: %s, name: %s file not found',
-                                   connection_id, repo_id, parent_dir, dirent_name)
+                timestamp_mtime = datetime.datetime.fromisoformat(mtime).timestamp()
+                content = None
+                if size > REPO_FILE_SIZE_LIMIT:
+                    self.update_document(seafile_index_name, connection_id, content, repo_id, parent_dir,
+                                         dirent_name, timestamp_mtime)
                     continue
-                content = get_content_by_download_link(download_link)
-                content = extractor.extract(connection_id, repo_id, content, file_path)
-            self.update_document(seafile_index_name, connection_id, content, repo_id, parent_dir,
-                                               dirent_name, timestamp_mtime)
-            index_count += 1
-            if need_update_connection_status(index_count):
-                connection_status['last_indexed_count'] = index_count
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-        # clear deleted site crawled url
-        need_cleared_seafile_index_set = old_index_ids_set - new_index_ids_set
-        self.delete_indexes_by_ids(seafile_index_name, need_cleared_seafile_index_set)
-        return index_count, len(dirent_list)
+
+                file_path = os.path.join(parent_dir, dirent_name)
+                extractor = ExtractorFactory.get_extractor(dirent_name)
+                if extractor:
+                    try:
+                        download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
+                    except FileNotFoundException:
+                        logger.warning('connection: %s, repo_id: %s, parent_dir: %s, name: %s file not found',
+                                       connection_id, repo_id, parent_dir, dirent_name)
+                        continue
+                    content = get_content_by_download_link(download_link)
+                    content = extractor.extract(connection_id, repo_id, content, file_path)
+                self.update_document(seafile_index_name, connection_id, content, repo_id, parent_dir,
+                                     dirent_name, timestamp_mtime)
+                index_count += 1
+                if need_update_connection_status(index_count):
+                    connection_status['last_indexed_count'] = index_count
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+
+        page = 1
+        per_page = 1000
+        while True:
+            if is_first_update:
+                break
+            resp = seahub_api.get_recently_deleted_files(since, page, per_page)
+            recently_deleted_files = resp.get('files', [])
+            if not recently_deleted_files:
+                break
+
+            for file in recently_deleted_files:
+                parent_dir = file.get('path')
+                obj_name = file.get('obj_name')
+                key = self.gen_index_id(repo_id, parent_dir, obj_name)
+                need_deleted_index_ids_set.add(key)
+
+            self.delete_indexes_by_ids(seafile_index_name, need_deleted_index_ids_set)
+            need_deleted_index_ids_set = set()
+        if need_deleted_index_ids_set:
+            self.delete_indexes_by_ids(seafile_index_name, need_deleted_index_ids_set)
+
+        _, total = self.query_all_data(seafile_index_name, 0, 1)
+        return index_count, total
 
