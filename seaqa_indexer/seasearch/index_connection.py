@@ -84,7 +84,7 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     server_url = config.get('server_url')
     api_token = config.get('api_token')
     old_repo_id = config.get('repo_id')
-    old_last_modified = project_connection.indexed_at
+    old_indexed_at = project_connection.indexed_at
     connection_type = project_connection.type
     connection_status = json.loads(project_connection.status)
 
@@ -99,16 +99,25 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
 
     new_last_modified = time_str_to_utc_time(new_last_modified)
     new_last_sync_time = datetime.datetime.now(datetime.UTC)
-    if new_repo_id == old_repo_id and str(old_last_modified) == str(new_last_modified).split('+')[0]:
+    is_first_update = False
+
+    if not old_indexed_at:
+        old_indexed_at = datetime.datetime(1970, 1, 1)
+        is_first_update = True
+
+    # convert to utc aware time
+    old_indexed_at = old_indexed_at.replace(tzinfo=datetime.timezone.utc)
+
+    if new_repo_id == old_repo_id and old_indexed_at > new_last_modified:
         connection_status['last_indexed_count'] = 0
         connection_status['last_index_status'] = IndexStatus.COMPLETED
-        seaqa_db.update_connection(connection_id, old_last_modified, json.dumps(connection_status), last_sync_time=new_last_sync_time)
+        seaqa_db.update_connection(connection_id, old_indexed_at, json.dumps(connection_status), last_sync_time=new_last_sync_time)
         logger.info('connection: %s, repo: %s does not change, skip this update', connection_id, new_repo_id)
         return
 
     seafile_index_name = gen_index_name_by_type(connection_id, connection_type)
     seafile_index.create_index_if_missing(seafile_index_name)
-    index_count, total_records = seafile_index.update(seafile_index_name, connection_id, new_repo_id, seahub_api, connection_status, seaqa_db)
+    index_count, total_records = seafile_index.update(seafile_index_name, connection_id, new_repo_id, seahub_api, connection_status, seaqa_db, old_indexed_at, is_first_update)
 
     # finish index
     config['repo_id'] = new_repo_id
