@@ -58,8 +58,11 @@ class GitHubSeaDBAPI:
 
     def get_github_issues_count(self, connection_id):
         table_name = self._get_issues_table_name(connection_id)
-        sql = f"SELECT count(*) FROM `{table_name}`"
-        issues_count = self.seadb_api.query_rows(self.base_id, sql).get('results', [])[0]
+        sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
+        issues_result = self.seadb_api.query_rows(self.base_id, sql)
+        issues_count = 0
+        if issues_result and 'results' in issues_result and issues_result['results']:
+            issues_count = issues_result['results'][0].get('count', 0)
         return issues_count
 
     def delete_issues_from_db(self, connection_id, need_delete_issue_pks, need_deleted_comment_issue_ids):
