@@ -56,6 +56,30 @@ class SeahubAPI(object):
 
         return parse_response(response)
 
+    def get_recently_changed_files(self, since, page, per_page):
+        url = self.server + '/api/v2.1/via-repo-token/recently-changed-files/'
+        data = {
+            'since': since,
+            'page': page,
+            'per_page': per_page,
+        }
+
+        response = requests.get(url, headers=self.headers, params=data)
+
+        return parse_response(response)
+
+    def get_recently_deleted_files(self, since, page, per_page):
+        url = self.server + '/api/v2.1/via-repo-token/recently-deleted-files/'
+        data = {
+            'since': since,
+            'page': page,
+            'per_page': per_page,
+        }
+
+        response = requests.get(url, headers=self.headers, params=data)
+
+        return parse_response(response)
+
     def get_download_link(self, path):
         import requests
         url = self.server + '/api/v2.1/via-repo-token/download-link/'
