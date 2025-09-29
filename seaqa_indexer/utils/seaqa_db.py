@@ -22,7 +22,7 @@ class SeaqaDB(object):
     def get_connection_by_ids(self, project_uuid, connection_ids):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.type
+            sql = """SELECT pc.id, pc.type, pc.config
             FROM project_connection pc 
             INNER JOIN projects p 
             ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.deleted=false AND pc.project_uuid=:project_uuid"""

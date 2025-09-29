@@ -137,7 +137,7 @@ class GitHubIssuesIndex(object):
             'from': start,
             'size': size,
             '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'body', 'comments_body',
-                        'state', 'labels', 'url'],
+                        'state', 'labels'],
             'sort': [
                 '_score'
             ],
@@ -194,31 +194,6 @@ class GitHubIssuesIndex(object):
         logger.debug(f"GitHub issue search: {keyword} in {index_name}, found {len(issues)} results")
         return issues
 
-    def add_or_update_issue(self, index_name, connection_id, issue_data):
-        _id = self.gen_index_id(issue_data['id'])
-
-        doc = {
-            'connection_id': connection_id,
-            'repo_owner': issue_data['repo_owner'],
-            'repo_name': issue_data['repo_name'],
-            'issue_id': issue_data['id'],
-            'issue_number': issue_data['number'],
-            'title': issue_data['title'],
-            'author': issue_data.get('user', {}).get('login', ''),
-            'url': issue_data.get('url', ''),
-            'body': issue_data['body'] or '',
-            'comments_body': issue_data.get('comments_body', []),
-            'state': issue_data['state'],
-            'labels': issue_data.get('labels', [])
-        }
-
-        bulk_ops = [
-            {'index': {'_index': index_name, '_id': _id}},
-            doc
-        ]
-
-        self.seasearch_api.bulk(index_name, bulk_ops)
-
     def gen_index_id(self, issue_id):
         return md5(f"{issue_id}")
 
@@ -249,6 +224,7 @@ class GitHubIssuesIndex(object):
         need_cleared_issues_id_set = set()
         issues_table_name = str(connection_id) + '_github_issues'
         comments_table_name = str(connection_id) + '_issue_comments'
+        bulk_params = []
 
         if not last_indexed_at:
             last_indexed_at = datetime.datetime(1970, 1, 1)
@@ -281,32 +257,39 @@ class GitHubIssuesIndex(object):
                 if comments:
                     for comment in comments:
                         comments_list.append(comment.get('body'))
-                issue_dict = {
-                    'id': issue_id,
-                    'number': issue.get('issue_number'),
-                    'title': issue.get('title'),
-                    'body': issue.get('body'),
-                    'state': issue.get('state'),
-                    'labels': issue.get('labels'),
-                    'comments_body': comments_list,
-                    'user': {'login': issue.get('author')},
-                    'url': issue.get('url'),
-                    'repo_owner': repo_owner,
-                    'repo_name': repo_name,
-                }
+                key = self.gen_index_id(issue_id)
                 if issue.get('deleted'):
-                    key = self.gen_index_id(issue_id)
                     need_cleared_issues_index_set.add(key)
                     need_cleared_issues_pk_set.add(issue_id)
                     need_cleared_issues_id_set.add(issue.get('_pk'))
                 else:
-                    self.add_or_update_issue(index_name, connection_id, issue_dict)
+                    doc = {
+                        'connection_id': connection_id,
+                        'repo_owner': repo_owner,
+                        'repo_name': repo_name,
+                        'issue_id': issue_id,
+                        'issue_number': issue.get('issue_number'),
+                        'title': issue.get('title'),
+                        'body': issue.get('body'),
+                        'comments_body': comments_list,
+                        'state': issue.get('state'),
+                        'labels': issue.get('labels')
+                    }
+                    index_info = {'index': {'_index': index_name, '_id': key}}
+                    bulk_params.append(index_info)
+                    bulk_params.append(doc)
+                    if len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT:
+                        self.seasearch_api.bulk(index_name, bulk_params)
+                        bulk_params = []
+
                     index_count += 1
+                    if need_update_connection_status(index_count):
+                        connection_status['last_indexed_count'] = index_count
+                        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             offset += page_size
 
-        if need_update_connection_status(index_count):
-            connection_status['last_indexed_count'] = index_count
-            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        if bulk_params:
+            self.seasearch_api.bulk(index_name, bulk_params)
 
         if need_cleared_issues_index_set:
             self.delete_indexes_by_ids(index_name, need_cleared_issues_index_set)

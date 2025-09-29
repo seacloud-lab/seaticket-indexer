@@ -60,10 +60,12 @@ class IndexManager:
         connection_id_list = connection_ids.split(',') if connection_ids else None
         project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
 
+        connection_id_to_config = {}
         for project_connection in project_connections:
             connection_type = project_connection.type
             connection_id = project_connection.id
             index_name = gen_index_name_by_type(connection_id, connection_type)
+            connection_id_to_config[connection_id] = json.loads(project_connection.config)
 
             if connection_type == ConnectionType.SEAFILE.value:
                 seafile_search_param = self.seafile_index.get_search_param(index_name, keyword, start, size)
@@ -143,6 +145,9 @@ class IndexManager:
             elif index_name.startswith(ConnectionType.EMAIL.value):
                 pass
             elif index_name.startswith(ConnectionType.GITHUB_ISSUE.value):
+                config = connection_id_to_config.get(source['connection_id'])
+                repository = config.get('repository')
+                url = repository.rstrip('/') + '/' + 'issues' + '/' + str(source['issue_number'])
                 r = {
                     'title': source['title'],
                     'repo_owner': source['repo_owner'],
@@ -154,20 +159,28 @@ class IndexManager:
                     'state': source['state'],
                     'labels': source['labels'],
                     'score': score,
+                    'url': url,
                     '_id': _id,
                     'type': 'github_issue',
                 }
+
                 result_docs.append(r)
             elif index_name.startswith(ConnectionType.DISCOURSE_FORUM.value):
+                config = connection_id_to_config.get(source['connection_id'])
+                discourse_forum_url = config.get('url')
+                slug = source['slug']
+                topic_id = source['topic_id']
+                topic_url = discourse_forum_url.rstrtip('/') + '/t/' + slug + '/' + str(topic_id)
                 r = {
                     'title': source['title'],
-                    'topic_id': source['topic_id'],
+                    'topic_id': topic_id,
                     'connection_id': source['connection_id'],
                     'content': source['body'],
-                    'slug': source['slug'],
+                    'slug': slug,
                     'score': score,
                     'bumped_at': source['bumped_at'],
                     'created_at': source['created_at'],
+                    'url': topic_url,
                     '_id': _id,
                     'type': 'discourse_forum',
                 }
