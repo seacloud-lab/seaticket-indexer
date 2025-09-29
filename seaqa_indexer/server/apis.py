@@ -135,10 +135,6 @@ def github_webhook():
             issue_id = issue_data['id']
         except KeyError as e:
             return jsonify({'error_msg': 'Missing expected field in webhook payload'}), 400
-    elif event == 'installation':
-        installation_id = update_data["installation"]["id"]
-        application.app.github_issues_sync_manager.handle_github_app_installation(connection_id, installation_id)
-        return jsonify({"msg": f"installation {action}", "installation_id": installation_id}), 200
 
     try:
         application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, update_data, issue_id, action, event)
