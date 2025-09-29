@@ -29,6 +29,10 @@ SEASEARCH_TOKEN = ''
 
 SEAQA_WEB_SECRET_KEY = ''
 
+#SeaQA GitHub APP setting
+APP_ID = ''
+PRIVATE_KEY_PATH = ''
+
 try:
     from local_settings import *
 except ImportError:
@@ -62,3 +66,6 @@ S3_HOST = os.environ.get('S3_HOST')
 S3_WEB_CRAWL_BUCKET = os.environ.get('S3_WEB_CRAWL_BUCKET')
 S3_KEY_ID = os.environ.get('S3_KEY_ID')
 S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY')
+
+APP_ID = os.environ.get('APP_ID') or APP_ID
+PRIVATE_KEY_PATH = os.environ.get('PRIVATE_KEY_PATH') or PRIVATE_KEY_PATH

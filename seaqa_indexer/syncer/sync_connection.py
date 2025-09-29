@@ -83,6 +83,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
             server_url = config.get('repository')
             token = config.get('access_token')
+            installation_id = config.get('installation_id')
             try:
                 path = urlparse(server_url).path
                 parts = path.strip("/").split("/")

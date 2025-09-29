@@ -5,6 +5,7 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
+from seaqa_indexer.utils import encrypt_config, decrypt_config
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,14 @@ class GithubIssuesSyncManager:
             github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, comment_count)
 
         self.add_issues_index_task(connection_id)
+
+    def handle_github_app_installation(self, connection_id, installation_id):
+        project_connection = self.seaqa_db.get_project_connection_by_id(connection_id)
+        connection_config = json.loads(project_connection.config)
+        decrypt_connection_config= decrypt_config(connection_config)
+        decrypt_connection_config['installation_id'] = installation_id
+        encrypt_connection_config = encrypt_config(decrypt_connection_config)
+        self.seaqa_db.update_connection_config(connection_id, encrypt_connection_config)
 
     def add_github_issues_sync_task(self, connection_id):
         logger.info('add github issues sync task: %s', connection_id)
