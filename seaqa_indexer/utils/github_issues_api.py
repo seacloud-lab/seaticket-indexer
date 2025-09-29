@@ -60,5 +60,4 @@ class GitHubAPI:
 
     def get_issues_labels(self, per_page=100, page=1):
         url = f'{self.base_url}/labels'
-        response = requests.get(url, headers=self.headers)
-        return response.json()
+        return self._request(url)
