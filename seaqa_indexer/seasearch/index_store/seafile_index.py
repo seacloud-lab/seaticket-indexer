@@ -273,6 +273,8 @@ class SeafileIndex(object):
                     connection_status['last_indexed_count'] = index_count
                     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
 
+            page += 1
+
         page = 1
         per_page = 1000
         while True:
@@ -291,6 +293,7 @@ class SeafileIndex(object):
 
             self.delete_indexes_by_ids(seafile_index_name, need_deleted_index_ids_set)
             need_deleted_index_ids_set = set()
+            page += 1
         if need_deleted_index_ids_set:
             self.delete_indexes_by_ids(seafile_index_name, need_deleted_index_ids_set)
 
