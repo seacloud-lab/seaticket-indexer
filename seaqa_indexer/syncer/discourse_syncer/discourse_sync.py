@@ -298,6 +298,14 @@ class DiscourseSync:
 
                 topic_id = topic_data.get('id')
 
+                # Check if topic already exists in DB
+                existing_topic = self.check_existing_topic(topic_id, connection_id)
+                if existing_topic:
+                    existing_bumped_at = time_str_to_utc_time(str(existing_topic.get('bumped_at')))
+                    if topic_bumped_at <= existing_bumped_at:
+                        logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
+                        continue
+
                 # Handle different sync scenarios
                 self.add_or_update_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers)
 

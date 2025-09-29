@@ -73,3 +73,8 @@ class SeaqaDB(object):
             cmd += " WHERE id = :connection_id"
             session.execute(text(cmd), params)
             session.commit()
+
+    def get_connections_to_recover(self):
+        with self.db_session_class() as session:
+            sql = """SELECT * FROM `project_connection` WHERE JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_sync_status')) != 'completed' AND deleted=false AND is_active=true"""
+            return session.execute(text(sql)).fetchall()

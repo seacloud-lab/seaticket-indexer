@@ -11,12 +11,14 @@ from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.syncer.sync_connection import sync_connection
+from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.utils.constants import CrawlStatus
 
 
 logger = logging.getLogger(__name__)
 
 
-class DiscourseSyncTaskWorker(object):
+class ConnectionSyncTaskWorker(object):
     """ The handler for redis message queue
     """
 
@@ -24,7 +26,7 @@ class DiscourseSyncTaskWorker(object):
         self.db_session_class = init_db_session_class()
         self.should_stop = threading.Event()
         self.worker_num = 3
-        self.update_discourse_interval = 7 * 24 * 60 * 60
+        self.update_connection_interval = 7 * 24 * 60 * 60
 
         self.LOCK_TIMEOUT = 1800  # 30 minutes
         self.REFRESH_INTERVAL = 600  # 10 minutes
@@ -45,10 +47,50 @@ class DiscourseSyncTaskWorker(object):
     def start(self):
         if not self.mq:
             return
+
+        self.recover_interrupted_tasks()
+
         for i in range(int(self.worker_num)):
             t = threading.Thread(target=self.connection_sync_handler, name='sync_handler_thread_' + str(i), daemon=True)
             t.start()
         threading.Thread(target=self.refresh_lock, name='refresh_thread', daemon=True).start()
+
+    def is_connection_in_queue(self, connection_id):
+        """Check if connection_id already exists in sync_task queue"""
+        try:
+            # Get all items in the sync_task queue
+            queue_items = self.mq.lrange('sync_task', 0, -1)
+            for item in queue_items:
+                try:
+                    data = json.loads(item)
+                    if data.get('connection_id') == connection_id:
+                        return True
+                except (json.JSONDecodeError, AttributeError):
+                    continue
+            return False
+        except Exception as e:
+            logger.warning(f"Error checking queue for connection {connection_id}: {e}")
+            return False
+
+    def recover_interrupted_tasks(self):
+        logger.info("Start to recover interrupted sync tasks...")
+        try:
+            seaqa_db = SeaqaDB(self.db_session_class)
+            connections = seaqa_db.get_connections_to_recover()
+            for connection in connections:
+                connection_id = connection.id
+                status = json.loads(connection.status)
+                status['last_sync_status'] = CrawlStatus.PENDING
+                seaqa_db.update_connection_status(connection_id, json.dumps(status))
+                
+                # Check if connection already exists in queue before adding
+                if not self.is_connection_in_queue(connection_id):
+                    logger.debug(f"Add recovering sync task for connection {connection_id}")
+                    self.add_to_undo_task(connection_id)
+                else:
+                    logger.debug(f"Connection {connection_id} already exists in sync queue, skipping")
+        except Exception as e:
+            logger.exception(f"Error during task recovery: {e}")
 
     def connection_sync_handler(self):
         logger.info('%s: sync handler is running.' % self.tname)
@@ -70,7 +112,7 @@ class DiscourseSyncTaskWorker(object):
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
-            logger.error('%s discourse sync connection Error' % self.tname)
+            logger.error('%s connection sync connection Error' % self.tname)
             logger.error(e, exc_info=True)
             # prevent case that redis break at program running.
             time.sleep(0.3)
@@ -105,7 +147,7 @@ class DiscourseSyncTaskWorker(object):
             logger.exception('%s sync connection %s error: %s' % (self.tname, connection_id, e))
 
     def add_to_undo_task(self, connection_id):
-        """Push task back to the end of the queue.
+        """Push task back to the front of the queue.
         """
         # avoid get the same task repeatly
         time.sleep(0.5)
@@ -128,7 +170,7 @@ class DiscourseSyncTaskWorker(object):
             self.mq.delete(key)
             logger.info("redis lock key %s has been deleted", key)
         # sys.exit
-        logger.info("Exit discourse sync worker process")
+        logger.info("Exit connection sync worker process")
         os._exit(0)
 
     def signal_term_handler(self, signal, frame):
@@ -157,10 +199,10 @@ class DiscourseSyncTaskWorker(object):
                 time.sleep(1)
 
 def start_worker():
-    discourse_sync_task_worker = DiscourseSyncTaskWorker()
+    connection_sync_task_worker = ConnectionSyncTaskWorker()
     logger.info("sync task worker process initialized.")
     try:
-        discourse_sync_task_worker.start()
+        connection_sync_task_worker.start()
     except Exception as e:
         logger.exception(e)
         os._exit(0)
