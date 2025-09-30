@@ -5,8 +5,6 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
-from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync import GithubIssuesSync
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 logger = logging.getLogger(__name__)
@@ -16,23 +14,21 @@ class GithubIssuesSyncManager:
     def __init__(self):
         self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
-        self.seadb_api = SeaDBAPI()
         self.seaqa_db = SeaqaDB(self.db_session_class)
 
     def update_github_issues_by_webhook(self, connection_id, update_data, issue_id, action, event):
         project_connection = self.seaqa_db.get_project_connection_by_id(connection_id)
         project_uuid = project_connection.project_uuid
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
-        github_issues_sync = GithubIssuesSync(project_uuid, self.db_session_class)
 
         if event == "issues":
             logger.info(f"Received webhook for issue #{issue_id}, action: {action}, event: {event}")
             updated_at = update_data.get("updated_at")
             if action == 'deleted':
-                github_issues_sync.update_issue_record(connection_id, issue_id, updated_at, deleted=True)
+                github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, deleted=True)
                 self.add_issues_index_task(connection_id)
                 return
-            github_issues_sync.save_or_update_issue_to_db(connection_id, update_data)
+            github_seadb_api.save_or_update_issue_to_db(connection_id, update_data)
 
         elif event == "issue_comment":
             logger.info(f"Received webhook for issue_comment #{issue_id}, action: {action}, event: {event}")
@@ -44,12 +40,12 @@ class GithubIssuesSyncManager:
             if action == 'deleted':
                 comment_id = comment_data['id']
                 github_seadb_api.tag_comment_deleted(connection_id, comment_id)
-                github_issues_sync.update_issue_record(connection_id, issue_id, updated_at, comment_count)
+                github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, comment_count)
                 self.add_issues_index_task(connection_id)
                 return
 
-            github_issues_sync.save_or_update_issue_comment_to_db(connection_id, issue_id, comment_data)
-            github_issues_sync.update_issue_record(connection_id, issue_id, updated_at, comment_count)
+            github_seadb_api.save_or_update_issue_comment_to_db(connection_id, issue_id, comment_data)
+            github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, comment_count)
 
         self.add_issues_index_task(connection_id)
 
