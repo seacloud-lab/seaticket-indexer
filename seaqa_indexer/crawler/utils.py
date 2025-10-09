@@ -84,12 +84,13 @@ def spider_parse_item(spider, response):
     }
 
 
-def load_existing_site_info(site_id, project_uuid, existing_site_info, seadb_api, limit=1000):
+def load_existing_site_info(connection_id, project_uuid, existing_site_info, seadb_api, limit=1000):
     """Load the ETag and Last-Modified information of an existing file"""
     offset = 0
+    table_name = WebCrawlTable.gen_table_name(connection_id)
     while True:
         sql = f"""SELECT `{WebCrawlTable.url.name}`, `{WebCrawlTable.etag.name}`, `{WebCrawlTable.last_modified.name}`, `{WebCrawlTable.hash.name}`
-        FROM `{site_id}`
+        FROM `{table_name}`
         LIMIT {limit} OFFSET {offset}"""
         result = seadb_api.query_rows(project_uuid, sql)
         if not result.get('results', []):
