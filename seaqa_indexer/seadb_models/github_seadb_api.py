@@ -182,5 +182,8 @@ class GitHubSeaDBAPI:
                     'table_id': table_id,
                     'column_key': column_key,
                     'option_name': issues_label.get('name'),
+                    'option_data': {
+                        'color': '#' + f"{issues_label.get('color')}",
+                    },
                 }
                 self.seadb_api.add_column_option(self.base_id, column_option)
