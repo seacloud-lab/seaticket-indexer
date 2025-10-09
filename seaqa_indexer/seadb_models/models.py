@@ -1,3 +1,5 @@
+from seaqa_indexer.utils.constants import ConnectionType
+
 
 class PropertyTypes:
     TEXT = 'text'
@@ -118,6 +120,10 @@ class DiscourseTopicsTable(BaseModel):
     updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
     created_at = MappedColumn('created_at', PropertyTypes.DATETIME)
 
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.DISCOURSE_FORUM.value + '_' + str(connection_id)
+
 
 class DiscourseRepliesTable(BaseModel):
     topic_id = MappedColumn('topic_id', PropertyTypes.INT)
@@ -125,6 +131,10 @@ class DiscourseRepliesTable(BaseModel):
     content = MappedColumn('content', PropertyTypes.TEXT)
     author = MappedColumn('author', PropertyTypes.TEXT)
     updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.DISCOURSE_FORUM.value + '_replies' + '_' + str(connection_id)
 
 
 class WebCrawlTable(BaseModel):
@@ -135,6 +145,10 @@ class WebCrawlTable(BaseModel):
     updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     hash = MappedColumn('hash', PropertyTypes.TEXT)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.SITE.value + '_' + str(connection_id)
 
 
 class GithubIssuesTable(BaseModel):
@@ -155,6 +169,10 @@ class GithubIssuesTable(BaseModel):
     comments_count = MappedColumn('comments_count', PropertyTypes.INT)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
 
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.GITHUB_ISSUE.value + '_' + str(connection_id)
+
 
 class GithubIssueCommentsTable(BaseModel):
     comment_id = MappedColumn('comment_id', PropertyTypes.INT)
@@ -164,3 +182,7 @@ class GithubIssueCommentsTable(BaseModel):
     created_at = MappedColumn('created_at', PropertyTypes.DATETIME)
     updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.GITHUB_ISSUE.value + '_comments' + '_' + str(connection_id)

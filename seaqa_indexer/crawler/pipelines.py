@@ -23,7 +23,8 @@ class BatchCrawlPipeline:
 
         if urls_to_delete:
             formatted_urls = ", ".join("'{}'".format(url) for url in urls_to_delete)
-            sql = f"""SELECT _pk FROM `{self.site_id}` WHERE url in ({formatted_urls}) LIMIT {len(urls_to_delete)}"""
+            table_name = WebCrawlTable.gen_table_name(self.site_id)
+            sql = f"""SELECT _pk FROM `{table_name}` WHERE url in ({formatted_urls}) LIMIT {len(urls_to_delete)}"""
             resp_results = self.seadb_api.query_rows(self.project_uuid, sql)
             results = resp_results.get('results', [])
             rows = []
@@ -36,7 +37,7 @@ class BatchCrawlPipeline:
                     }
                 }
                 rows.append(row)
-            self.seadb_api.update_rows(self.project_uuid, str(self.site_id), rows)
+            self.seadb_api.update_rows(self.project_uuid, table_name, rows)
             files = [url_to_filename(url) for url in urls_to_delete]
             self.storage.batch_delete_files(self.site_id, self.project_uuid, files)
             spider.logger.info('delete files: %s', files)
@@ -65,8 +66,8 @@ class BatchCrawlPipeline:
         last_modified = item.get('last_modified') if item else None
         filename = url_to_filename(url)
         self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
-
-        sql = f"""SELECT _pk FROM `{self.site_id}` WHERE url='{url}'"""
+        table_name = WebCrawlTable.gen_table_name(self.site_id)
+        sql = f"""SELECT _pk FROM `{table_name}` WHERE url='{url}'"""
         resp_result = self.seadb_api.query_rows(self.project_uuid, sql)
         results = resp_result.get('results')
         if results:
@@ -82,7 +83,7 @@ class BatchCrawlPipeline:
                     }
                 }
             ]
-            self.seadb_api.update_rows(self.project_uuid, str(self.site_id), rows)
+            self.seadb_api.update_rows(self.project_uuid, table_name, rows)
         else:
             rows = [
                 {
@@ -94,4 +95,4 @@ class BatchCrawlPipeline:
                     WebCrawlTable.hash.name: hash,
                 }
             ]
-            self.seadb_api.insert_rows(self.project_uuid, str(self.site_id), rows)
+            self.seadb_api.insert_rows(self.project_uuid, table_name, rows)
