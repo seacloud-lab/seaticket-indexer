@@ -11,14 +11,8 @@ class GitHubSeaDBAPI:
         self.base_id = base_id
         self.seadb_api = SeaDBAPI()
 
-    def _get_issues_table_name(self, connection_id):
-        return f"{connection_id}_github_issues"
-
-    def _get_issue_comments_table_name(self, connection_id):
-        return f"{connection_id}_issue_comments"
-
     def tag_comment_deleted(self, connection_id, comment_id):
-        table_name = self._get_issue_comments_table_name(connection_id)
+        table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
         sql = f"UPDATE `{table_name}` SET deleted = True WHERE comment_id = {comment_id}"
         self.seadb_api.query_rows(self.base_id, sql)
 
@@ -32,7 +26,7 @@ class GitHubSeaDBAPI:
         if deleted:
             row[GithubIssuesTable.deleted.name] = deleted
 
-        table_name = self._get_issues_table_name(connection_id)
+        table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE issue_id={issue_id}"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
 
@@ -46,7 +40,7 @@ class GitHubSeaDBAPI:
         self.seadb_api.update_rows(self.base_id, table_name, update_row)
 
     def get_github_issues_count(self, connection_id):
-        table_name = self._get_issues_table_name(connection_id)
+        table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
         issues_result = self.seadb_api.query_rows(self.base_id, sql)
         issues_count = 0
@@ -55,17 +49,17 @@ class GitHubSeaDBAPI:
         return issues_count
 
     def delete_issues_from_db(self, connection_id, need_delete_issue_pks, need_deleted_comment_issue_ids):
-        table_name = self._get_issues_table_name(connection_id)
+        table_name = GithubIssuesTable.gen_table_name(connection_id)
         self.seadb_api.delete_rows(self.base_id, table_name, need_delete_issue_pks)
 
-        comments_table_name = self._get_issue_comments_table_name(connection_id)
+        comments_table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
         for issue_id in need_deleted_comment_issue_ids:
             delete_sql = f"DELETE FROM `{comments_table_name}` WHERE issue_id = {issue_id}"
             self.seadb_api.query_rows(self.base_id, delete_sql)
 
     def delete_comments_from_db(self, connection_id, issue_id):
-        table_name = self._get_issue_comments_table_name(connection_id)
-        sql = f"DELETE FROM `{table_name}` WHERE issue_id = {issue_id} AND deleted = True"
+        comments_table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
+        sql = f"DELETE FROM `{comments_table_name}` WHERE issue_id = {issue_id} AND deleted = True"
         self.seadb_api.query_rows(self.base_id, sql)
 
     def save_or_update_issue_to_db(self, connection_id, issue):
@@ -109,7 +103,7 @@ class GitHubSeaDBAPI:
         if type_name:
             insert_row[GithubIssuesTable.issue_type.name] = type_name
 
-        table_name = self._get_issues_table_name(connection_id)
+        table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE issue_id={issue_id}"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if issues:
@@ -140,7 +134,7 @@ class GitHubSeaDBAPI:
             GithubIssueCommentsTable.updated_at.name: time_str_to_utc_time(comment.get('updated_at')).isoformat(),
         }
 
-        table_name = self._get_issue_comments_table_name(connection_id)
+        table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE comment_id={comment_id}"
         comment_records = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if comment_records:
@@ -156,7 +150,7 @@ class GitHubSeaDBAPI:
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 
     def add_or_update_issue_label_column_options(self, connection_id, issues_labels):
-        table_name = self._get_issues_table_name(connection_id)
+        table_name = GithubIssuesTable.gen_table_name(connection_id)
         metadata = self.seadb_api.get_base_metadata(self.base_id)
         table_info = {}
         for table in metadata.get('tables', []):
