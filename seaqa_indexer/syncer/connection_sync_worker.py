@@ -12,7 +12,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.syncer.sync_connection import sync_connection
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import CrawlStatus
+from seaqa_indexer.utils.constants import ConnectionTypeNeedSync
 
 
 logger = logging.getLogger(__name__)
@@ -55,40 +55,19 @@ class ConnectionSyncTaskWorker(object):
             t.start()
         threading.Thread(target=self.refresh_lock, name='refresh_thread', daemon=True).start()
 
-    def is_connection_in_queue(self, connection_id):
-        """Check if connection_id already exists in sync_task queue"""
-        try:
-            # Get all items in the sync_task queue
-            queue_items = self.mq.lrange('sync_task', 0, -1)
-            for item in queue_items:
-                try:
-                    data = json.loads(item)
-                    if data.get('connection_id') == connection_id:
-                        return True
-                except (json.JSONDecodeError, AttributeError):
-                    continue
-            return False
-        except Exception as e:
-            logger.warning(f"Error checking queue for connection {connection_id}: {e}")
-            return False
-
     def recover_interrupted_tasks(self):
         logger.info("Start to recover interrupted sync tasks...")
         try:
+            need_sync_types = [conn_type.value for conn_type in ConnectionTypeNeedSync]
+            
             seaqa_db = SeaqaDB(self.db_session_class)
-            connections = seaqa_db.get_connections_to_recover()
+            connections = seaqa_db.get_connections_to_recover(need_sync_types)
             for connection in connections:
                 connection_id = connection.id
-                status = json.loads(connection.status)
-                status['last_sync_status'] = CrawlStatus.PENDING
-                seaqa_db.update_connection_status(connection_id, json.dumps(status))
-                
-                # Check if connection already exists in queue before adding
-                if not self.is_connection_in_queue(connection_id):
-                    logger.debug(f"Add recovering sync task for connection {connection_id}")
-                    self.add_to_undo_task(connection_id)
-                else:
-                    logger.debug(f"Connection {connection_id} already exists in sync queue, skipping")
+
+                logger.debug(f"Add recovering sync task for connection {connection_id}")
+                self.add_to_undo_task(connection_id)
+
         except Exception as e:
             logger.exception(f"Error during task recovery: {e}")
 

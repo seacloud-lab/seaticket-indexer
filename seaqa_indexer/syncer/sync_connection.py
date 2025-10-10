@@ -30,10 +30,6 @@ def sync_connection(connection_id, db_session_class, mq):
         return
 
     connection_status = json.loads(project_connection.status)
-    last_sync_status = connection_status.get('last_sync_status')
-    if last_sync_status == CrawlStatus.CRAWLING:
-        logger.warning('connection: %s is syncing', connection_id)
-        return
 
     connection_id = project_connection.id
     project_uuid = project_connection.project_uuid

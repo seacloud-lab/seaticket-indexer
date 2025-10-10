@@ -23,6 +23,12 @@ class ConnectionType(Enum):
     SEAFILE = 'seafile'
 
 
+class ConnectionTypeNeedSync(Enum):
+    EMAIL = 'email'
+    GITHUB_ISSUE = 'github_issue'
+    DISCOURSE_FORUM = 'discourse_forum'
+    SITE = 'site'
+
 CONNECTION_TYPE_TO_INDEX_PREFIX = {
     connection_type.value: connection_type.value + '_' for connection_type in ConnectionType
 }

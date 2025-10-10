@@ -104,11 +104,15 @@ def time_difference_to_midnight():
 
 
 def time_str_to_utc_time(time_str):
+    # If there is no timezone information, assume it is UTC time
+    if not time_str.endswith('Z') and '+' not in time_str and '-' not in time_str[-6:]: 
+        time_str += '+00:00'
+
     if time_str.endswith('Z'):
         # python 3.12 can convert but 3.10 not support
         time_str = time_str[:-1] + '+00:00'
     dt = datetime.fromisoformat(time_str)
-    return dt.astimezone(timezone.utc)
+    return dt.astimezone(timezone.utc) # If tzinfo is None, it is assumed to be in the system’s local timezone
 
 
 def decrypt_config(config):
