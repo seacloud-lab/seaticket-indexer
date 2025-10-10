@@ -128,31 +128,6 @@ class DiscourseSeaDBAPI:
             return result['results']
         return []
 
-    # Combined operations
-    def delete_all_data_by_connection_id(self, connection_id):
-        """Delete all data for the specified connection_id."""
-        deleted_count = 0
-
-        # Delete the topics 0-
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        try:
-            topics_sql = f"DELETE FROM `{table_name}`"
-            self.seadb_api.query_rows(self.base_id, topics_sql)
-            logger.info(f"Deleted all topics from {table_name}")
-        except Exception as e:
-            logger.error(f"Error deleting topics from {table_name}: {e}")
-
-        # Delete the replies table
-        replies_table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        try:
-            replies_sql = f"DELETE FROM `{replies_table_name}`"
-            self.seadb_api.query_rows(self.base_id, replies_sql)
-            logger.info(f"Deleted all replies from {replies_table_name}")
-        except Exception as e:
-            logger.error(f"Error deleting replies from {replies_table_name}: {e}")
-
-        return deleted_count
-
     def delete_topic_from_db(self, topic_id, connection_id):
         """Delete topic from database"""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)

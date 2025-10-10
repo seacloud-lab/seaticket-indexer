@@ -8,15 +8,14 @@ from sqlalchemy.sql import text
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.seasearch.index_manager import IndexManager
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.seadb_models.models import WebCrawlTable, GithubIssuesTable, GithubIssueCommentsTable, DiscourseTopicsTable, DiscourseRepliesTable
 
-from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 
 logger = logging.getLogger(__name__)
 
@@ -93,16 +92,6 @@ class ProjectConnectionCleaner(object):
             session.execute(text(sql), {'connection_id': connection_id})
             session.commit()
 
-    def delete_discourse_data_from_db(self, project_uuid, connection_id):
-        """Delete discourse topics and replies from seadb"""
-        try:
-            discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
-
-            deleted_count = discourse_seadb_api.delete_all_data_by_connection_id(connection_id)
-            logger.info(f"Deleted {deleted_count} discourse records for connection {connection_id} from seadb")
-        except Exception as e:
-            logger.error(f"Error deleting discourse data from seadb for connection {connection_id}: {e}")
-            raise
 
     def clear_deleted_project(self, project_uuid):
         # delete project index
@@ -122,19 +111,23 @@ class ProjectConnectionCleaner(object):
 
         base_metadata = self.seadb_api.get_base_metadata(project_uuid)
         tables = base_metadata.get('tables')
+
         if connection_type == ConnectionType.SITE.value:
             self.storage.delete_site(connection_id, project_uuid)
             if tables:
                 for table in tables:
-                    if table['name'] == str(connection_id):
+                    if table['name'] == WebCrawlTable.gen_table_name(connection_id):
                         self.seadb_api.delete_table(project_uuid, table['id'])
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
             if tables:
                 for table in tables:
-                    if table['name'] == str(connection_id) + '_github_issues' or table['name'] == str(connection_id) + '_issue_comments':
+                    if table['name'] == GithubIssuesTable.gen_table_name(connection_id) or table['name'] == GithubIssueCommentsTable.gen_table_name(connection_id):
                         self.seadb_api.delete_table(project_uuid, table['id'])
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            self.delete_discourse_data_from_db(project_uuid, connection_id)
+            if tables:
+                for table in tables:
+                    if table['name'] == DiscourseTopicsTable.gen_table_name(connection_id) or table['name'] == DiscourseRepliesTable.gen_table_name(connection_id):
+                        self.seadb_api.delete_table(project_uuid, table['id'])
 
         # delete db record
         self.delete_deleted_connection(connection_id)
