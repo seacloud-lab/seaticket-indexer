@@ -9,6 +9,7 @@ from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.utils import url_to_filename
+from seaqa_indexer.seadb_models.models import WebCrawlTable
 
 logger = logging.getLogger(__name__)
 
@@ -242,8 +243,9 @@ class SiteIndex(object):
             last_indexed_at = datetime.datetime(1970, 1, 1)
 
         last_indexed_at = last_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
+        table_name = WebCrawlTable.gen_table_name(connection_id)
         while True:
-            sql = f"""SELECT * FROM `{connection_id}` WHERE updated_at > '{last_indexed_at}'
+            sql = f"""SELECT * FROM `{table_name}` WHERE updated_at > '{last_indexed_at}'
                             ORDER BY updated_at LIMIT {page_size} OFFSET {offset}"""
             result = self.seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])
@@ -297,5 +299,5 @@ class SiteIndex(object):
         self.delete_indexes_by_ids(index_name, deleted_index_id_set)
         if deleted_index_id_set:
             # delete deleted seadb data
-            self.seadb_api.delete_rows(project_uuid, str(connection_id), list(deleted_seadb_pk_set))
+            self.seadb_api.delete_rows(project_uuid, table_name, list(deleted_seadb_pk_set))
         return index_count

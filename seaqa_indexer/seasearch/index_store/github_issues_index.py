@@ -6,7 +6,6 @@ import pytz
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,6 @@ class GitHubIssuesIndex(object):
         self.github_seadb_api = github_seadb_api
         self.shard_num = shard_num
         self.lang = LANG
-        self.seadb_api = SeaDBAPI()
 
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
@@ -230,12 +228,8 @@ class GitHubIssuesIndex(object):
             last_indexed_at = datetime.datetime(1970, 1, 1)
         last_indexed_at = last_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
 
-        base_sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{last_indexed_at}'"
-
         while True:
-            sql_issues = f"{base_sql} LIMIT {page_size} OFFSET {offset}"
-            res = self.seadb_api.query_rows(project_uuid, sql_issues)
-            issues = res.get('results', [])
+            issues = self.github_seadb_api.get_issues_by_page(connection_id, last_indexed_at, page_size, offset)
             if not issues:
                 break
             index_count += len(issues)
@@ -247,12 +241,11 @@ class GitHubIssuesIndex(object):
                 comments_offset = 0
                 comments_page_size = 1000
                 while True:
-                    sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {comments_offset}"
-                    comments_data = self.seadb_api.query_rows(project_uuid, sql_comments).get('results', [])
-                    comments.extend(comments_data)
-                    comments_offset += comments_page_size
+                    comments_data = self.github_seadb_api.get_issue_comments_by_page(connection_id, issue_id, comments_page_size, comments_offset)
                     if not comments_data:
                         break
+                    comments.extend(comments_data)
+                    comments_offset += comments_page_size
                 comments_list = []
                 if comments:
                     for comment in comments:
