@@ -12,10 +12,12 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.syncer.sync_connection import sync_connection
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import ConnectionTypeNeedSync
+from seaqa_indexer.utils.constants import ConnectionType
 
 
 logger = logging.getLogger(__name__)
+
+NEED_RECOVER_SYNC_TYPES = [ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value]
 
 
 class ConnectionSyncTaskWorker(object):
@@ -33,6 +35,7 @@ class ConnectionSyncTaskWorker(object):
         self.locked_keys = set()
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
+        self.seaqa_db = SeaqaDB(self.db_session_class)
 
         self.set_signal()
         self.worker_list = []
@@ -58,14 +61,11 @@ class ConnectionSyncTaskWorker(object):
     def recover_interrupted_tasks(self):
         logger.info("Start to recover interrupted sync tasks...")
         try:
-            need_sync_types = [conn_type.value for conn_type in ConnectionTypeNeedSync]
-            
-            seaqa_db = SeaqaDB(self.db_session_class)
-            connections = seaqa_db.get_connections_to_recover(need_sync_types)
+            connections = self.seaqa_db.get_connections_to_recover(NEED_RECOVER_SYNC_TYPES)
             for connection in connections:
                 connection_id = connection.id
 
-                logger.debug(f"Add recovering sync task for connection {connection_id}")
+                logger.info(f"Add recovering sync task for connection {connection_id}")
                 self.add_to_undo_task(connection_id)
 
         except Exception as e:
@@ -121,7 +121,7 @@ class ConnectionSyncTaskWorker(object):
 
     def sync(self, connection_id):
         try:
-            sync_connection(connection_id, self.db_session_class, self.mq)
+            sync_connection(connection_id, self.seaqa_db, self.mq)
         except Exception as e:
             logger.exception('%s sync connection %s error: %s' % (self.tname, connection_id, e))
 

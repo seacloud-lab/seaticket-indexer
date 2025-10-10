@@ -74,11 +74,12 @@ class SeaqaDB(object):
             session.execute(text(cmd), params)
             session.commit()
 
-    def get_connections_to_recover(self, need_sync_types):
+    def get_connections_to_recover(self, need_recover_sync_types):
         with self.db_session_class() as session:
-            need_sync_types_combine_str = ','.join([f"'{t}'" for t in need_sync_types])
-            sql = f"""SELECT * FROM `project_connection` 
-                     WHERE JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_sync_status')) = 'crawling' 
+            need_sync_types_combine_str = ','.join([f"'{t}'" for t in need_recover_sync_types])
+            sql = f"""SELECT id FROM `project_connection` 
+                     WHERE (JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_sync_status')) in ('crawling', 'pending')
+                      OR JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_index_status')) = 'indexing') 
                      AND deleted=false 
                      AND is_active=true 
                      AND type IN ({need_sync_types_combine_str})"""

@@ -37,11 +37,11 @@ def retry_with_exponential_backoff(max_retries=5, base_delay=3, max_delay=60):
 
 
 class DiscourseSync:
-    def __init__(self, base_id, db_session_class, username=''):
+    def __init__(self, base_id, seaqa_db, username=''):
         self.discourse_seadb_api = DiscourseSeaDBAPI(base_id=base_id, username=username)
         self.topics_table = DiscourseTopicsTable
         self.replies_table = DiscourseRepliesTable
-        self.db_session_class = db_session_class
+        self.seaqa_db = seaqa_db
 
     def check_existing_topic(self, topic_id, connection_id):
         """Check if a topic already exists"""
@@ -270,12 +270,6 @@ class DiscourseSync:
             'replies': replies,
         }
 
-    def update_connection_status(self, connection_id, status):
-        with self.db_session_class() as session:
-            cmd = """UPDATE project_connection SET status = :status WHERE id = :connection_id"""
-            session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
-            session.commit()
-
     def sync(self, connection_id, forum_url, api_key, api_username, last_updated_at, connection_status):
         page = 0
         should_stop = False
@@ -312,7 +306,7 @@ class DiscourseSync:
                 sync_count += 1
                 if need_update_connection_status(sync_count):
                     connection_status['last_sync_count'] = sync_count
-                    self.update_connection_status(connection_id, json.dumps(connection_status))
+                    self.seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
                 time.sleep(1)
 
             page += 1

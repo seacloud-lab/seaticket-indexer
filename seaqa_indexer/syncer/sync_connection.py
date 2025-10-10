@@ -16,9 +16,8 @@ from seaqa_indexer.utils.github_issues_api import GitHubAPI
 logger = logging.getLogger(__name__)
 
 
-def sync_connection(connection_id, db_session_class, mq):
+def sync_connection(connection_id, seaqa_db, mq):
     logger.info(f"Start sync connection: {connection_id}")
-    seaqa_db = SeaqaDB(db_session_class)
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
@@ -51,7 +50,7 @@ def sync_connection(connection_id, db_session_class, mq):
             discourse_api_username = config['api_username']
 
             project_uuuid = project_connection.project_uuid
-            discourse_sync = DiscourseSync(project_uuuid, db_session_class)
+            discourse_sync = DiscourseSync(project_uuuid, seaqa_db)
             sync_count = discourse_sync.sync(connection_id, forum_url, discourse_api_key, discourse_api_username, old_last_sync_time, connection_status)
 
             total_count = discourse_sync.get_discourse_forum_count(connection_id)
@@ -65,6 +64,8 @@ def sync_connection(connection_id, db_session_class, mq):
                 repo_owner, repo_name = parts[0], parts[1]
             except Exception as e:
                 logger.warning("github repository is invalid: %s", e)
+                connection_status['last_sync_status'] = CrawlStatus.FAILED
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
                 return
             since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
             github_api = GitHubAPI(token, repo_owner, repo_name, connection_id)
