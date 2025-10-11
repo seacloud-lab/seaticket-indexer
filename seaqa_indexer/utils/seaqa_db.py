@@ -12,11 +12,13 @@ class SeaqaDB(object):
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.is_active
+            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.is_active, pc.created_at
             FROM project_connection pc 
             INNER JOIN projects p 
             ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
-            connection = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
+            connection = session.execute(
+                text(sql), {'connection_id': connection_id}
+            ).fetchone()
             return connection
 
     def get_connection_by_ids(self, project_uuid, connection_ids):
