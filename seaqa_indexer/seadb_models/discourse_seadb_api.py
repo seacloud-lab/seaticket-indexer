@@ -134,10 +134,9 @@ class DiscourseSeaDBAPI:
         sql = f"DELETE FROM `{table_name}` WHERE topic_id = '{topic_id}'"
         return self.seadb_api.query_rows(self.base_id, sql)
 
-    def get_connection_data_count(self, connection_id):
-        """Retrieve data statistics for the specified connection_id."""
+    def get_topic_count(self, connection_id):
+        """Retrieve topic count for the specified connection_id."""
         topics_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        replies_table_name = DiscourseRepliesTable.gen_table_name(connection_id)
 
         # Obtain the number of topics
         topics_sql = f"SELECT COUNT(*) as count FROM `{topics_table_name}`"
@@ -146,14 +145,4 @@ class DiscourseSeaDBAPI:
         if topics_result and 'results' in topics_result and topics_result['results']:
             topic_count = topics_result['results'][0].get('count', 0)
 
-        # Obtain the number of replies
-        replies_sql = f"SELECT COUNT(*) as count FROM `{replies_table_name}`"
-        replies_result = self.seadb_api.query_rows(self.base_id, replies_sql)
-        reply_count = 0
-        if replies_result and 'results' in replies_result and replies_result['results']:
-            reply_count = replies_result['results'][0].get('count', 0)
-
-        return {
-            'topics': topic_count,
-            'replies': reply_count
-        }
+        return topic_count

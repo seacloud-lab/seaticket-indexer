@@ -64,7 +64,7 @@ def sync_connection(connection_id, seaqa_db, mq):
                 connection_status,
             )
 
-            total_count = discourse_sync.get_discourse_forum_count(connection_id)
+            total_count = discourse_sync.get_discourse_forum_topic_count(connection_id)
 
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
             server_url = config.get('repository')
