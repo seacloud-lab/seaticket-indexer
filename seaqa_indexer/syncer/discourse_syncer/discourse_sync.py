@@ -8,6 +8,7 @@ import random
 from sqlalchemy import text
 from urllib.parse import urljoin
 from functools import wraps
+from dateutil.relativedelta import relativedelta
 
 from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_status
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
@@ -270,7 +271,7 @@ class DiscourseSync:
             'replies': replies,
         }
 
-    def sync(self, connection_id, forum_url, api_key, api_username, last_updated_at, connection_status):
+    def sync(self, connection_id, forum_url, sync_years, project_created_at, api_key, api_username, last_updated_at, connection_status):
         page = 0
         should_stop = False
         sync_count = 0
@@ -278,6 +279,11 @@ class DiscourseSync:
 
         if last_updated_at:
             last_updated_at = time_str_to_utc_time(str(last_updated_at))
+        
+        # Calculate sync_earliest_time by subtracting sync_years from project_created_at
+        project_created_at_utc = time_str_to_utc_time(str(project_created_at))
+        sync_earliest_time = project_created_at_utc - relativedelta(years=sync_years)
+
         while True:
             topics = self.fetch_latest_topics_page(forum_url, headers, page)
 
@@ -286,7 +292,14 @@ class DiscourseSync:
 
             for topic_data in topics:
                 topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
+
                 if last_updated_at and topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
+                    should_stop = True
+                    break
+
+                if topic_bumped_at <= sync_earliest_time:
+                    if topic_data.get('pinned'):
+                        continue
                     should_stop = True
                     break
 
