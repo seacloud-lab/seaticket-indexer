@@ -170,7 +170,7 @@ class IndexManager:
                 discourse_forum_url = config.get('url')
                 slug = source['slug']
                 topic_id = source['topic_id']
-                topic_url = discourse_forum_url.rstrtip('/') + '/t/' + slug + '/' + str(topic_id)
+                topic_url = discourse_forum_url.rstrip('/') + '/t/' + slug + '/' + str(topic_id)
                 r = {
                     'title': source['title'],
                     'topic_id': topic_id,
