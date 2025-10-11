@@ -213,15 +213,13 @@ class GitHubIssuesIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, index_name, connection_id, project_uuid, repo_owner, repo_name, connection_status, seaqa_db, last_indexed_at):
+    def update(self, index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, last_indexed_at):
         index_count = 0
         page_size = 1000
         offset = 0
         need_cleared_issues_index_set = set()
         need_cleared_issues_pk_set = set()
         need_cleared_issues_id_set = set()
-        issues_table_name = str(connection_id) + '_github_issues'
-        comments_table_name = str(connection_id) + '_issue_comments'
         bulk_params = []
 
         if not last_indexed_at:
