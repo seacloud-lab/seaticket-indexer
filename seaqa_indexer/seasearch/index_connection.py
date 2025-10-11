@@ -149,7 +149,7 @@ def update_github_issues_index(project_connection, seasearch_api, seaqa_db):
     issues_index_name = gen_index_name_by_type(connection_id, connection_type)
     github_issues_index.create_index_if_missing(issues_index_name)
 
-    index_count = github_issues_index.update(issues_index_name, connection_id, project_uuid, repo_owner, repo_name, connection_status, seaqa_db, old_indexed_at)
+    index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, old_indexed_at)
     # finish index
     indexed_at = datetime.datetime.now(datetime.UTC)
     connection_status['last_indexed_count'] = index_count
