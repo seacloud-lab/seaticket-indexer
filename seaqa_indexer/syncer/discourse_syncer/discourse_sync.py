@@ -72,9 +72,9 @@ class DiscourseSync:
 
         self.discourse_seadb_api.delete_topic(connection_id, topic_id)
 
-    def get_discourse_forum_count(self, connection_id):
+    def get_discourse_forum_topic_count(self, connection_id):
         """Retrieve the number of discourse topics for the specified connection"""
-        return self.discourse_seadb_api.get_connection_data_count(connection_id)
+        return self.discourse_seadb_api.get_topic_count(connection_id)
 
     def handle_topic_update(self, connection_id, topic_id, data):
         topic_data = data.get('topic', {})
