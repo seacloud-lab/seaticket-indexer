@@ -128,7 +128,7 @@ class DiscourseTopicsTable(BaseModel):
 class DiscourseRepliesTable(BaseModel):
     topic_id = MappedColumn('topic_id', PropertyTypes.INT)
     post_number = MappedColumn('post_number', PropertyTypes.INT)
-    content = MappedColumn('content', PropertyTypes.TEXT)
+    content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
     author = MappedColumn('author', PropertyTypes.TEXT)
     updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
 
@@ -155,7 +155,7 @@ class GithubIssuesTable(BaseModel):
     issue_id = MappedColumn('issue_id', PropertyTypes.INT)
     issue_number = MappedColumn('issue_number', PropertyTypes.INT)
     title = MappedColumn('title', PropertyTypes.TEXT)
-    body = MappedColumn('body', PropertyTypes.TEXT)
+    body = MappedColumn('body', PropertyTypes.TEXT, {'compressed': True})
     state = MappedColumn('state', PropertyTypes.SINGLE_SELECT, SelectTypes.state)
     state_reason = MappedColumn('state_reason', PropertyTypes.SINGLE_SELECT, SelectTypes.state_reason)
     labels = MappedColumn('labels', PropertyTypes.MULTIPLE_SELECT)
@@ -178,7 +178,7 @@ class GithubIssueCommentsTable(BaseModel):
     comment_id = MappedColumn('comment_id', PropertyTypes.INT)
     issue_id = MappedColumn('issue_id', PropertyTypes.INT)
     author = MappedColumn('author', PropertyTypes.TEXT)
-    body = MappedColumn('body', PropertyTypes.TEXT)
+    body = MappedColumn('body', PropertyTypes.TEXT, {'compressed': True})
     created_at = MappedColumn('created_at', PropertyTypes.DATETIME)
     updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
