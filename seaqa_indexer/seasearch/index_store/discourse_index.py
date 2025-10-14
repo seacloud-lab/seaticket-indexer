@@ -69,9 +69,8 @@ class DiscourseIndex(object):
         }
     }
 
-    def __init__(self, seasearch_api, discourse_seadb_api, shard_num=1):
+    def __init__(self, seasearch_api, shard_num=1):
         self.seasearch_api = seasearch_api
-        self.discourse_seadb_api = discourse_seadb_api
         self.shard_num = shard_num
         self.lang = LANG
 
@@ -233,10 +232,10 @@ class DiscourseIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def get_all_need_index_topics_from_db(self, connection_id, last_indexed_at):
+    def get_all_need_index_topics_from_db(self, connection_id, last_indexed_at, discourse_seadb_api):
         """From seadb obtain the topics that need to be indexed"""
         try:
-            topics = self.discourse_seadb_api.get_topics_by_connection_id(
+            topics = discourse_seadb_api.get_topics_by_connection_id(
                 connection_id=connection_id,
                 update_at_gt=last_indexed_at,
             )
@@ -261,18 +260,18 @@ class DiscourseIndex(object):
             logger.error(f"Error getting topics from seadb: {e}")
             return []
 
-    def delete_topic_from_db(self, topic_id, connection_id):
+    def delete_topic_from_db(self, topic_id, connection_id, discourse_seadb_api):
         """Delete topic from seadb physically"""
         try:
-            self.discourse_seadb_api.delete_topic(connection_id, topic_id)
+            discourse_seadb_api.delete_topic(connection_id, topic_id)
             logger.debug(f"Deleted topic {topic_id} from seadb")
         except Exception as e:
             logger.error(f"Error deleting topic {topic_id} from seadb: {e}")
 
-    def get_replies_for_topic(self, connection_id, topic_id):
+    def get_replies_for_topic(self, connection_id, topic_id, discourse_seadb_api):
         """Get the reply to the topic from seadb"""
         try:
-            replies = self.discourse_seadb_api.get_replies_by_topic(
+            replies = discourse_seadb_api.get_replies_by_topic(
                 connection_id=connection_id,
                 topic_id=topic_id
             )
@@ -291,14 +290,14 @@ class DiscourseIndex(object):
             logger.error(f"Error getting replies from seadb: {e}")
             return []
 
-    def update(self, index_name, connection_id, connection_status, seaqa_db, last_indexed_at):
-        topics = self.get_all_need_index_topics_from_db(connection_id, last_indexed_at)
+    def update(self, index_name, connection_id, connection_status, seaqa_db, discourse_seadb_api, last_indexed_at):
+        topics = self.get_all_need_index_topics_from_db(connection_id, last_indexed_at, discourse_seadb_api)
         index_count = 0
         need_cleared_topic_id_set = set()
         need_cleared_topic_index_id_set = set()
 
         for topic in topics:
-            replies = self.get_replies_for_topic(connection_id, topic.topic_id)
+            replies = self.get_replies_for_topic(connection_id, topic.topic_id, discourse_seadb_api)
 
             topic_data = {
                 'topic_id': topic.topic_id,
@@ -325,6 +324,6 @@ class DiscourseIndex(object):
         if need_cleared_topic_index_id_set:
             self.delete_indexes_by_ids(index_name, need_cleared_topic_index_id_set)
             for topic_id in need_cleared_topic_id_set:
-                self.delete_topic_from_db(topic_id, connection_id)
+                self.delete_topic_from_db(topic_id, connection_id, discourse_seadb_api)
 
         return index_count

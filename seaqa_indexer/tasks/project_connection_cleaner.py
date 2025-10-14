@@ -14,7 +14,8 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.seadb_models.models import WebCrawlTable, GithubIssuesTable, GithubIssueCommentsTable, DiscourseTopicsTable, DiscourseRepliesTable
+from seaqa_indexer.seadb_models.models import WebCrawlTable, GithubIssuesTable, GithubIssueCommentsTable, \
+    DiscourseTopicsTable, DiscourseRepliesTable, SeafileTable
 
 
 logger = logging.getLogger(__name__)
@@ -127,6 +128,11 @@ class ProjectConnectionCleaner(object):
             if tables:
                 for table in tables:
                     if table['name'] == DiscourseTopicsTable.gen_table_name(connection_id) or table['name'] == DiscourseRepliesTable.gen_table_name(connection_id):
+                        self.seadb_api.delete_table(project_uuid, table['id'])
+        if connection_type == ConnectionType.SEAFILE.value:
+            if tables:
+                for table in tables:
+                    if table['name'] == SeafileTable.gen_table_name(connection_id):
                         self.seadb_api.delete_table(project_uuid, table['id'])
 
         # delete db record

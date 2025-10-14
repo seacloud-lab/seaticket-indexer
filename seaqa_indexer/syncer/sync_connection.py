@@ -1,16 +1,23 @@
 import logging
 import json
 import datetime
+import os
 
 from urllib.parse import urlparse
 
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
-from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
-from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType
-from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT
+from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time, encrypt_config
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
+from seaqa_indexer.seasearch.utils import get_content_by_download_link
+from seaqa_indexer.utils.seahub_api import FileNotFoundException
+from seaqa_indexer.seasearch.extract import ExtractorFactory
+from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT
+from seaqa_indexer.utils.seahub_api import SeahubAPI
+from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
+from seaqa_indexer.app.event_redis import redis_cache
 
 
 logger = logging.getLogger(__name__)
@@ -39,6 +46,7 @@ def sync_connection(connection_id, seaqa_db, mq):
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
+    is_update_config = False
 
     sync_count = 0
     total_count = 0
@@ -82,6 +90,30 @@ def sync_connection(connection_id, seaqa_db, mq):
             github_api = GitHubAPI(token, repo_owner, repo_name, connection_id)
             github_seadb_api = GitHubSeaDBAPI(project_uuid)
             sync_count, total_count = sync_github_issue(connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api)
+
+        if connection_type == ConnectionType.SEAFILE.value:
+            old_repo_name = config.get('repo_name')
+            server_url = config.get('server_url')
+            api_token = config.get('api_token')
+            since = old_last_sync_time
+            is_first_update = False
+            if not since:
+                since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+                is_first_update = True
+            since = time_str_to_utc_time(str(since)).isoformat()
+            seahub_api = SeahubAPI(server_url, api_token)
+            repo_info = seahub_api.get_repo_info()
+            repo_id = repo_info.get('repo_id')
+            new_repo_name = repo_info.get('repo_name')
+
+            redis_cache.set(repo_id, json.dumps({server_url: new_repo_name}), REPO_NAME_CACHE_TIME_OUT)
+            config['repo_id'] = repo_id
+            config['repo_name'] = new_repo_name
+            if old_repo_name != new_repo_name:
+                is_update_config = True
+
+            seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
+            sync_count, total_count = sync_seafile(connection_id, repo_id, since, seahub_api, seafile_seadb_api, is_first_update)
     except Exception as e:
         logger.exception('connection: %s, sync issues failed, error: %s', connection_id, e)
         connection_status['last_sync_status'] = CrawlStatus.FAILED
@@ -93,7 +125,10 @@ def sync_connection(connection_id, seaqa_db, mq):
     connection_status['last_sync_count'] = sync_count
     connection_status['last_sync_status'] = CrawlStatus.COMPLETED
     last_sync_time = datetime.datetime.now(datetime.UTC)
-    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time)
+    new_config = None
+    if is_update_config:
+        new_config = encrypt_config(config)
+    seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time, config=new_config)
 
     logger.info('Finish sync connection: %s', connection_id)
     msg_content = {
@@ -137,4 +172,67 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
         page += 1
 
     total_count = github_seadb_api.get_github_issues_count(connection_id)
+    return sync_count, total_count
+
+
+def sync_seafile(connection_id, repo_id, since, seahub_api, seafile_seadb_api, is_first_update):
+    page = 1
+    per_page = 1000
+    sync_count = 0
+    # sync updated files
+    while True:
+        resp = seahub_api.get_recently_changed_files(since, page, per_page)
+        page += 1
+        recently_changed_files = resp.get('files', [])
+        if not recently_changed_files:
+            break
+
+        for file in recently_changed_files:
+            parent_dir = file.get('_parent_dir')
+            dirent_name = file.get('_name')
+            mtime = file.get('_mtime')
+            size = file.get('_size')
+            content = ''
+            if size < REPO_FILE_SIZE_LIMIT:
+                file_path = os.path.join(parent_dir, dirent_name)
+                extractor = ExtractorFactory.get_extractor(dirent_name)
+                if extractor:
+                    try:
+                        download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
+                    except FileNotFoundException:
+                        logger.warning('connection: %s, repo_id: %s, parent_dir: %s, name: %s file not found',
+                                       connection_id, repo_id, parent_dir, dirent_name)
+                        continue
+                    content = get_content_by_download_link(download_link)
+                    content = extractor.extract(connection_id, repo_id, content, file_path)
+            file_info = {
+                'path': parent_dir,
+                'filename': dirent_name,
+                'mtime': mtime,
+                'size': size,
+                'content': content,
+            }
+            seafile_seadb_api.save_or_update_file_to_db(connection_id, file_info)
+            sync_count += 1
+
+    # sync deleted files
+    page = 1
+    per_page = 1000
+    while True:
+        if is_first_update:
+            break
+        resp = seahub_api.get_recently_deleted_files(since, page, per_page)
+        page += 1
+        recently_deleted_files = resp.get('files', [])
+        if not recently_deleted_files:
+            break
+
+        for file in recently_deleted_files:
+            file_info = {
+                'path': file.get('path'),
+                'filename': file.get('obj_name'),
+            }
+            seafile_seadb_api.mark_file_as_deleted(connection_id, file_info)
+
+    total_count = seafile_seadb_api.get_file_total_count(connection_id)
     return sync_count, total_count
