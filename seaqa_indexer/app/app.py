@@ -7,6 +7,7 @@ from seaqa_indexer.workers.index_worker_starter import IndexWorkerStarter
 from seaqa_indexer.tasks.project_connection_cleaner_starter import ProjectConnectionCleanerStarter
 from seaqa_indexer.workers.connection_sync_starter import ConnectionSyncWorkerStarter
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import DiscourseSyncManager
+from seaqa_indexer.syncer.seafile_syncer.seafile_sync_manager import SeafileSyncManager
 from seaqa_indexer.tasks.project_connection_task_publisher import ProjectConnectionTaskPublisher
 
 
@@ -16,6 +17,7 @@ class SeaqaIndexerApp(object):
         self.index_manager = IndexManager()
         self.github_issues_sync_manager = GithubIssuesSyncManager()
         self.discourse_sync_manager = DiscourseSyncManager()
+        self.seafile_sync_manager = SeafileSyncManager()
 
         self.web_crawl_worker_starter = WebCrawlWorkerStarter()
         self.index_worker_starter = IndexWorkerStarter()

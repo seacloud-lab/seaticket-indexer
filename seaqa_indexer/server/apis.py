@@ -93,7 +93,7 @@ def manual_sync_connection():
 @auth_required
 def add_index_seafile_task():
     connection_id = request.args.get('connection_id')
-    application.app.index_manager.add_connection_index_task(connection_id)
+    application.app.seafile_sync_manager.add_sync_task(connection_id)
 
     return jsonify({'success': True}), 200
 

@@ -43,7 +43,7 @@ office_suffixes = [
     'sdoc',
 ]
 
-REPO_FILE_SIZE_LIMIT = 10 * 1024 * 1024
+REPO_FILE_SIZE_LIMIT = 25 * 1024 * 1024
 
 REPO_NAME_CACHE_TIME_OUT = 24 * 60 * 60
 

@@ -78,9 +78,8 @@ class GitHubIssuesIndex(object):
         }
     }
 
-    def __init__(self, seasearch_api, github_seadb_api, shard_num=1):
+    def __init__(self, seasearch_api, shard_num=1):
         self.seasearch_api = seasearch_api
-        self.github_seadb_api = github_seadb_api
         self.shard_num = shard_num
         self.lang = LANG
 
@@ -213,7 +212,7 @@ class GitHubIssuesIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, last_indexed_at):
+    def update(self, index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, last_indexed_at):
         index_count = 0
         page_size = 1000
         offset = 0
@@ -227,19 +226,18 @@ class GitHubIssuesIndex(object):
         last_indexed_at = last_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
 
         while True:
-            issues = self.github_seadb_api.get_issues_by_page(connection_id, last_indexed_at, page_size, offset)
+            issues = github_seadb_api.get_issues_by_page(connection_id, last_indexed_at, page_size, offset)
             if not issues:
                 break
-            index_count += len(issues)
 
             for issue in issues:
                 issue_id = issue.get('issue_id')
-                self.github_seadb_api.delete_comments_from_db(connection_id, issue_id)
+                github_seadb_api.delete_comments_from_db(connection_id, issue_id)
                 comments = []
                 comments_offset = 0
                 comments_page_size = 1000
                 while True:
-                    comments_data = self.github_seadb_api.get_issue_comments_by_page(connection_id, issue_id, comments_page_size, comments_offset)
+                    comments_data = github_seadb_api.get_issue_comments_by_page(connection_id, issue_id, comments_page_size, comments_offset)
                     if not comments_data:
                         break
                     comments.extend(comments_data)
@@ -284,6 +282,6 @@ class GitHubIssuesIndex(object):
 
         if need_cleared_issues_index_set:
             self.delete_indexes_by_ids(index_name, need_cleared_issues_index_set)
-            self.github_seadb_api.delete_issues_from_db(connection_id, need_cleared_issues_pk_set, need_cleared_issues_id_set)
+            github_seadb_api.delete_issues_from_db(connection_id, list(need_cleared_issues_pk_set), list(need_cleared_issues_id_set))
 
         return index_count
