@@ -186,3 +186,16 @@ class GithubIssueCommentsTable(BaseModel):
     @classmethod
     def gen_table_name(cls, connection_id):
         return ConnectionType.GITHUB_ISSUE.value + '_comments' + '_' + str(connection_id)
+
+
+class SeafileTable(BaseModel):
+    path = MappedColumn('path', PropertyTypes.TEXT)
+    filename = MappedColumn('filename', PropertyTypes.TEXT)
+    mtime = MappedColumn('mtime', PropertyTypes.DATETIME)
+    content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.SEAFILE.value + '_' + str(connection_id)

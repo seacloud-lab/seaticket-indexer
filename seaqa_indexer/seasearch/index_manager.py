@@ -24,8 +24,8 @@ class IndexManager:
         self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
         self.site_index = SiteIndex(self.seasearch_api)
         self.seafile_index = SeafileIndex(self.seasearch_api)
-        self.github_issues_index = GitHubIssuesIndex(self.seasearch_api, self.db_session_class)
-        self.discourse_index = DiscourseIndex(self.seasearch_api, self.db_session_class)
+        self.github_issues_index = GitHubIssuesIndex(self.seasearch_api)
+        self.discourse_index = DiscourseIndex(self.seasearch_api)
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
 
@@ -105,11 +105,9 @@ class IndexManager:
                 connection_id = source['connection_id']
                 repo_cache_info = redis_cache.get(repo_id)
                 if not repo_cache_info:
-                    project_connection = self.seaqa_db.get_project_connection_by_id(connection_id)
-                    if not project_connection:
-                        continue
-                    repo_name = json.loads(project_connection.config).get('repo_name')
-                    server_url = json.loads(project_connection.config).get('server_url')
+                    config = connection_id_to_config.get(connection_id)
+                    repo_name = config.get('repo_name')
+                    server_url = config.get('server_url')
                     repo_cache_info = json.dumps({server_url: repo_name})
                     redis_cache.set(repo_id, repo_cache_info, REPO_NAME_CACHE_TIME_OUT)
 
@@ -126,6 +124,7 @@ class IndexManager:
                     'score': score,
                     'repo_name': repo_name,
                     'server_url': server_url,
+                    'mtime': source['mtime'],
                     '_id': _id,
                     'type': 'seafile',
                 }
