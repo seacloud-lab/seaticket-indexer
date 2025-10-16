@@ -115,6 +115,7 @@ class IndexManager:
                 server_url = list(repo_cache_info.keys())[0]
                 repo_name = list(repo_cache_info.values())[0]
 
+                url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + source['path'].strip('/') + '/' + source['filename']
                 r = {
                     'filename': source['filename'],
                     'path': source['path'],
@@ -124,6 +125,7 @@ class IndexManager:
                     'score': score,
                     'repo_name': repo_name,
                     'server_url': server_url,
+                    'url': url,
                     'mtime': source['mtime'],
                     '_id': _id,
                     'type': 'seafile',
