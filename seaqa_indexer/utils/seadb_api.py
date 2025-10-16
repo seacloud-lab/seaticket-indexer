@@ -146,9 +146,10 @@ class SeaDBAPI:
             'column_name': column['column_name'],
             'column_type': column['column_type'],
         }
+        if column.get('column_data'):
+            data['column_data'] = column['column_data']
         response = requests.post(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
-
 
     def delete_column(self, base_id, table_id, column_key):
         base_id = uuid_str_to_36_chars(base_id)
@@ -161,11 +162,30 @@ class SeaDBAPI:
         response = requests.delete(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
 
-    def get_base_metadata(self, base_id):
+    def update_column(self, base_id, table_id, column_key, new_column_name=None, update_column_data=None):
         base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
-        url = f'{self.server_url}/api/v1/{base_id}/metadata'
-        response = requests.get(url, headers=headers, timeout=self.timeout)
+        url = f'{self.server_url}/api/v1/{base_id}/columns'
+        data = {
+            'table_id': table_id,
+            'column_key': column_key
+        }
+        if new_column_name:
+            data['new_column_name'] = new_column_name
+        if update_column_data:
+            data['update_column_data'] = update_column_data
+        response = requests.put(url, json=data, headers=headers, timeout=self.timeout)
+        return parse_response(response)
+
+    def create_column_index(self, base_id, table_id, columns):
+        base_id = uuid_str_to_36_chars(base_id)
+        headers = self.gen_headers(base_id)
+        url = f'{self.server_url}/api/v1/{base_id}/index'
+        data = {
+            'table_id': table_id,
+            'columns': columns,
+        }
+        response = requests.post(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
 
     def add_column_option(self, base_id, option_data):
