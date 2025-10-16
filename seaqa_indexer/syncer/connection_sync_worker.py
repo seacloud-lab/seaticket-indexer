@@ -28,7 +28,6 @@ class ConnectionSyncTaskWorker(object):
         self.db_session_class = init_db_session_class()
         self.should_stop = threading.Event()
         self.worker_num = 3
-        self.update_connection_interval = 7 * 24 * 60 * 60
 
         self.LOCK_TIMEOUT = 1800  # 30 minutes
         self.REFRESH_INTERVAL = 600  # 10 minutes

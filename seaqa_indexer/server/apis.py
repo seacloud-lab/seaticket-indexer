@@ -79,7 +79,7 @@ def manual_sync_connection():
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
             application.app.discourse_sync_manager.add_discourse_sync_task(connection_id)
         elif connection_type == ConnectionType.SEAFILE.value:
-            application.app.index_manager.add_connection_index_task(connection_id)
+            application.app.seafile_sync_manager.add_sync_task(connection_id)
         else:
             return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
     except Exception as e:
