@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 from functools import wraps
 from dateutil.relativedelta import relativedelta
 
-from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_status
+from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_last_sync_count
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 
@@ -276,6 +276,8 @@ class DiscourseSync:
         should_stop = False
         sync_count = 0
         headers = self._build_api_headers(api_key, api_username)
+        _status_last_update_time = datetime.datetime.now()
+        _status_last_update_count = 0
 
         if last_updated_at:
             last_updated_at = time_str_to_utc_time(str(last_updated_at))
@@ -317,9 +319,14 @@ class DiscourseSync:
                 self.add_or_update_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers)
 
                 sync_count += 1
-                if need_update_connection_status(sync_count):
+                should, new_time, new_count = need_update_connection_last_sync_count(
+                    sync_count, _status_last_update_time, _status_last_update_count
+                )
+                if should:
                     connection_status['last_sync_count'] = sync_count
                     self.seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                    _status_last_update_time = new_time
+                    _status_last_update_count = new_count
                 time.sleep(1)
 
             page += 1
