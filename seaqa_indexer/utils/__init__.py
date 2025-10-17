@@ -154,3 +154,23 @@ def uuid_str_to_32_chars(project_uuid):
         return uuid.UUID(project_uuid).hex
     else:
         return project_uuid
+
+
+def need_update_connection_last_sync_count(item_count, last_update_time, last_update_count):
+    from seaqa_indexer.utils.constants import CONNECTION_STATUS_MIN_UPDATE_COUNT, CONNECTION_STATUS_UPDATE_INTERVAL_SECONDS
+
+    now = datetime.now()
+    if last_update_time is None:
+        last_update_time = now
+
+    delta_count = item_count - last_update_count
+    count_ready = delta_count >= CONNECTION_STATUS_MIN_UPDATE_COUNT
+
+    elapsed_seconds = (now - last_update_time).total_seconds() if isinstance(last_update_time, datetime) else 0
+    time_ready = elapsed_seconds >= CONNECTION_STATUS_UPDATE_INTERVAL_SECONDS
+
+    should = count_ready or time_ready
+    if should:
+        return True, now, item_count
+    else:
+        return False, last_update_time, last_update_count
