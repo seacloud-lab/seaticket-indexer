@@ -4,7 +4,7 @@ import datetime
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.seadb_models.models import WebCrawlTable
-from seaqa_indexer.utils import need_update_connection_status
+from seaqa_indexer.utils import need_update_connection_last_sync_count
 
 
 class BatchCrawlPipeline:
@@ -52,9 +52,16 @@ class BatchCrawlPipeline:
     def process_item(self, item, spider):
         self.save_content(item)
         spider.crawled_count += 1
-        spider.connection_status['last_sync_count'] = spider.crawled_count
-        if need_update_connection_status(spider.crawled_count):
+        if not hasattr(spider, '_status_last_update_time'):
+            spider._status_last_update_time = datetime.datetime.now()
+        should, new_time, new_count = need_update_connection_last_sync_count(
+            spider.crawled_count, getattr(spider, '_status_last_update_time'), getattr(spider, '_status_last_update_count', 0)
+        )
+        if should:
+            spider.connection_status['last_sync_count'] = spider.crawled_count
             spider.update_connection_status(self.site_id, json.dumps(spider.connection_status))
+            spider._status_last_update_time = new_time
+            spider._status_last_update_count = new_count
         return item
 
     def save_content(self, item):

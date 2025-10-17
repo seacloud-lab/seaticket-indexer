@@ -9,7 +9,7 @@ from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time, encrypt_config
-from seaqa_indexer.utils import need_update_connection_status
+from seaqa_indexer.utils import need_update_connection_last_sync_count
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seasearch.utils import get_content_by_download_link
 from seaqa_indexer.utils.seahub_api import FileNotFoundException
@@ -141,6 +141,8 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
     page = 1
     per_page = 100  # max 100
     sync_count = 0
+    _status_last_update_time = datetime.datetime.now()
+    _status_last_update_count = 0
 
     issues_labels = github_api.get_issues_labels(page, per_page)
     github_seadb_api.add_or_update_issue_label_column_options(connection_id, issues_labels)
@@ -155,9 +157,14 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
                 continue
             sync_count += 1
             github_seadb_api.save_or_update_issue_to_db(connection_id, issue)
-            if need_update_connection_status(sync_count):
+            should, new_time, new_count = need_update_connection_last_sync_count(
+                sync_count, _status_last_update_time, _status_last_update_count
+            )
+            if should:
                 connection_status['last_sync_count'] = sync_count
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                _status_last_update_time = new_time
+                _status_last_update_count = new_count
             comments_page = 1
             while True:
                 comments = github_api.get_issue_comments(issue['number'], per_page=per_page, page=comments_page)
