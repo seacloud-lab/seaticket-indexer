@@ -54,11 +54,12 @@ class BatchCrawlPipeline:
         spider.crawled_count += 1
         if not hasattr(spider, '_status_last_update_time'):
             spider._status_last_update_time = datetime.datetime.now()
+
+        spider.connection_status['last_sync_count'] = spider.crawled_count
         should, new_time, new_count = need_update_connection_last_sync_count(
             spider.crawled_count, getattr(spider, '_status_last_update_time'), getattr(spider, '_status_last_update_count', 0)
         )
         if should:
-            spider.connection_status['last_sync_count'] = spider.crawled_count
             spider.update_connection_status(self.site_id, json.dumps(spider.connection_status))
             spider._status_last_update_time = new_time
             spider._status_last_update_count = new_count
