@@ -126,7 +126,12 @@ def update_github_issues_index(project_connection, seasearch_api, seaqa_db):
     issues_index_name = gen_index_name_by_type(connection_id, connection_type)
     github_issues_index.create_index_if_missing(issues_index_name)
 
-    index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, old_indexed_at)
+    since = old_indexed_at
+    if not since:
+        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    since = time_str_to_utc_time(str(since)).isoformat()
+
+    index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, since)
     # finish index
     indexed_at = datetime.datetime.now(datetime.UTC)
     connection_status['last_indexed_count'] = index_count
@@ -149,7 +154,12 @@ def update_discourse_forum_index(project_connection, seasearch_api, seaqa_db):
     discourse_index_name = gen_index_name_by_type(connection_id, connection_type)
     discourse_forum_index.create_index_if_missing(discourse_index_name)
 
-    index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db, discourse_seadb_api, old_indexed_at)
+    since = old_indexed_at
+    if not since:
+        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    since = time_str_to_utc_time(str(since)).isoformat()
+
+    index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db, discourse_seadb_api, since)
     indexed_at = datetime.datetime.now(datetime.UTC)
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
