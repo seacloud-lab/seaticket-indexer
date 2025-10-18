@@ -62,10 +62,6 @@ class DiscourseSync:
             self.topics_table.created_at.name: topic_created_at.isoformat(),}
         self.discourse_seadb_api.insert_topic(connection_id, topic_data)
 
-    def delete_reply(self, topic_id, post_number, connection_id):
-        """Delete a specific reply"""
-        self.discourse_seadb_api.delete_reply(connection_id, topic_id, post_number)
-
     def delete_topic_and_replies(self, topic_id, connection_id):
         """Delete a topic and all its replies"""
         self.discourse_seadb_api.delete_replies_by_topic(connection_id, topic_id)
@@ -117,7 +113,7 @@ class DiscourseSync:
         reply_data = data.get('post', {})
         post_number = reply_data.get('post_number')
         if post_number:
-            self.delete_reply(topic_id, post_number, connection_id)
+            self.discourse_seadb_api.delete_reply(connection_id, topic_id, post_number)
             logger.info(f"Deleted reply {post_number} in topic {topic_id}")
 
     def handle_topic_deleted(self, topic_id, connection_id):
@@ -174,11 +170,7 @@ class DiscourseSync:
     def add_or_update_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers):
         """Deletes and recreates an existing topic and its replies to ensure content is up-to-date."""
         # Delete existing topic and its replies
-        try:
-            self.delete_topic_and_replies(topic_id, connection_id)
-            logger.debug(f"Successfully deleted topic {topic_id} and its replies for updating.")
-        except Exception as e:
-            pass
+        self.delete_topic_and_replies(topic_id, connection_id)
 
         # Create new topic with replies
         self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
@@ -281,7 +273,7 @@ class DiscourseSync:
 
         if last_updated_at:
             last_updated_at = time_str_to_utc_time(str(last_updated_at))
-        
+
         # Calculate sync_earliest_time by subtracting sync_years from project_created_at
         project_created_at_utc = time_str_to_utc_time(str(project_created_at))
         sync_earliest_time = project_created_at_utc - relativedelta(years=sync_years)

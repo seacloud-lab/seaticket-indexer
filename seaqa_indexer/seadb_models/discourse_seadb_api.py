@@ -30,6 +30,13 @@ class DiscourseSeaDBAPI:
             return result['results'][0]
         return None
 
+    def get_topics_by_page(self, connection_id, since, page_size, offset):
+        issues_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        issues = res.get('results', [])
+        return issues
+
     def get_topics_by_connection_id(self, connection_id, update_at_gt=None, topic_id=None):
         """Retrieve all topics for the specified connection_id."""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
@@ -37,7 +44,7 @@ class DiscourseSeaDBAPI:
         if update_at_gt is not None:
             if isinstance(update_at_gt, datetime.datetime):
                 update_at_gt = update_at_gt.isoformat()
-            sql += f" WHERE `update_at` > {update_at_gt}"
+            sql += f" WHERE `update_at` > '{update_at_gt}'"
         if topic_id is not None:
             if 'WHERE' in sql:
                 sql += f" AND `topic_id` = {topic_id}"
@@ -77,6 +84,15 @@ class DiscourseSeaDBAPI:
         topics = self.get_topics_by_connection_id(connection_id, topic_id=topic_id)
         primary_key = topics[0].get('_pk')
         return self.seadb_api.delete_rows(self.base_id, table_name, [primary_key])
+
+    def delete_topics_from_db(self, connection_id, need_delete_topic_pks, need_deleted_reply_topic_ids):
+        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        self.seadb_api.delete_rows(self.base_id, table_name, need_delete_topic_pks)
+
+        comments_table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        for topic_id in need_deleted_reply_topic_ids:
+            delete_sql = f"DELETE FROM `{comments_table_name}` WHERE topic_id = {topic_id}"
+            self.seadb_api.query_rows(self.base_id, delete_sql)
 
     # Replies operations
     def insert_reply(self, connection_id, reply_data):
@@ -119,14 +135,11 @@ class DiscourseSeaDBAPI:
         result = self.seadb_api.query_rows(self.base_id, sql)
         return result
 
-    def get_replies_by_topic(self, connection_id, topic_id):
-        """Retrieve all replies for the specified topic."""
+    def get_topic_replies_by_page(self, connection_id, topic_id, page_size, offset):
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id}"
-        result = self.seadb_api.query_rows(self.base_id, sql)
-        if result and 'results' in result:
-            return result['results']
-        return []
+        sql = f"SELECT * FROM `{table_name}` WHERE topic_id = {topic_id} LIMIT {page_size} OFFSET {offset}"
+        replies = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        return replies
 
     def delete_topic_from_db(self, topic_id, connection_id):
         """Delete topic from database"""
