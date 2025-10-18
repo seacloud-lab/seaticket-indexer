@@ -212,7 +212,7 @@ class GitHubIssuesIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, last_indexed_at):
+    def update(self, index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, since):
         index_count = 0
         page_size = 1000
         offset = 0
@@ -221,12 +221,8 @@ class GitHubIssuesIndex(object):
         need_cleared_issues_id_set = set()
         bulk_params = []
 
-        if not last_indexed_at:
-            last_indexed_at = datetime.datetime(1970, 1, 1)
-        last_indexed_at = last_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
-
         while True:
-            issues = github_seadb_api.get_issues_by_page(connection_id, last_indexed_at, page_size, offset)
+            issues = github_seadb_api.get_issues_by_page(connection_id, since, page_size, offset)
             if not issues:
                 break
 
