@@ -266,6 +266,8 @@ class DiscourseIndex(object):
                     if need_update_connection_status(index_count):
                         connection_status['last_indexed_count'] = index_count
                         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        if bulk_params:
+            self.seasearch_api.bulk(index_name, bulk_params)
 
         if need_cleared_topic_index_id_set:
             self.delete_indexes_by_ids(index_name, need_cleared_topic_index_id_set)
