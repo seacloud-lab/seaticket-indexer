@@ -82,6 +82,9 @@ class DiscourseSeaDBAPI:
         """Delete topic record"""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
         topics = self.get_topics_by_connection_id(connection_id, topic_id=topic_id)
+        if not topics:
+            logger.debug(f"Topic {topic_id} not found in connection {connection_id}, skipping deletion")
+            return None
         primary_key = topics[0].get('_pk')
         return self.seadb_api.delete_rows(self.base_id, table_name, [primary_key])
 
