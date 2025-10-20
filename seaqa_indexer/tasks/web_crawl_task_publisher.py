@@ -24,7 +24,7 @@ class WebCrawlTaskPublisher(object):
         self._enabled = True
         self._logfile = LOG_FILE
         self._loglevel = LOG_LEVEL
-        self._interval = 24 * 60 * 60
+        self._interval = 1 * 60 * 60
         self._crawl_interval = 3 * 24 * 60 * 60
 
     def start(self):
