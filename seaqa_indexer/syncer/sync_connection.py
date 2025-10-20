@@ -23,16 +23,17 @@ from seaqa_indexer.app.event_redis import redis_cache
 logger = logging.getLogger(__name__)
 
 
-def sync_connection(connection_id, seaqa_db, mq):
-    logger.info(f"Start sync connection: {connection_id}")
+def sync_connection(connection_id, seaqa_db, mq, sync_logger):
+    sync_logger.init(connection_id)
+    sync_logger._log_info(f"Start sync connection: {connection_id}")
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
-        logger.warning('connection: %s not found', connection_id)
+        sync_logger._log_warning(f'connection: {connection_id} not found')
         return
 
     connection_is_active = project_connection.is_active
     if not connection_is_active:
-        logger.warning('connection: %s is inactive', connection_id)
+        sync_logger._log_warning(f'connection: {connection_id} is inactive')
         return
 
     connection_status = json.loads(project_connection.status)
@@ -82,7 +83,7 @@ def sync_connection(connection_id, seaqa_db, mq):
                 parts = path.strip("/").split("/")
                 repo_owner, repo_name = parts[0], parts[1]
             except Exception as e:
-                logger.warning("github repository is invalid: %s", e)
+                sync_logger._log_warning(f"github repository is invalid: {e}")
                 connection_status['last_sync_status'] = CrawlStatus.FAILED
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
                 return
@@ -113,9 +114,9 @@ def sync_connection(connection_id, seaqa_db, mq):
                 is_update_config = True
 
             seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
-            sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update)
+            sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
     except Exception as e:
-        logger.exception('connection: %s, sync issues failed, error: %s', connection_id, e)
+        sync_logger._log_error(f'connection: {connection_id}, sync issues failed, error: {e}')
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         return
@@ -130,7 +131,7 @@ def sync_connection(connection_id, seaqa_db, mq):
         new_config = encrypt_config(config)
     seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time, config=new_config)
 
-    logger.info('Finish sync connection: %s', connection_id)
+    sync_logger._log_info(f'Finish sync connection: {connection_id}')
     msg_content = {
         'connection_id': connection_id,
     }
@@ -182,7 +183,7 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
     return sync_count, total_count
 
 
-def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update):
+def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger):
     page = 1
     per_page = 1000
     sync_count = 0
@@ -209,8 +210,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
                     try:
                         download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
                     except FileNotFoundException:
-                        logger.warning('connection: %s, repo_id: %s, parent_dir: %s, name: %s file not found',
-                                       connection_id, repo_id, parent_dir, dirent_name)
+                        sync_logger._log_warning(f'connection: {connection_id}, repo_id: {repo_id}, parent_dir: {parent_dir}, name: {dirent_name} file not found')
                         continue
                     content = get_content_by_download_link(download_link)
                     content = extractor.extract(connection_id, repo_id, content, file_path)

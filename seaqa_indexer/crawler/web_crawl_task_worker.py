@@ -18,6 +18,7 @@ from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.crawl_web import craw_web
 from seaqa_indexer.mq import get_mq
+from seaqa_indexer.utils.sync_logger import SyncLogger
 
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class WebCrawlTaskWorker(object):
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         reactor.suggestThreadPoolSize(10)
 
+        self.sync_logger = SyncLogger(self.db_session_class)
         self.set_signal()
         self.worker_list = []
 
@@ -84,7 +86,7 @@ class WebCrawlTaskWorker(object):
 
     def crawl_site(self, connection_id):
         try:
-            craw_web(connection_id, self.db_session_class, self.mq)
+            craw_web(connection_id, self.db_session_class, self.mq, self.sync_logger)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', connection_id, e)
 

@@ -12,6 +12,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.syncer.sync_connection import sync_connection
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.utils.constants import ConnectionType
 
 
@@ -35,6 +36,7 @@ class ConnectionSyncTaskWorker(object):
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
+        self.sync_logger = SyncLogger(self.db_session_class)
 
         self.set_signal()
         self.worker_list = []
@@ -120,7 +122,7 @@ class ConnectionSyncTaskWorker(object):
 
     def sync(self, connection_id):
         try:
-            sync_connection(connection_id, self.seaqa_db, self.mq)
+            sync_connection(connection_id, self.seaqa_db, self.mq, self.sync_logger)
         except Exception as e:
             logger.exception('%s sync connection %s error: %s' % (self.tname, connection_id, e))
 
