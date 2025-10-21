@@ -30,8 +30,8 @@ SEASEARCH_TOKEN = ''
 SEAQA_WEB_SECRET_KEY = ''
 
 #SeaQA GitHub APP setting
-APP_ID = ''
-PRIVATE_KEY_PATH = ''
+GITHUB_APP_ID = '2027684'
+PRIVATE_KEY_PATH = '/data/dev/seaqa-indexer/seaqa_indexer/github-app-private-key.pem'
 
 try:
     from local_settings import *
@@ -67,5 +67,5 @@ S3_WEB_CRAWL_BUCKET = os.environ.get('S3_WEB_CRAWL_BUCKET')
 S3_KEY_ID = os.environ.get('S3_KEY_ID')
 S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY')
 
-APP_ID = os.environ.get('APP_ID') or APP_ID
+GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID') or GITHUB_APP_ID
 PRIVATE_KEY_PATH = os.environ.get('PRIVATE_KEY_PATH') or PRIVATE_KEY_PATH

@@ -3,7 +3,7 @@ import time
 import jwt
 import requests
 from cryptography.hazmat.primitives import serialization
-from seaqa_indexer.config import APP_ID, PRIVATE_KEY_PATH
+from seaqa_indexer.config import GITHUB_APP_ID, PRIVATE_KEY_PATH
 
 
 class GitHubAPIException(Exception):
@@ -31,13 +31,7 @@ class GitHubAPI:
             installation_token = self.get_installation_token(self.installation_id)
             headers['Authorization'] = f'Bearer {installation_token}'
         else:
-            try:
-                installation_id = self.get_installation_id(self.jwt_token)
-                installation_token = self.get_installation_token(installation_id)
-                headers['Authorization'] = f'Bearer {installation_token}'
-            except Exception as e:
-                logger.error(f'Failed to get installation token: {e}')
-                headers['Authorization'] = f'Bearer {self.token}'
+            headers['Authorization'] = f'Bearer {self.token}'
         return headers
 
     def _request(self, url, params=None):
@@ -83,28 +77,10 @@ class GitHubAPI:
         payload = {
             "iat": now,
             "exp": now + (10 * 60),
-            "iss": APP_ID
+            "iss": GITHUB_APP_ID
         }
         encoded_jwt = jwt.encode(payload, private_key, algorithm="RS256")
         return encoded_jwt
-
-    def get_installation_id(self, jwt_token):
-        url = f"{self.base_url}/installation"
-        headers = {
-            "Authorization": f"Bearer {jwt_token}",
-            "Accept": "application/vnd.github+json"
-        }
-        try:
-            response = requests.get(url, headers=headers)
-            data = response.json()
-            installation_id = data['id']
-            from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import GithubIssuesSyncManager
-            github_issues_sync_manager = GithubIssuesSyncManager()
-            github_issues_sync_manager.handle_github_app_installation(self.connection_id, installation_id)
-            return installation_id
-        except requests.exceptions.RequestException as e:
-            logger.error(e)
-            return None
 
     def get_installation_token(self, installation_id):
         url = f"https://api.github.com/app/installations/{installation_id}/access_tokens"
