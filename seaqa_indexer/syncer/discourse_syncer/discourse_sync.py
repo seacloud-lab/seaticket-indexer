@@ -38,11 +38,12 @@ def retry_with_exponential_backoff(max_retries=5, base_delay=3, max_delay=60):
 
 
 class DiscourseSync:
-    def __init__(self, base_id, seaqa_db, username=''):
+    def __init__(self, base_id, seaqa_db, sync_logger, username=''):
         self.discourse_seadb_api = DiscourseSeaDBAPI(base_id=base_id, username=username)
         self.topics_table = DiscourseTopicsTable
         self.replies_table = DiscourseRepliesTable
         self.seaqa_db = seaqa_db
+        self.sync_logger = sync_logger
 
     def check_existing_topic(self, topic_id, connection_id):
         """Check if a topic already exists"""
@@ -83,7 +84,7 @@ class DiscourseSync:
         if existing_topic:
             bumped_at = time_str_to_utc_time(topic_data.get('last_posted_at'))
             self.update_topic(title, slug, views, category_id, topic_id, connection_id, bumped_at)
-            logger.debug(f"Updated existing topic {topic_id}")
+            self.sync_logger._log_debug(f"Updated existing topic {topic_id}")
         else:
             # When using webhook, the returned value does not have a bumped_at.
             topic_created_at = time_str_to_utc_time(topic_data.get('created_at'))
@@ -92,7 +93,7 @@ class DiscourseSync:
             else:
                 bumped_at = time_str_to_utc_time(topic_data.get('last_posted_at'))
             self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at)
-            logger.debug(f"Created new topic {topic_id}")
+            self.sync_logger._log_debug(f"Created new topic {topic_id}")
 
     def handle_reply_update(self, connection_id, topic_id, data):
         reply_data = data.get('post', {})
@@ -104,25 +105,25 @@ class DiscourseSync:
         updated_at = time_str_to_utc_time(reply_data.get('updated_at'))
         if existing_reply:
             self.update_reply(content, author, topic_id, post_number, updated_at, connection_id)
-            logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
+            self.sync_logger._log_debug(f"Updated existing reply {post_number} in topic {topic_id}")
         else:
             self.insert_reply(topic_id, post_number, content, author, updated_at, connection_id)
-            logger.debug(f"Created new reply {post_number} in topic {topic_id}")
+            self.sync_logger._log_debug(f"Created new reply {post_number} in topic {topic_id}")
 
     def handle_reply_delete(self, connection_id, topic_id, data):
         reply_data = data.get('post', {})
         post_number = reply_data.get('post_number')
         if post_number:
             self.discourse_seadb_api.delete_reply(connection_id, topic_id, post_number)
-            logger.info(f"Deleted reply {post_number} in topic {topic_id}")
+            self.sync_logger._log_info(f"Deleted reply {post_number} in topic {topic_id}")
 
     def handle_topic_deleted(self, topic_id, connection_id):
         """Mark a topic as deleted instead of physically deleting it"""
         try:
             self.discourse_seadb_api.delete_topic(connection_id, topic_id)
-            logger.info(f"Deleted topic {topic_id} for connection {connection_id}")
+            self.sync_logger._log_info(f"Deleted topic {topic_id} for connection {connection_id}")
         except Exception as e:
-            logger.error(f"Failed to delete topic {topic_id}: {e}")
+            self.sync_logger._log_error(f"Failed to delete topic {topic_id}: {e}")
 
     def insert_reply(self, topic_id, post_number, content, author, updated_at, connection_id):
         """Insert a new reply"""
@@ -174,14 +175,14 @@ class DiscourseSync:
 
         # Create new topic with replies
         self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
-        logger.debug(f"Successfully recreated topic {topic_id} with replies.")
+        self.sync_logger._log_debug(f"Successfully recreated topic {topic_id} with replies.")
 
     def _create_topic_and_replies(self, topic_data, topic_id, forum_url, headers, connection_id):
         """Create new topic and its replies"""
         # Fetch topic posts
         topic_replies_data = self.get_discourse_topic_replies(forum_url, topic_id, headers)
         if not topic_replies_data:
-            logger.info(f"fetch 0 replies for topic {topic_id}")
+            self.sync_logger._log_info(f"fetch 0 replies for topic {topic_id}")
             return
 
         # Create topic
@@ -210,12 +211,12 @@ class DiscourseSync:
             updated_at = time_str_to_utc_time(reply.get('updated_at'))
 
             self.insert_reply(topic_id, post_number, content, author, updated_at, connection_id)
-        logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
+        self.sync_logger._log_debug(f"Successfully processed and saved topic {topic_id} with replies")
 
     @retry_with_exponential_backoff()
     def fetch_latest_topics_page(self, forum_url, headers, page):
         url = urljoin(forum_url, f"latest.json?page={page}")
-        logger.debug(f"Fetching page {page} from {url}")
+        self.sync_logger._log_debug(f"Fetching page {page} from {url}")
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
 
@@ -226,7 +227,7 @@ class DiscourseSync:
     @retry_with_exponential_backoff()
     def fetch_discourse_topic(self, forum_url, topic_id, headers):
         url = urljoin(forum_url, f"t/{topic_id}.json")
-        logger.info(f"Fetching topic detail from {url}")
+        self.sync_logger._log_info(f"Fetching topic detail from {url}")
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         return response
@@ -304,7 +305,7 @@ class DiscourseSync:
                 if existing_topic:
                     existing_bumped_at = time_str_to_utc_time(str(existing_topic.get('bumped_at')))
                     if topic_bumped_at <= existing_bumped_at:
-                        logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
+                        self.sync_logger._log_debug(f'Topic {topic_id} is up to date, skipping sync.')
                         continue
 
                 # Handle different sync scenarios

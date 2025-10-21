@@ -7,6 +7,7 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
+from seaqa_indexer.utils.sync_logger import SyncLogger
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class ForumInActiveException(Exception):
 class DiscourseSyncManager:
     def __init__(self):
         self.db_session_class = init_db_session_class()
+        self.sync_logger = SyncLogger(self.db_session_class)
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def get_project_connection_by_id(self, pc_id, conn_type='discourse_forum'):
@@ -46,15 +48,16 @@ class DiscourseSyncManager:
 
     def handle_webhook(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
+        sync_logger = self.sync_logger.init(connection_id)
         project_connection = self.get_project_connection_by_id(connection_id)
         project_uuid = project_connection.project_uuid
-        discourse_sync = DiscourseSync(project_uuid, self.db_session_class)
+        discourse_sync = DiscourseSync(project_uuid, self.db_session_class, sync_logger)
         if not project_connection:
             raise ForumNotFoundException()
 
         connection_is_active = project_connection.is_active
         if not connection_is_active:
-            logger.warning('connection: %s is inactive', connection_id)
+            sync_logger._log_warning(f'connection: {connection_id} is inactive')
             raise ForumInActiveException()
 
         topic_id = request_data.get('topic', {}).get('id')
@@ -67,5 +70,6 @@ class DiscourseSyncManager:
         elif event_type == 'post_destroyed':
             discourse_sync.handle_reply_delete(connection_id, topic_id, request_data)
         else:
-            logger.warning(f"Unknown event type: {event_type}")
+            sync_logger._log_warning(f"Unknown event type: {event_type}")
+        sync_logger._flush_log_lines()
         self.add_discourse_index_task(connection_id)

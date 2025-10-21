@@ -61,7 +61,7 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
 
             project_uuuid = project_connection.project_uuid
             project_created_at = project_connection.created_at
-            discourse_sync = DiscourseSync(project_uuuid, seaqa_db)
+            discourse_sync = DiscourseSync(project_uuuid, seaqa_db, sync_logger)
             sync_count = discourse_sync.sync(
                 connection_id,
                 forum_url,
@@ -84,6 +84,7 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
                 repo_owner, repo_name = parts[0], parts[1]
             except Exception as e:
                 sync_logger._log_warning(f"github repository is invalid: {e}")
+                sync_logger._flush_log_lines()
                 connection_status['last_sync_status'] = CrawlStatus.FAILED
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
                 return
@@ -117,6 +118,7 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
             sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
     except Exception as e:
         sync_logger._log_error(f'connection: {connection_id}, sync issues failed, error: {e}')
+        sync_logger._flush_log_lines()
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         return
@@ -132,6 +134,7 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
     seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time, config=new_config)
 
     sync_logger._log_info(f'Finish sync connection: {connection_id}')
+    sync_logger._flush_log_lines()
     msg_content = {
         'connection_id': connection_id,
     }
