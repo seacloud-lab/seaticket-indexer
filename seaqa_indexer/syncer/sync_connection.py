@@ -155,6 +155,16 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
         for issue in issues:
             if 'pull_request' in issue:
                 continue
+
+            # Check if issue already exists in DB
+            issue_id = issue['id']
+            existing_issue = github_seadb_api.get_issue_by_id(issue_id, connection_id)
+            if existing_issue:
+                existing_updated_at = time_str_to_utc_time(str(existing_issue.get('updated_at')))
+                if time_str_to_utc_time(issue.get('updated_at')) <= existing_updated_at:
+                    logger.debug(f'Issue {issue_id} is up to date, skipping sync.')
+                    continue
+
             sync_count += 1
             github_seadb_api.save_or_update_issue_to_db(connection_id, issue)
             should, new_time, new_count = need_update_connection_last_sync_count(
