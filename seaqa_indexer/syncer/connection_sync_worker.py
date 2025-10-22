@@ -36,7 +36,6 @@ class ConnectionSyncTaskWorker(object):
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
-        self.sync_logger = SyncLogger(self.db_session_class)
 
         self.set_signal()
         self.worker_list = []
@@ -122,7 +121,8 @@ class ConnectionSyncTaskWorker(object):
 
     def sync(self, connection_id):
         try:
-            sync_connection(connection_id, self.seaqa_db, self.mq, self.sync_logger)
+            task_sync_logger = SyncLogger(self.db_session_class)
+            sync_connection(connection_id, self.seaqa_db, self.mq, task_sync_logger)
         except Exception as e:
             logger.exception('%s sync connection %s error: %s' % (self.tname, connection_id, e))
 

@@ -1,7 +1,7 @@
 from urllib.parse import urlparse
 from scrapy.linkextractors import LinkExtractor
 from scrapy.spiders import CrawlSpider, Rule
-from seaqa_indexer.crawler.utils import spider_parse_item, load_existing_site_info
+from seaqa_indexer.crawler.utils import spider_parse_item, load_existing_site_info, get_log_line
 
 
 class SiteCrawlerSpider(CrawlSpider):
@@ -29,7 +29,7 @@ class SiteCrawlerSpider(CrawlSpider):
         self.storage = storage
         self.sync_logger = sync_logger
         self._load_existing_site_info()
-        self.sync_logger._log_info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
+        self.sync_logger.info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}", extra={'line': get_log_line(), 'file_name': __name__})
 
     def _load_existing_site_info(self):
         """Load the ETag and Last-Modified information of an existing file"""

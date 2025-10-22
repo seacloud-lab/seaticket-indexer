@@ -1,13 +1,13 @@
 import os
 import sys
 import logging
-import atexit
 import subprocess
 import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
 from copy import deepcopy
+from inspect import currentframe
 from seaqa_indexer.utils.hasher import AESPasswordHasher
 
 
@@ -174,3 +174,8 @@ def need_update_connection_last_sync_count(item_count, last_update_time, last_up
         return True, now, item_count
     else:
         return False, last_update_time, last_update_count
+
+
+def get_log_line():
+    frame = currentframe().f_back
+    return frame.f_lineno

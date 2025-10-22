@@ -35,8 +35,6 @@ class WebCrawlTaskWorker(object):
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         reactor.suggestThreadPoolSize(10)
-
-        self.sync_logger = SyncLogger(self.db_session_class)
         self.set_signal()
         self.worker_list = []
 
@@ -86,7 +84,8 @@ class WebCrawlTaskWorker(object):
 
     def crawl_site(self, connection_id):
         try:
-            craw_web(connection_id, self.db_session_class, self.mq, self.sync_logger)
+            task_sync_logger = SyncLogger(self.db_session_class)
+            craw_web(connection_id, self.db_session_class, self.mq, task_sync_logger)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', connection_id, e)
 

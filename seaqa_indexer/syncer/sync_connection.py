@@ -9,7 +9,7 @@ from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time, encrypt_config
-from seaqa_indexer.utils import need_update_connection_last_sync_count
+from seaqa_indexer.utils import need_update_connection_last_sync_count, get_log_line
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seasearch.utils import get_content_by_download_link
 from seaqa_indexer.utils.seahub_api import FileNotFoundException
@@ -25,15 +25,17 @@ logger = logging.getLogger(__name__)
 
 def sync_connection(connection_id, seaqa_db, mq, sync_logger):
     sync_logger.init(connection_id)
-    sync_logger._log_info(f"Start sync connection: {connection_id}")
+    sync_logger.info(f"Start sync connection: {connection_id}", extra={'line': get_log_line(), 'file_name': __name__})
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
-        sync_logger._log_warning(f'connection: {connection_id} not found')
+        sync_logger.warning(f'connection: {connection_id} not found', extra={'line': get_log_line(), 'file_name': __name__})
+        sync_logger.stop_capture()
         return
 
     connection_is_active = project_connection.is_active
     if not connection_is_active:
-        sync_logger._log_warning(f'connection: {connection_id} is inactive')
+        sync_logger.warning(f'connection: {connection_id} is inactive', extra={'line': get_log_line(), 'file_name': __name__})
+        sync_logger.stop_capture()
         return
 
     connection_status = json.loads(project_connection.status)
@@ -83,10 +85,10 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
                 parts = path.strip("/").split("/")
                 repo_owner, repo_name = parts[0], parts[1]
             except Exception as e:
-                sync_logger._log_warning(f"github repository is invalid: {e}")
-                sync_logger._flush_log_lines()
+                sync_logger.warning(f"github repository is invalid: {e}", extra={'line': get_log_line(), 'file_name': __name__})
                 connection_status['last_sync_status'] = CrawlStatus.FAILED
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                sync_logger.stop_capture()
                 return
             since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
             github_api = GitHubAPI(token, repo_owner, repo_name, connection_id)
@@ -117,10 +119,10 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
             seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
             sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
     except Exception as e:
-        sync_logger._log_error(f'connection: {connection_id}, sync issues failed, error: {e}')
-        sync_logger._flush_log_lines()
+        sync_logger.error(f'connection: {connection_id}, sync issues failed, error: {e}', extra={'line': get_log_line(), 'file_name': __name__})
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        sync_logger.stop_capture()
         return
 
     # finish sync
@@ -133,8 +135,8 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
         new_config = encrypt_config(config)
     seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time, config=new_config)
 
-    sync_logger._log_info(f'Finish sync connection: {connection_id}')
-    sync_logger._flush_log_lines()
+    sync_logger.info(f'Finish sync connection: {connection_id}', extra={'line': get_log_line(), 'file_name': __name__})
+    sync_logger.stop_capture()
     msg_content = {
         'connection_id': connection_id,
     }
@@ -213,7 +215,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
                     try:
                         download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
                     except FileNotFoundException:
-                        sync_logger._log_warning(f'connection: {connection_id}, repo_id: {repo_id}, parent_dir: {parent_dir}, name: {dirent_name} file not found')
+                        sync_logger.warning(f'connection: {connection_id}, repo_id: {repo_id}, parent_dir: {parent_dir}, name: {dirent_name} file not found', extra={'line': get_log_line(), 'file_name': __name__})
                         continue
                     content = get_content_by_download_link(download_link)
                     content = extractor.extract(connection_id, repo_id, content, file_path)

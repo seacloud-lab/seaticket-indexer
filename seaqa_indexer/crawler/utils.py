@@ -4,7 +4,7 @@ import urllib.parse
 from email.utils import parsedate_to_datetime
 from seaqa_indexer.crawler.extractor import extract_html
 from seaqa_indexer.seadb_models.models import WebCrawlTable
-from seaqa_indexer.utils import md5
+from seaqa_indexer.utils import md5, get_log_line
 
 
 def url_to_filename(url):
@@ -41,7 +41,7 @@ def spider_parse_item(spider, response):
             response_last_modified = response_last_modified.decode('utf-8')
             response_last_modified = parsedate_to_datetime(response_last_modified).isoformat()
     except UnicodeDecodeError as e:
-        spider.sync_logger._log_debug(f"Failed to decode cache headers for {url}: {e}")
+        spider.sync_logger.debug(f"Failed to decode cache headers for {url}: {e}", extra={'line': get_log_line(), 'file_name': __name__})
         response_etag = None
         response_last_modified = None
 
@@ -55,10 +55,10 @@ def spider_parse_item(spider, response):
             content_changed = False
 
     if not content_changed:
-        spider.sync_logger._log_info(f"No changes detected for {url}")
+        spider.sync_logger.info(f"No changes detected for {url}", extra={'line': get_log_line(), 'file_name': __name__})
         return
 
-    spider.sync_logger._log_info(f"Processing page: {url}")
+    spider.sync_logger.info(f"Processing page: {url}", extra={'line': get_log_line(), 'file_name': __name__})
 
     # Extract page title
     title = response.css('title::text').get()
@@ -68,10 +68,10 @@ def spider_parse_item(spider, response):
     try:
         content_hash = md5(body_content) if body_content else None
     except Exception as e:
-        spider.sync_logger._log_debug(f"Failed to compute content hash for {url}: {e}")
+        spider.sync_logger.debug(f"Failed to compute content hash for {url}: {e}", extra={'line': get_log_line(), 'file_name': __name__})
         content_hash = None
     if content_hash == cache_info.get('hash', ''):
-        spider.sync_logger._log_info(f"No changes detected for {url}")
+        spider.sync_logger.info(f"No changes detected for {url}", extra={'line': get_log_line(), 'file_name': __name__})
         return
 
     return {
