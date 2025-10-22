@@ -17,8 +17,6 @@ class SyncLogger:
     def __init__(self, db_session_class):
         self.db_session_class = db_session_class
         self.log_lines = []
-        self._attached_handlers = []
-        self._capture_started = False
         self.connection_id = None
     
     def init(self, connection_id):
@@ -34,7 +32,6 @@ class SyncLogger:
                 session.commit()
         except Exception as e:
             logger.error(f"Failed to initialize sync log header: {e}")
-        self.start_capture()
         return self
     
     def _threshold_level(self):
@@ -108,47 +105,7 @@ class SyncLogger:
         
     def flush(self):
         self._flush_log_lines()
-        
-    class _SyncLogHandler(logging.Handler):
-        def __init__(self, sync_logger_ref):
-            super().__init__()
-            self._sync_logger = sync_logger_ref
-
-        def emit(self, record: logging.LogRecord) -> None:
-            try:
-                msg = self.format(record) if self.formatter else record.getMessage()
-                self._sync_logger._add_log_line(msg)
-            except Exception:
-                pass
-
-    def start_capture(self, logger_names=None, level=None):
-        if self._capture_started:
-            return
-        if logger_names is None:
-            logger_names = [
-                'trafilatura',
-                'scrapy',
-            ]
-        handler = SyncLogger._SyncLogHandler(self)
-        effective_level = level if level is not None else LEVEL_MAP.get(str(LOG_LEVEL).upper(), logging.INFO)
-        handler.setLevel(effective_level)
-        formatter = logging.Formatter('[%(levelname)s] %(name)s:%(lineno)d %(message)s')
-        handler.setFormatter(formatter)
-
-        for name in logger_names:
-            lg = logging.getLogger(name)
-            lg.addHandler(handler)
-            self._attached_handlers.append((lg, handler))
-        self._capture_started = True
 
     def stop_capture(self):
-        for lg, handler in self._attached_handlers:
-            try:
-                lg.removeHandler(handler)
-                handler.close()
-            except Exception:
-                pass
-        self._attached_handlers = []
-        self._capture_started = False
         self._flush_log_lines()
         
