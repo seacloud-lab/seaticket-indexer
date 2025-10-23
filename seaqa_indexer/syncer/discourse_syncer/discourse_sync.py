@@ -5,7 +5,6 @@ import json
 import datetime
 import random
 
-from sqlalchemy import text
 from urllib.parse import urljoin
 from functools import wraps
 from dateutil.relativedelta import relativedelta

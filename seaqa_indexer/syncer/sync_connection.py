@@ -106,7 +106,14 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
                 is_first_update = True
             since = time_str_to_utc_time(str(since)).isoformat()
             seahub_api = SeahubAPI(server_url, api_token)
-            repo_info = seahub_api.get_repo_info()
+            try:
+                repo_info = seahub_api.get_repo_info()
+            except FileNotFoundException:
+                sync_logger.warning(f'Failed to sync connection: {connection_id}, failed to get repo info', extra={'line': get_log_line(), 'file_name': __name__})
+                connection_status['last_sync_status'] = CrawlStatus.FAILED
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                sync_logger.stop_capture()
+                return
             repo_id = repo_info.get('repo_id')
             new_repo_name = repo_info.get('repo_name')
 
@@ -117,9 +124,16 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
                 is_update_config = True
 
             seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
-            sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
+            try:
+                sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
+            except FileNotFoundException:
+                sync_logger.error(f'Failed to sync connection: {connection_id}, Page not found', extra={'line': get_log_line(), 'file_name': __name__})
+                connection_status['last_sync_status'] = CrawlStatus.FAILED
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                sync_logger.stop_capture()
+                return
     except Exception as e:
-        sync_logger.error(f'connection: {connection_id}, sync issues failed, error: {e}', extra={'line': get_log_line(), 'file_name': __name__})
+        sync_logger.error(f'Failed to sync connection: {connection_id}, error: {e}', extra={'line': get_log_line(), 'file_name': __name__})
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         sync_logger.stop_capture()
