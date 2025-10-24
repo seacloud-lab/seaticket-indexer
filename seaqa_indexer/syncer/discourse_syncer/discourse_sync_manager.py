@@ -1,3 +1,4 @@
+import logging
 import json
 
 from sqlalchemy import text
@@ -7,8 +8,8 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 from seaqa_indexer.utils.sync_logger import SyncLogger
-from seaqa_indexer.utils import get_log_line
 
+logger = logging.getLogger(__name__)
 
 class ForumNotFoundException(Exception):
     pass
@@ -55,7 +56,8 @@ class DiscourseSyncManager:
 
         connection_is_active = project_connection.is_active
         if not connection_is_active:
-            sync_logger.warning(f'connection: {connection_id} is inactive', extra={'line': get_log_line(), 'file_name': __name__})
+            logger.warning('connection: %s is inactive', connection_id)
+            sync_logger.log(f'connection {connection_id} is inactive')
             sync_logger.stop_capture()
             raise ForumInActiveException()
 
@@ -69,6 +71,7 @@ class DiscourseSyncManager:
         elif event_type == 'post_destroyed':
             discourse_sync.handle_reply_delete(connection_id, topic_id, request_data)
         else:
-            sync_logger.warning(f"Unknown event type: {event_type}", extra={'line': get_log_line(), 'file_name': __name__})
+            logger.warning(f"Unknown event type: {event_type}")
+            sync_logger.log(f"Unknown event type: {event_type}")
         sync_logger.stop_capture()
         self.add_discourse_index_task(connection_id)

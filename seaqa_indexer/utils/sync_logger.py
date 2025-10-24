@@ -1,19 +1,9 @@
 import datetime
 import logging
-import traceback
 from sqlalchemy import text
-from seaqa_indexer.config import LOG_LEVEL
 
 logger = logging.getLogger(__name__)
 
-LEVEL_MAP = {
-    'CRITICAL': logging.CRITICAL,
-    'ERROR': logging.ERROR,
-    'EXCEPTION': logging.ERROR,
-    'WARNING': logging.WARNING,
-    'INFO': logging.INFO,
-    'DEBUG': logging.DEBUG,
-}
 
 class SyncLogger:
     def __init__(self, db_session_class):
@@ -33,26 +23,11 @@ class SyncLogger:
                 session.execute(text(update_sql), {"details": '', "connection_id": self.connection_id})
                 session.commit()
         except Exception as e:
-            logger.error(f"Failed to initialize sync log header: {e}")
+            logger.error(f"Failed to initialize sync log: {e}")
         return self
     
-    def _threshold_level(self):
-        return LEVEL_MAP.get(LOG_LEVEL.upper(), logging.INFO)
-
-    def _parse_level_from_message(self, message):
-        try:
-            if isinstance(message, str) and message.startswith('['):
-                end = message.find(']')
-                if end > 1:
-                    lvl_name = message[1:end].strip().upper()
-                    return LEVEL_MAP.get(lvl_name, logging.INFO)
-        except Exception:
-            pass
-        return logging.INFO
-
     def _add_log_line(self, message):
-        msg_level = self._parse_level_from_message(message)
-        if msg_level < self._threshold_level():
+        if not message:
             return
         line = f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}"
         self.log_lines.append(line)
@@ -77,50 +52,8 @@ class SyncLogger:
         except Exception as e:
             logger.error(f"Failed to flush log lines: {e}")
     
-    def info(self, message, extra=None):
-        if extra:
-            line = extra.get('line')
-            file_name = extra.get('file_name')
-            message = f"[INFO] {file_name}:{line} {message}"
+    def log(self, message):
         self._add_log_line(message)
-    
-    def warning(self, message, extra=None):
-        if extra:
-            line = extra.get('line')
-            file_name = extra.get('file_name')
-            message = f"[WARNING] {file_name}:{line} {message}"
-        self._add_log_line(message)
-    
-    def error(self, message, extra=None):
-        if extra:
-            line = extra.get('line')
-            file_name = extra.get('file_name')
-            message = f"[ERROR] {file_name}:{line} {message}"
-        self._add_log_line(message)
-    
-    def debug(self, message, extra=None):
-        if extra:
-            line = extra.get('line')
-            file_name = extra.get('file_name')
-            message = f"[DEBUG] {file_name}:{line} {message}"
-        self._add_log_line(message)
-    
-    def exception(self, message, extra=None):
-        prefix = f"[ERROR] {message}"
-        if extra:
-            line = extra.get('line')
-            file_name = extra.get('file_name')
-            prefix = f"[ERROR] {file_name}:{line} {message}"
-
-        stack = traceback.format_exc()
-        if stack.strip() == 'NoneType: None':
-            stack = ''
-
-        final_message = f"{prefix}\n{stack}" if stack else prefix
-        self._add_log_line(final_message)
-        
-    def flush(self):
-        self._flush_log_lines()
 
     def stop_capture(self):
         self._flush_log_lines()

@@ -1,5 +1,5 @@
 from scrapy.spiders import SitemapSpider
-from seaqa_indexer.crawler.utils import spider_parse_item, load_existing_site_info, get_log_line
+from seaqa_indexer.crawler.utils import spider_parse_item, load_existing_site_info
 
 
 class SitemapCrawlerSpider(SitemapSpider):
@@ -23,9 +23,9 @@ class SitemapCrawlerSpider(SitemapSpider):
         self.existing_site_info = {}
         self.seadb_api = seadb_api
         self.storage = storage
-        self.sync_logger = sync_logger
         self._load_existing_site_info()
-        self.sync_logger.info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}", extra={'line': get_log_line(), 'file_name': __name__})
+        self.logger.info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
+        sync_logger.log(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
 
     def _load_existing_site_info(self):
         """Load the ETag and Last-Modified information of an existing file"""

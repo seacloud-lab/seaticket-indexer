@@ -4,7 +4,7 @@ import datetime
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.seadb_models.models import WebCrawlTable
-from seaqa_indexer.utils import need_update_connection_last_sync_count, get_log_line
+from seaqa_indexer.utils import need_update_connection_last_sync_count
 
 
 class BatchCrawlPipeline:
@@ -17,7 +17,6 @@ class BatchCrawlPipeline:
         self.site_id = spider.site_id
         self.seadb_api = spider.seadb_api
         self.storage = spider.storage
-        self.sync_logger = spider.sync_logger
 
     def close_spider(self, spider):
         urls_to_delete = set(spider.existing_site_info.keys()) - spider.processed_urls
@@ -41,13 +40,13 @@ class BatchCrawlPipeline:
             self.seadb_api.update_rows(self.project_uuid, table_name, rows)
             files = [url_to_filename(url) for url in urls_to_delete]
             self.storage.batch_delete_files(self.site_id, self.project_uuid, files)
-            self.sync_logger.info(f"delete files: {files}", extra={'line': get_log_line(), 'file_name': __name__})
+            spider.logger.info('delete files: %s', files)
 
         spider.connection_status['total_records'] = len(spider.processed_urls)
         spider.connection_status['last_sync_status'] = CrawlStatus.COMPLETED
         last_sync_time = datetime.datetime.now(datetime.UTC)
         spider.update_connection_status(self.site_id, json.dumps(spider.connection_status), last_sync_time)
-        self.sync_logger.info(f"Update completed: processed {len(spider.processed_urls)} URLs, deleted {len(urls_to_delete)} removed pages", extra={'line': get_log_line(), 'file_name': __name__})
+        spider.logger.info(f"Update completed: processed {len(spider.processed_urls)} URLs, deleted {len(urls_to_delete)} removed pages")
 
     def process_item(self, item, spider):
         self.save_content(item)

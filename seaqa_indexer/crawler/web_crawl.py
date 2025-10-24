@@ -1,3 +1,4 @@
+import logging
 import requests
 
 from urllib.parse import urljoin
@@ -12,8 +13,9 @@ from seaqa_indexer.crawler.spiders.site_crawler import SiteCrawlerSpider
 from seaqa_indexer.crawler.spiders.sitemap_crawler import SitemapCrawlerSpider
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
-from seaqa_indexer.utils import get_log_line
 
+
+logger = logging.getLogger(__name__)
 
 class WebCrawl:
     def __init__(self, db_session_class, sync_logger):
@@ -71,12 +73,12 @@ class WebCrawl:
                             ET.fromstring(response.content)
                             return sitemap_url
                         except ET.ParseError:
-                            self.sync_logger.debug(f"Found sitemap is not valid XML: {sitemap_url}", extra={'line': get_log_line(), 'file_name': __name__})
+                            logger.debug(f"Found sitemap is not valid XML: {sitemap_url}")
                             continue
             except Exception as e:
-                self.sync_logger.debug(f"trying to get {url} sitemap error: {str(e)}", extra={'line': get_log_line(), 'file_name': __name__})
+                logger.debug(f"trying to get {url} sitemap error: {str(e)}")
 
-        self.sync_logger.info(f"No sitemap found for site {url}", extra={'line': get_log_line(), 'file_name': __name__})
+        logger.info(f"No sitemap found for site {url}")
         return None
 
     def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back,

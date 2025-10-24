@@ -1,6 +1,4 @@
-import json
 import datetime
-from seaqa_indexer.utils import time_str_to_utc_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import SeafileTable
 
