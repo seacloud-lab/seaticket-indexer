@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class FileNotFoundException(Exception):
-    def __init__(self, message="File not found"):
+    def __init__(self, message="Page not found"):
         self.message = message
         super().__init__(self.message)
 

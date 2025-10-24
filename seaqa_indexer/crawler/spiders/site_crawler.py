@@ -27,9 +27,10 @@ class SiteCrawlerSpider(CrawlSpider):
         self.existing_site_info = {}
         self.seadb_api = seadb_api
         self.storage = storage
+        self.sync_logger = sync_logger
         self._load_existing_site_info()
         self.logger.info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
-        sync_logger.log(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
+        self.sync_logger.log(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")
 
     def _load_existing_site_info(self):
         """Load the ETag and Last-Modified information of an existing file"""

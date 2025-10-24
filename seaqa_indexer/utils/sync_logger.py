@@ -17,7 +17,7 @@ class SyncLogger:
             with self.db_session_class() as session:
                 update_sql = """
                     UPDATE project_connection
-                    SET log_details = :details
+                    SET last_sync_log = :details
                     WHERE id = :connection_id
                 """
                 session.execute(text(update_sql), {"details": '', "connection_id": self.connection_id})
@@ -43,7 +43,7 @@ class SyncLogger:
             with self.db_session_class() as session:
                 update_sql = """
                     UPDATE project_connection
-                    SET log_details = CONCAT(COALESCE(log_details, ''), :append_text)
+                    SET last_sync_log = CONCAT(COALESCE(last_sync_log, ''), :append_text)
                     WHERE id = :connection_id
                 """
                 session.execute(text(update_sql), {"append_text": append_text, "connection_id": self.connection_id})
