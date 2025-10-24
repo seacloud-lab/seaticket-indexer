@@ -1,4 +1,3 @@
-import logging
 import json
 
 from sqlalchemy import text
@@ -9,8 +8,6 @@ from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.utils import get_log_line
-
-logger = logging.getLogger(__name__)
 
 
 class ForumNotFoundException(Exception):

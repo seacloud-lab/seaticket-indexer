@@ -1,5 +1,6 @@
 import datetime
 import logging
+import traceback
 from sqlalchemy import text
 from seaqa_indexer.config import LOG_LEVEL
 
@@ -8,6 +9,7 @@ logger = logging.getLogger(__name__)
 LEVEL_MAP = {
     'CRITICAL': logging.CRITICAL,
     'ERROR': logging.ERROR,
+    'EXCEPTION': logging.ERROR,
     'WARNING': logging.WARNING,
     'INFO': logging.INFO,
     'DEBUG': logging.DEBUG,
@@ -102,10 +104,23 @@ class SyncLogger:
             file_name = extra.get('file_name')
             message = f"[DEBUG] {file_name}:{line} {message}"
         self._add_log_line(message)
+    
+    def exception(self, message, extra=None):
+        prefix = f"[ERROR] {message}"
+        if extra:
+            line = extra.get('line')
+            file_name = extra.get('file_name')
+            prefix = f"[ERROR] {file_name}:{line} {message}"
+
+        stack = traceback.format_exc()
+        if stack.strip() == 'NoneType: None':
+            stack = ''
+
+        final_message = f"{prefix}\n{stack}" if stack else prefix
+        self._add_log_line(final_message)
         
     def flush(self):
         self._flush_log_lines()
 
     def stop_capture(self):
         self._flush_log_lines()
-        

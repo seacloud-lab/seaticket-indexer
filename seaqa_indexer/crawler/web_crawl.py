@@ -1,7 +1,5 @@
-import logging
 import requests
 
-import datetime
 from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
 from sqlalchemy.sql import text
@@ -15,9 +13,6 @@ from seaqa_indexer.crawler.spiders.sitemap_crawler import SitemapCrawlerSpider
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils import get_log_line
-
-
-logger = logging.getLogger(__name__)
 
 
 class WebCrawl:

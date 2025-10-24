@@ -1,4 +1,3 @@
-import logging
 import json
 import datetime
 import os
@@ -18,9 +17,6 @@ from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
-
-
-logger = logging.getLogger(__name__)
 
 
 def sync_connection(connection_id, seaqa_db, mq, sync_logger):
@@ -133,7 +129,7 @@ def sync_connection(connection_id, seaqa_db, mq, sync_logger):
                 sync_logger.stop_capture()
                 return
     except Exception as e:
-        sync_logger.error(f'Failed to sync connection: {connection_id}, error: {e}', extra={'line': get_log_line(), 'file_name': __name__})
+        sync_logger.exception(f'Failed to sync connection: {connection_id}, error: {e}', extra={'line': get_log_line(), 'file_name': __name__})
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         sync_logger.stop_capture()
