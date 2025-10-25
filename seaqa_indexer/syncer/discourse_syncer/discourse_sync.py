@@ -44,8 +44,12 @@ class DiscourseSync:
         self.seaqa_db = seaqa_db
 
     def check_existing_topic(self, topic_id, connection_id):
-        """Check if a topic already exists"""
-        return self.discourse_seadb_api.get_topic_by_id(connection_id, topic_id)
+        """Check if a topic already exists, if exists, return the topic record"""
+        if topics := self.discourse_seadb_api.get_topics_by_connection_id(connection_id, topic_id=topic_id):
+            return topics[0]
+        else:
+            # Default topic data structure is dict
+            return {}
 
     def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at):
         """Insert a new topic"""
@@ -79,9 +83,9 @@ class DiscourseSync:
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
-        if existing_topic:
+        if topic_pk := existing_topic.get('_pk'):
             bumped_at = time_to_utc_time(topic_data.get('last_posted_at'))
-            self.update_topic(title, slug, views, category_id, topic_id, connection_id, bumped_at)
+            self.update_topic(title, slug, views, category_id, connection_id, bumped_at, topic_pk)
             logger.debug(f"Updated existing topic {topic_id}")
         else:
             # When using webhook, the returned value does not have a bumped_at.
@@ -134,7 +138,7 @@ class DiscourseSync:
         }
         self.discourse_seadb_api.insert_reply(connection_id, reply_data)
 
-    def update_topic(self, title, slug, views, category_id, topic_id, connection_id, bumped_at):
+    def update_topic(self, title, slug, views, category_id, connection_id, bumped_at, primary_key):
         """Update an existing topic"""
         topic_data = {
             self.topics_table.title.name: title,
@@ -144,7 +148,7 @@ class DiscourseSync:
             self.topics_table.bumped_at.name: bumped_at.isoformat(),
             self.topics_table.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
-        self.discourse_seadb_api.update_topic(connection_id, topic_id, topic_data)
+        self.discourse_seadb_api.update_topic(connection_id, topic_data, primary_key)
 
     def check_existing_reply(self, topic_id, post_number, connection_id):
         """Check if a reply already exists"""
@@ -166,40 +170,30 @@ class DiscourseSync:
             "Api-Username": api_username
         }
 
-    def add_or_update_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers, sync_logger):
-        """Deletes and recreates an existing topic and its replies to ensure content is up-to-date."""
-        # Delete existing topic and its replies
-        self.delete_topic_and_replies(topic_id, connection_id)
-
-        # Create new topic with replies
-        self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id, sync_logger)
-        logger.debug(f"Successfully recreated topic {topic_id} with replies.")
-
-    def _create_topic_and_replies(self, topic_data, topic_id, forum_url, headers, connection_id, sync_logger):
-        """Create new topic and its replies"""
-        # Fetch topic posts
-        topic_replies_data = self.get_discourse_topic_replies(forum_url, topic_id, headers)
-        if not topic_replies_data:
-            logger.info(f"fetch 0 replies for topic {topic_id}")
-            sync_logger.log(f"fetch 0 replies for topic {topic_id}")
-            return
-
-        # Create topic
-        self._insert_topic_data(topic_data, topic_id, connection_id)
-
-        # Create replies
-        self._insert_topic_replies(topic_replies_data, topic_id, connection_id)
-
-    def _insert_topic_data(self, topic_data, topic_id, connection_id):
-        """Insert topic data into database"""
+    def add_or_update_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers, primary_key, sync_logger):
+        """Create topic and its replies if not exist, otherwise update them"""
         title = topic_data.get('title')
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
         bumped_at = time_to_utc_time(topic_data.get('bumped_at'))
-        topic_created_at = time_to_utc_time(topic_data.get('created_at'))
+        if primary_key:
+            # Update existing topic
+            self.update_topic(title, slug, views, category_id, connection_id, bumped_at, primary_key)
+            self.discourse_seadb_api.delete_replies_by_topic(connection_id, topic_id)
+        else:
+            # Create new topic
+            topic_created_at = time_to_utc_time(topic_data.get('created_at'))
+            self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at)
 
-        self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at)
+        # Fetch and insert replies
+        topic_replies_data = self.get_discourse_topic_replies(forum_url, topic_id, headers)
+        if not topic_replies_data:
+            logger.info(f"fetch 0 replies for topic {topic_id}")
+            sync_logger.log(f"fetch 0 replies for topic {topic_id}")
+            return
+        self._insert_topic_replies(topic_replies_data, topic_id, connection_id)
+        logger.debug(f"Successfully recreated topic {topic_id} with replies.")
 
     def _insert_topic_replies(self, topic_replies_data, topic_id, connection_id):
         """Insert topic replies into database"""
@@ -306,9 +300,10 @@ class DiscourseSync:
                     if topic_bumped_at <= existing_bumped_at:
                         logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
                         continue
-
+                
+                exist_topic_pk = existing_topic.get('_pk')
                 # Handle different sync scenarios
-                self.add_or_update_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers, sync_logger)
+                self.add_or_update_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers, exist_topic_pk, sync_logger)
 
                 sync_count += 1
                 should, new_time, new_count = need_update_connection_last_sync_count(

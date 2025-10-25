@@ -6,7 +6,6 @@ from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 
 
-
 logger = logging.getLogger(__name__)
 
 class DiscourseSeaDBAPI:
@@ -20,15 +19,6 @@ class DiscourseSeaDBAPI:
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
         rows = [topic_data]
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
-
-    def get_topic_by_id(self, connection_id, topic_id):
-        """Retrieve topic record based on topic_id"""
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id}"
-        result = self.seadb_api.query_rows(self.base_id, sql)
-        if result and 'results' in result and result['results']:
-            return result['results'][0]
-        return None
 
     def get_topics_by_page(self, connection_id, since, page_size, offset):
         issues_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
@@ -62,15 +52,13 @@ class DiscourseSeaDBAPI:
         result = self.seadb_api.query_rows(self.base_id, sql)
         if result and 'results' in result and result['results']:
             return result['results'][0]
-        return None
+        return {}
 
-    def update_topic(self, connection_id, topic_data):
+    def update_topic(self, connection_id, topic_data, primary_key):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        pk = topic_data.get('_pk')
-        row_data = {k: v for k, v in topic_data.items() if k != '_pk'}
         updates = [{
-            "pk": pk,
-            "row": row_data
+            "pk": primary_key,
+            "row": topic_data
         }]
         return self.seadb_api.update_rows(
             base_id=self.base_id,
