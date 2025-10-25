@@ -1,7 +1,6 @@
 # coding: UTF-8
 
 import os
-import tempfile
 import logging
 import re
 import chardet
@@ -9,11 +8,15 @@ import json
 from zipfile import ZipFile
 from io import BytesIO
 
-from seaqa_indexer.utils import run
 from seaqa_indexer.utils.constants import text_suffixes, office_suffixes
+from seaqa_indexer.utils.converter import pptx_to_markdown
+from seaqa_indexer.utils.converter import pdf_to_markdown
+from seaqa_indexer.utils.converter import docx_to_markdown
+from seaqa_indexer.utils.converter import sdoc_to_markdown
 
 
 logger = logging.getLogger(__name__)
+
 
 class ZipString(ZipFile):
     def __init__(self, content):
@@ -21,47 +24,18 @@ class ZipString(ZipFile):
 
 
 def extract_pdf_text(content):
-    temp_pdf = tempfile.NamedTemporaryFile()
-    temp_txt = tempfile.NamedTemporaryFile()
-    try:
-        pdf_name = temp_pdf.name
-        txt_name = temp_txt.name
-        with open(pdf_name, 'wb') as output:
-            output.write(content)
+    pdf_md = pdf_to_markdown(BytesIO(content))
+    return pdf_md.encode()
 
-        cmd = ['timeout', str(5 * 60), 'pdftotext', pdf_name, txt_name]
-        if run(cmd) != 0:
-            content = None
-        else:
-            with open(txt_name, 'rb') as fp:
-                content = fp.read()
-
-        return content
-    except Exception as e:
-        logger.warning('error when extracting pdf: %s', e)
-        return None
-    finally:
-        temp_pdf.close()
-        temp_txt.close()
 
 def extract_docx_text(content):
-    doc = ZipString(content)
-    content = doc.read('word/document.xml')
-    cleaned = re.sub('<(.|\n)*?>', ' ', content.decode())
-    return cleaned.encode()
+    md_content = docx_to_markdown(BytesIO(content))
+    return md_content.encode()
+
 
 def extract_pptx_text(content):
-    doc = ZipString(content)
-    unpacked = doc.infolist()
-    slides = []
-    for item in unpacked:
-        if item.orig_filename.startswith('ppt/slides') or item.orig_filename.startswith('ppt/notesSlides'):
-            if item.orig_filename.endswith('xml'):
-                slides.append(doc.read(item.orig_filename).decode())
-
-    content = ''.join(slides)
-    cleaned = re.sub('<(.|\n)*?>', ' ', content)
-    return cleaned.encode()
+    pptx_md = pptx_to_markdown(BytesIO(content))
+    return pptx_md.encode()
 
 
 def extract_odf_text(content):
@@ -73,23 +47,8 @@ def extract_odf_text(content):
 
 def extract_sdoc_text(content):
     data = json.loads(content)
-    texts = []
-
-    def extract_text(node):
-        children = node.get('children', [])
-        for item in children:
-            text = item.get('text', '')
-            if text and text.strip():
-                texts.append(text.strip())
-            extract_text(item)
-
-    # Ensure start with the 'elements' part of the data
-    for element in data.get('elements', []):
-        extract_text(element)
-
-    result = ' '.join(texts)
-    return result.encode()
-
+    markdown_text = sdoc_to_markdown(data)
+    return markdown_text.encode()
 
 EXTRACT_TEXT_FUNCS = {
     'docx': extract_docx_text,
