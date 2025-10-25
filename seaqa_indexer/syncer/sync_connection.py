@@ -197,7 +197,7 @@ def sync_seafile(connection_id, repo_id, since, seahub_api, seafile_seadb_api, i
         for file in recently_changed_files:
             parent_dir = file.get('_parent_dir')
             dirent_name = file.get('_name')
-            mtime = file.get('_mtime')
+            mtime = file.get('_file_mtime')
             size = file.get('_size')
             content = ''
             if size < REPO_FILE_SIZE_LIMIT:
