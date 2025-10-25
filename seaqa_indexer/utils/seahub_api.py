@@ -13,8 +13,6 @@ def parse_response(response):
     if response.status_code == 400:
         logger.warning('seahub error: %s', response.text)
 
-    if response.status_code == 404:
-        raise FileNotFoundException()
     elif response.status_code > 400:
         raise ConnectionError(response.status_code, response.text)
     else:
