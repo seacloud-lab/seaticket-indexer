@@ -18,7 +18,6 @@ from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.crawl_web import craw_web
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.utils.sync_logger import SyncLogger
 
 
 logger = logging.getLogger(__name__)
@@ -84,8 +83,7 @@ class WebCrawlTaskWorker(object):
 
     def crawl_site(self, connection_id):
         try:
-            task_sync_logger = SyncLogger(self.db_session_class)
-            craw_web(connection_id, self.db_session_class, self.mq, task_sync_logger)
+            craw_web(connection_id, self.db_session_class, self.mq)
         except Exception as e:
             logger.exception('crawl site: %s failed, error: %s', connection_id, e)
 

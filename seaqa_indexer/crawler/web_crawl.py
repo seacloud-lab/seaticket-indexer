@@ -74,11 +74,14 @@ class WebCrawl:
                             return sitemap_url
                         except ET.ParseError:
                             logger.debug(f"Found sitemap is not valid XML: {sitemap_url}")
+                            self.sync_logger.log(f"Found sitemap is not valid XML: {sitemap_url}")
                             continue
             except Exception as e:
                 logger.debug(f"trying to get {url} sitemap error: {str(e)}")
+                self.sync_logger.log(f"Trying to get {url} sitemap error")
 
         logger.info(f"No sitemap found for site {url}")
+        self.sync_logger.log(f"No sitemap found for site {url}")
         return None
 
     def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back,

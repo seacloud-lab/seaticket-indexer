@@ -7,7 +7,6 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
-from seaqa_indexer.utils.sync_logger import SyncLogger
 
 logger = logging.getLogger(__name__)
 
@@ -46,19 +45,16 @@ class DiscourseSyncManager:
 
     def handle_webhook(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
-        sync_logger = SyncLogger(self.db_session_class).init(connection_id)
         project_connection = self.get_project_connection_by_id(connection_id)
         if not project_connection:
             raise ForumNotFoundException()
 
         project_uuid = project_connection.project_uuid
-        discourse_sync = DiscourseSync(project_uuid, self.db_session_class, sync_logger)
+        discourse_sync = DiscourseSync(project_uuid, self.db_session_class)
 
         connection_is_active = project_connection.is_active
         if not connection_is_active:
             logger.warning('connection: %s is inactive', connection_id)
-            sync_logger.log(f'connection {connection_id} is inactive')
-            sync_logger.stop_capture()
             raise ForumInActiveException()
 
         topic_id = request_data.get('topic', {}).get('id')
@@ -72,6 +68,4 @@ class DiscourseSyncManager:
             discourse_sync.handle_reply_delete(connection_id, topic_id, request_data)
         else:
             logger.warning(f"Unknown event type: {event_type}")
-            sync_logger.log(f"Unknown event type: {event_type}")
-        sync_logger.stop_capture()
         self.add_discourse_index_task(connection_id)

@@ -12,7 +12,6 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.syncer.sync_connection import sync_connection
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.utils.constants import ConnectionType
 
 
@@ -121,8 +120,7 @@ class ConnectionSyncTaskWorker(object):
 
     def sync(self, connection_id):
         try:
-            task_sync_logger = SyncLogger(self.db_session_class)
-            sync_connection(connection_id, self.seaqa_db, self.mq, task_sync_logger)
+            sync_connection(connection_id, self.seaqa_db, self.mq, self.db_session_class)
         except Exception as e:
             logger.exception('%s sync connection %s error: %s' % (self.tname, connection_id, e))
 

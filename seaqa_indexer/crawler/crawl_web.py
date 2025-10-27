@@ -4,10 +4,11 @@ import json
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.crawler.web_crawl import WebCrawl
+from seaqa_indexer.utils.sync_logger import SyncLogger
 
 logger = logging.getLogger(__name__)
 
-def craw_web(connection_id, db_session_class, mq, sync_logger):
+def craw_web(connection_id, db_session_class, mq):
     def failed_crawl_site(error_msg, params):
         site_id, site_url, connection_status, sync_logger = params
         connection_status['last_sync_status'] = CrawlStatus.FAILED
@@ -25,7 +26,7 @@ def craw_web(connection_id, db_session_class, mq, sync_logger):
         sync_logger.log(f"Completed crawl connection: {connection_id}")
         sync_logger.stop_capture()
     logger.info(f"Start crawl connection: {connection_id}")
-    sync_logger.init(connection_id)
+    sync_logger = SyncLogger(db_session_class).init(connection_id)
     sync_logger.log(f"Start crawl connection: {connection_id}")
     seaqa_db = SeaqaDB(db_session_class)
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
@@ -67,7 +68,7 @@ def craw_web(connection_id, db_session_class, mq, sync_logger):
         web_crawl.crawl(connection_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back, failed_crawl_site)
     except Exception as e:
         logger.exception('failed to crawl site: %s, error: %s', connection_id, e)
-        sync_logger.log(f'failed to crawl site: {e}')
+        sync_logger.log(f'Internal Server Error')
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         sync_logger.stop_capture()
