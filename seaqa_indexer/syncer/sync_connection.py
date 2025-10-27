@@ -113,7 +113,7 @@ def sync_connection(connection_id, seaqa_db, mq):
                 is_update_config = True
 
             seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
-            sync_count, total_count = sync_seafile(connection_id, repo_id, since, seahub_api, seafile_seadb_api, is_first_update)
+            sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update)
     except Exception as e:
         logger.exception('connection: %s, sync issues failed, error: %s', connection_id, e)
         connection_status['last_sync_status'] = CrawlStatus.FAILED
@@ -182,10 +182,12 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
     return sync_count, total_count
 
 
-def sync_seafile(connection_id, repo_id, since, seahub_api, seafile_seadb_api, is_first_update):
+def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update):
     page = 1
     per_page = 1000
     sync_count = 0
+    _status_last_update_time = datetime.datetime.now()
+    _status_last_update_count = 0
     # sync updated files
     while True:
         resp = seahub_api.get_recently_changed_files(since, page, per_page)
@@ -220,6 +222,14 @@ def sync_seafile(connection_id, repo_id, since, seahub_api, seafile_seadb_api, i
                 'content': content,
             }
             seafile_seadb_api.save_or_update_file_to_db(connection_id, file_info)
+            should, new_time, new_count = need_update_connection_last_sync_count(
+                sync_count, _status_last_update_time, _status_last_update_count
+            )
+            if should:
+                connection_status['last_sync_count'] = sync_count
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                _status_last_update_time = new_time
+                _status_last_update_count = new_count
             sync_count += 1
 
     # sync deleted files
