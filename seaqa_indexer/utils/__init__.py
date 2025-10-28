@@ -173,3 +173,7 @@ def need_update_connection_last_sync_count(item_count, last_update_time, last_up
         return True, now, item_count
     else:
         return False, last_update_time, last_update_count
+
+
+def get_file_suffix(filename):
+    return os.path.splitext(filename)[1].strip(".").lower()

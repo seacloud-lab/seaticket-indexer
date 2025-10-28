@@ -72,12 +72,16 @@ class BatchCrawlPipeline:
         etag = item.get('etag') if item else None
         last_modified = item.get('last_modified') if item else None
         filename = url_to_filename(url)
-        self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
+
         table_name = WebCrawlTable.gen_table_name(self.site_id)
         sql = f"""SELECT _pk FROM `{table_name}` WHERE url='{url}'"""
         resp_result = self.seadb_api.query_rows(self.project_uuid, sql)
         results = resp_result.get('results')
         if results:
+            old_hash = results[0].get('hash')
+            if hash and hash != old_hash:
+                self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
+                return
             rows = [
                 {
                     "pk": results[0].get('_pk'),
@@ -92,6 +96,7 @@ class BatchCrawlPipeline:
             ]
             self.seadb_api.update_rows(self.project_uuid, table_name, rows)
         else:
+            self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
             rows = [
                 {
                     WebCrawlTable.url.name: url,

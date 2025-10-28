@@ -8,13 +8,13 @@ from urllib.parse import urlparse
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT
-from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time, encrypt_config
+from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time, encrypt_config, get_file_suffix
 from seaqa_indexer.utils import need_update_connection_last_sync_count
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seasearch.utils import get_content_by_download_link
 from seaqa_indexer.utils.seahub_api import FileNotFoundException
 from seaqa_indexer.seasearch.extract import ExtractorFactory
-from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT, SEADB_CONTENT_SIZE_LIMIT
+from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT, SEADB_CONTENT_SIZE_LIMIT, SYNC_FILE_SUFFIXES
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
@@ -242,6 +242,18 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
             dirent_name = file.get('_name')
             mtime = file.get('_file_mtime')
             size = file.get('_size')
+
+            file_suffix = get_file_suffix(dirent_name)
+            if file_suffix not in SYNC_FILE_SUFFIXES:
+                continue
+
+            existing_file = seafile_seadb_api.get_file_by_path(connection_id, parent_dir, dirent_name)
+            if existing_file:
+                existing_mtime = time_str_to_utc_time(str(existing_file.get('mtime')))
+                if time_str_to_utc_time(mtime) <= existing_mtime:
+                    logger.debug(f'connection_id % parent_dir % filename: %s is up to date, skipping sync.', connection_id, parent_dir, dirent_name)
+                    continue
+
             content = ''
             if size < REPO_FILE_SIZE_LIMIT:
                 file_path = os.path.join(parent_dir, dirent_name)
@@ -287,6 +299,9 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
             break
 
         for file in recently_deleted_files:
+            file_suffix = get_file_suffix(file.get('obj_name'))
+            if file_suffix not in SYNC_FILE_SUFFIXES:
+                continue
             file_info = {
                 'path': file.get('path'),
                 'filename': file.get('obj_name'),
