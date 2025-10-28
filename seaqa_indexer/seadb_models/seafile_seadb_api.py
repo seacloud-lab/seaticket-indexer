@@ -68,8 +68,8 @@ class SeafileSeaDBAPI:
         return result['results'][0].get('count', 0)
 
     def get_files_by_page(self, connection_id, since, page_size, offset):
-        issues_table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        table_name = SeafileTable.gen_table_name(connection_id)
+        sql = f"SELECT * FROM `{table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
         issues = res.get('results', [])
         return issues
@@ -77,4 +77,11 @@ class SeafileSeaDBAPI:
     def delete_files_from_db(self, connection_id, deleted_seadb_pk_list):
         table_name = SeafileTable.gen_table_name(connection_id)
         self.seadb_api.delete_rows(self.base_id, table_name, deleted_seadb_pk_list)
+
+    def get_file_by_path(self, connection_id, path, filename):
+        table_name = SeafileTable.gen_table_name(connection_id)
+        sql = f"SELECT mtime FROM `{table_name}` WHERE `path` >= '{path}' and filename='{filename}'"
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        files = res.get('results', [])
+        return files[0] if files else None
 
