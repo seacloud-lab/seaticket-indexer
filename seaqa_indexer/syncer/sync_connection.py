@@ -14,7 +14,7 @@ from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seasearch.utils import get_content_by_download_link
 from seaqa_indexer.utils.seahub_api import FileNotFoundException
 from seaqa_indexer.seasearch.extract import ExtractorFactory
-from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT
+from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT, SEADB_CONTENT_SIZE_LIMIT
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
@@ -219,7 +219,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
                 'filename': dirent_name,
                 'mtime': mtime,
                 'size': size,
-                'content': content,
+                'content': content[:SEADB_CONTENT_SIZE_LIMIT] if content else '',
             }
             seafile_seadb_api.save_or_update_file_to_db(connection_id, file_info)
             should, new_time, new_count = need_update_connection_last_sync_count(
