@@ -1,7 +1,6 @@
 import logging
 import requests
 
-import datetime
 from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
 from sqlalchemy.sql import text
@@ -18,10 +17,10 @@ from seaqa_indexer.crawler.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
-
 class WebCrawl:
-    def __init__(self, db_session_class):
+    def __init__(self, db_session_class, sync_logger):
         self.db_session_class = db_session_class
+        self.sync_logger = sync_logger
 
         self.settings = get_project_settings()
         self.runner = CrawlerRunner(self.settings)
@@ -75,11 +74,14 @@ class WebCrawl:
                             return sitemap_url
                         except ET.ParseError:
                             logger.debug(f"Found sitemap is not valid XML: {sitemap_url}")
+                            self.sync_logger.log(f"Found sitemap is not valid XML: {sitemap_url}")
                             continue
             except Exception as e:
                 logger.debug(f"trying to get {url} sitemap error: {str(e)}")
+                self.sync_logger.log(f"Trying to get {url} sitemap error")
 
         logger.info(f"No sitemap found for site {url}")
+        self.sync_logger.log(f"No sitemap found for site {url}")
         return None
 
     def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back,
@@ -132,7 +134,8 @@ class WebCrawl:
                 connection_status,
                 update_connection_status=self.update_connection_status,
                 seadb_api=self.seadb_api,
-                storage=self.storage
+                storage=self.storage,
+                sync_logger=self.sync_logger
             )
         else:
             d = self.runner.crawl(
@@ -143,7 +146,8 @@ class WebCrawl:
                 connection_status=connection_status,
                 update_connection_status=self.update_connection_status,
                 seadb_api=self.seadb_api,
-                storage=self.storage
+                storage=self.storage,
+                sync_logger=self.sync_logger
             )
 
         d.addCallback(success_call_back, (site_id,))

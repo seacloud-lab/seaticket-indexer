@@ -5,7 +5,6 @@ import json
 import datetime
 import random
 
-from sqlalchemy import text
 from urllib.parse import urljoin
 from functools import wraps
 from dateutil.relativedelta import relativedelta
@@ -167,21 +166,22 @@ class DiscourseSync:
             "Api-Username": api_username
         }
 
-    def add_or_update_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers):
+    def add_or_update_topic_and_replies(self, topic_data, topic_id, connection_id, forum_url, headers, sync_logger):
         """Deletes and recreates an existing topic and its replies to ensure content is up-to-date."""
         # Delete existing topic and its replies
         self.delete_topic_and_replies(topic_id, connection_id)
 
         # Create new topic with replies
-        self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id)
+        self._create_topic_and_replies(topic_data, topic_id, forum_url, headers, connection_id, sync_logger)
         logger.debug(f"Successfully recreated topic {topic_id} with replies.")
 
-    def _create_topic_and_replies(self, topic_data, topic_id, forum_url, headers, connection_id):
+    def _create_topic_and_replies(self, topic_data, topic_id, forum_url, headers, connection_id, sync_logger):
         """Create new topic and its replies"""
         # Fetch topic posts
         topic_replies_data = self.get_discourse_topic_replies(forum_url, topic_id, headers)
         if not topic_replies_data:
             logger.info(f"fetch 0 replies for topic {topic_id}")
+            sync_logger.log(f"fetch 0 replies for topic {topic_id}")
             return
 
         # Create topic
@@ -263,7 +263,7 @@ class DiscourseSync:
             'replies': replies,
         }
 
-    def sync(self, connection_id, forum_url, sync_years, project_created_at, api_key, api_username, last_updated_at, connection_status):
+    def sync(self, connection_id, forum_url, sync_years, project_created_at, api_key, api_username, last_updated_at, connection_status, sync_logger):
         page = 0
         should_stop = False
         sync_count = 0
@@ -308,7 +308,7 @@ class DiscourseSync:
                         continue
 
                 # Handle different sync scenarios
-                self.add_or_update_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers)
+                self.add_or_update_topic_and_replies(topic_data, topic_id, connection_id, forum_url, headers, sync_logger)
 
                 sync_count += 1
                 should, new_time, new_count = need_update_connection_last_sync_count(

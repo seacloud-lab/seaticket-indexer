@@ -1,7 +1,6 @@
 import os
 import sys
 import logging
-import atexit
 import subprocess
 import hashlib
 import json
