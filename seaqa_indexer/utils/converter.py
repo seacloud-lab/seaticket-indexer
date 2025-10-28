@@ -1,5 +1,5 @@
+import re
 from html2text import HTML2Text
-import pdfplumber
 
 from pptx import Presentation
 from operator import attrgetter
@@ -17,6 +17,8 @@ from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 from docx.text.hyperlink import Hyperlink
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from pdfminer.high_level import extract_pages
+from pdfminer.layout import LTTextContainer, LTChar, LTRect, LTLine
 
 
 md_hander = HTML2Text(bodywidth=0)  # no wrapping length
@@ -499,26 +501,129 @@ def pptx_to_markdown(file):
 
 
 # ****** parse pdf *******
-def pdf_to_markdown(pdf_file):
-    with pdfplumber.open(pdf_file) as pdf:
-        md_content = []
-        for page in pdf.pages:
-            text = page.extract_text()
+def get_text_info(element):
+    """Extract the content, average font size, and left indentation of text blocks"""
+    text = element.get_text().strip()
+    if not text:
+        return None, None, None
+
+    # Calculate the average font size (taking the average of all characters)
+    chars = [c for c in element if isinstance(c, LTChar)]
+    if not chars:
+        return text, None, element.x0  # x0 is the left indentation coordinate
+    avg_font_size = sum(c.size for c in chars) / len(chars)
+    return text, round(avg_font_size, 1), element.x0
+
+
+def is_list_item(text, x0, prev_x0, list_indent_threshold=20):
+    """Determine whether it is a list item by indentation and prefix symbols"""
+    # List items usually have indentation (x0 greater than regular paragraphs)
+    if x0 - prev_x0 > list_indent_threshold:
+        return True
+    # Contains list symbols (such as 1., -, •, etc.)
+    list_pattern = re.compile(r'^(\d+\.|\*|-|•)\s+')
+    if list_pattern.match(text):
+        return True
+    return False
+
+
+def table_to_markdown(table_data):
+    """Convert table data to Markdown format"""
+    if not table_data:
+        return ""
+    max_cols = max(len(row) for row in table_data)
+    # Fill in the number of columns
+    table_data = [row + [""] * (max_cols - len(row)) for row in table_data]
+    md_table = []
+    # header
+    md_table.append("| " + " | ".join(table_data[0]) + " |")
+    # dividing line
+    md_table.append("| " + " | ".join(["---"] * max_cols) + " |")
+    # Content line
+    for row in table_data[1:]:
+        md_table.append("| " + " | ".join(row) + " |")
+    return "\n".join(md_table)
+
+
+def extract_table_from_page(page):
+    """Extract table data from the page (grouped based on text coordinates)"""
+    texts = []
+    for element in page:
+        if isinstance(element, LTTextContainer):
+            text, _, x0 = get_text_info(element)
             if text:
-                md_content.append(text + "\n\n")
+                # Storage (y0: vertical coordinate, x0: horizontal coordinate, text: content)
+                texts.append((-element.y0, x0, text))  # Negative sign is used for sorting (the larger y0, the higher it is)
 
-            tables = page.extract_tables()
-            for table in tables:
-                if not table:
+    if len(texts) < 2:
+        return None  # Less than 2 rows are not considered as a table
+
+    # Sort by y0 (top to bottom) and group into rows (same row for y-phase myopia)
+    texts.sort()
+    rows = []
+    current_row = [texts[0]]
+    y_threshold = 5  # Y-coordinate difference threshold
+    for t in texts[1:]:
+        if abs(t[0] - current_row[-1][0]) < y_threshold:
+            current_row.append(t)
+        else:
+            rows.append(sorted(current_row, key=lambda x: x[1]))  # Sort by x within the row
+            current_row = [t]
+    rows.append(sorted(current_row, key=lambda x: x[1]))
+
+    # Extract each line of text
+    table_data = []
+    for row in rows:
+        table_data.append([t[2] for t in row])
+    return table_data
+
+
+def pdf_to_markdown(pdf_path):
+    md_content = []
+    prev_x0 = 0
+    in_list = False
+
+    for page_num, page in enumerate(extract_pages(pdf_path), 1):
+        table_data = extract_table_from_page(page)
+        if table_data:
+            md_content.append(table_to_markdown(table_data) + "\n")
+
+        # Extract text content (exclude text from the table to avoid duplication)
+        for element in page:
+            if isinstance(element, LTTextContainer) and not isinstance(element, (LTRect, LTLine)):
+                text, font_size, x0 = get_text_info(element)
+                if not text:
                     continue
-                headers = table[0]
-                md_content.append("| " + " | ".join([str(h) if h else "" for h in headers]) + " |\n")
-                md_content.append("| " + " | ".join(["---"] * len(headers)) + " |\n")
-                for row in table[1:]:
-                    md_content.append("| " + " | ".join([str(cell) if cell else "" for cell in row]) + " |\n")
-                md_content.append("\n")
 
-        return "\n".join(md_content)
+                # Identify the title (assuming font size corresponds to hierarchy)
+                if font_size and font_size > 16:
+                    md_content.append(f"# {text}\n")
+                    in_list = False
+                elif font_size and font_size > 14:
+                    md_content.append(f"## {text}\n")
+                    in_list = False
+                elif font_size and font_size > 12:
+                    md_content.append(f"### {text}\n")
+                    in_list = False
+                else:
+                    # Identify list items
+                    if is_list_item(text, x0, prev_x0):
+                        # Remove the prefix of the list symbol (such as "1 "," - ")
+                        text = re.sub(r'^(\d+\.|\*|-|•)\s+', '', text)
+                        # Calculate indentation level (every 20 pixels is one level)
+                        indent = int((x0 - prev_x0) // 20) * 2
+                        md_content.append(f"{' ' * indent}- {text}\n")
+                        in_list = True
+                    else:
+                        # Ordinary paragraph
+                        if in_list:
+                            md_content.append("\n")  # Add a blank line after the end of the list
+                            in_list = False
+                        md_content.append(f"{text}\n")
+
+                prev_x0 = x0 if not in_list else prev_x0  # List items do not update baseline indentation
+
+    return "\n".join(md_content)
 
 
 # ****** parse docx *******
