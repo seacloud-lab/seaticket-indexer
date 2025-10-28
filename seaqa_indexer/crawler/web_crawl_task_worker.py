@@ -34,7 +34,6 @@ class WebCrawlTaskWorker(object):
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         reactor.suggestThreadPoolSize(10)
-
         self.set_signal()
         self.worker_list = []
 

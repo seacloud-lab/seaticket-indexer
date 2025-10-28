@@ -10,7 +10,6 @@ from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 
 logger = logging.getLogger(__name__)
 
-
 class ForumNotFoundException(Exception):
     pass
 
@@ -47,10 +46,11 @@ class DiscourseSyncManager:
     def handle_webhook(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
         project_connection = self.get_project_connection_by_id(connection_id)
-        project_uuid = project_connection.project_uuid
-        discourse_sync = DiscourseSync(project_uuid, self.db_session_class)
         if not project_connection:
             raise ForumNotFoundException()
+
+        project_uuid = project_connection.project_uuid
+        discourse_sync = DiscourseSync(project_uuid, self.db_session_class)
 
         connection_is_active = project_connection.is_active
         if not connection_is_active:

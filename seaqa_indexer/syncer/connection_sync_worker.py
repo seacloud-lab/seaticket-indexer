@@ -120,7 +120,7 @@ class ConnectionSyncTaskWorker(object):
 
     def sync(self, connection_id):
         try:
-            sync_connection(connection_id, self.seaqa_db, self.mq)
+            sync_connection(connection_id, self.seaqa_db, self.mq, self.db_session_class)
         except Exception as e:
             logger.exception('%s sync connection %s error: %s' % (self.tname, connection_id, e))
 

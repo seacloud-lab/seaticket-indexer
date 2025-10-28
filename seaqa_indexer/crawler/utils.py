@@ -57,7 +57,6 @@ def spider_parse_item(spider, response):
     if not content_changed:
         spider.logger.info(f"No changes detected for {url}")
         return
-
     spider.logger.info(f"Processing page: {url}")
 
     # Extract page title

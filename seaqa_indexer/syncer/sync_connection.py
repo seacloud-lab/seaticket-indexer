@@ -18,21 +18,26 @@ from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT, SEADB_CONTENT_SI
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
-
+from seaqa_indexer.utils.sync_logger import SyncLogger
 
 logger = logging.getLogger(__name__)
 
-
-def sync_connection(connection_id, seaqa_db, mq):
+def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     logger.info(f"Start sync connection: {connection_id}")
+    sync_logger = SyncLogger(db_session_class).init(connection_id)
+    sync_logger.log(f"Start sync connection: {connection_id}")
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
+        sync_logger.log(f'connection: {connection_id} not found')
+        sync_logger.stop_capture()
         return
 
     connection_is_active = project_connection.is_active
     if not connection_is_active:
         logger.warning('connection: %s is inactive', connection_id)
+        sync_logger.log(f'connection: {connection_id} is inactive')
+        sync_logger.stop_capture()
         return
 
     connection_status = json.loads(project_connection.status)
@@ -70,6 +75,7 @@ def sync_connection(connection_id, seaqa_db, mq):
                 discourse_api_username,
                 old_last_sync_time,
                 connection_status,
+                sync_logger,
             )
 
             total_count = discourse_sync.get_discourse_forum_topic_count(connection_id)
@@ -83,8 +89,10 @@ def sync_connection(connection_id, seaqa_db, mq):
                 repo_owner, repo_name = parts[0], parts[1]
             except Exception as e:
                 logger.warning("github repository is invalid: %s", e)
+                sync_logger.log(f"Github repository is invalid")
                 connection_status['last_sync_status'] = CrawlStatus.FAILED
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                sync_logger.stop_capture()
                 return
             since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
             github_api = GitHubAPI(token, repo_owner, repo_name, connection_id)
@@ -113,11 +121,42 @@ def sync_connection(connection_id, seaqa_db, mq):
                 is_update_config = True
 
             seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
-            sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update)
+            sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
     except Exception as e:
-        logger.exception('connection: %s, sync issues failed, error: %s', connection_id, e)
+        logger.exception('connection: %s, sync failed, error: %s', connection_id, e)
+        try:
+            if len(e.args) > 0:
+                status_raw = e.args[0]
+                status_text = str(status_raw)
+                if '401' in status_text:
+                    sync_logger.log('Sync failed: Unauthorized')
+                elif '403' in status_text:
+                    sync_logger.log('Sync failed: Forbidden')
+                elif '404' in status_text:
+                    err_msg = 'Page Not Found'
+                    if len(e.args) > 1:
+                        detail_raw = e.args[1]
+                        try:
+                            if isinstance(detail_raw, dict):
+                                error = detail_raw
+                            elif isinstance(detail_raw, str):
+                                error = json.loads(detail_raw)
+                            else:
+                                error = {}
+                            err_msg = error.get('error_msg', err_msg)
+                        except Exception:
+                            pass
+                    sync_logger.log(f'Sync failed: {err_msg}')
+                else:
+                    sync_logger.log('Internal Server Error')
+            else:
+                sync_logger.log('Internal Server Error')
+        except Exception as e:
+            logger.error(e)
+            sync_logger.log(f'Internal Server Error')
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        sync_logger.stop_capture()
         return
 
     # finish sync
@@ -131,6 +170,8 @@ def sync_connection(connection_id, seaqa_db, mq):
     seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time, config=new_config)
 
     logger.info('Finish sync connection: %s', connection_id)
+    sync_logger.log(f'Finish sync connection: {connection_id}')
+    sync_logger.stop_capture()
     msg_content = {
         'connection_id': connection_id,
     }
@@ -182,7 +223,7 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
     return sync_count, total_count
 
 
-def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update):
+def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger):
     page = 1
     per_page = 1000
     sync_count = 0
@@ -211,6 +252,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
                     except FileNotFoundException:
                         logger.warning('connection: %s, repo_id: %s, parent_dir: %s, name: %s file not found',
                                        connection_id, repo_id, parent_dir, dirent_name)
+                        sync_logger.log(f'File not found: {parent_dir}/{dirent_name}')
                         continue
                     content = get_content_by_download_link(download_link)
                     content = extractor.extract(connection_id, repo_id, content, file_path)
