@@ -42,7 +42,6 @@ def spider_parse_item(spider, response):
             response_last_modified = parsedate_to_datetime(response_last_modified).isoformat()
     except UnicodeDecodeError as e:
         spider.logger.debug(f"Failed to decode cache headers for {url}: {e}")
-        spider.sync_logger.log(f"Failed to decode cache headers for {url}")
         response_etag = None
         response_last_modified = None
 
@@ -69,7 +68,6 @@ def spider_parse_item(spider, response):
         content_hash = md5(body_content) if body_content else None
     except Exception as e:
         spider.logger.debug(f"Failed to compute content hash for {url}: {e}")
-        spider.sync_logger.log(f"Failed to compute content hash for {url}")
         content_hash = None
     if content_hash == cache_info.get('hash', ''):
         spider.logger.info(f"No changes detected for {url}")
