@@ -17,7 +17,7 @@ from seaqa_indexer.utils.constants import ConnectionType
 
 logger = logging.getLogger(__name__)
 
-NEED_RECOVER_SYNC_TYPES = [ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value]
+NEED_RECOVER_SYNC_TYPES = [ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value, ConnectionType.SEAFILE.value]
 
 
 class ConnectionSyncTaskWorker(object):
