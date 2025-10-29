@@ -4,7 +4,6 @@ import datetime
 import pytz
 
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.seadb_models.models import WebCrawlTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
@@ -33,6 +32,9 @@ class SummaryVectorIndex(object):
                 'm': 64,
                 'nbits': 8,
                 'vec_index_type': 'flat'
+            },
+            'modified_time': {
+                'type': 'date'
             }
         }
     }
@@ -121,7 +123,7 @@ class SummaryVectorIndex(object):
         
         while True:
             sql = f"""
-                SELECT _pk, ai_summary, ai_summary_vector, deleted, ai_processed_time 
+                SELECT _pk, ai_summary, ai_summary_vector, deleted, modified_time 
                 FROM `{table_name}` 
                 WHERE ai_processed_time IS NOT NULL 
                 AND ai_processed_time > '{last_ai_indexed_at}'
@@ -138,6 +140,7 @@ class SummaryVectorIndex(object):
                 ai_summary = row.get('ai_summary')
                 ai_summary_vector = row.get('ai_summary_vector')
                 deleted = row.get('deleted')
+                modified_time = row.get('modified_time')
                 
                 if deleted:
                     deleted_seadb_pk_set.add(pk)
@@ -155,6 +158,7 @@ class SummaryVectorIndex(object):
                     "project_id": project_uuid,
                     "connection_id": connection_id,
                     "pk": pk,
+                    "modified_time": modified_time
                 }
                 bulk_params.append(index_info)
                 bulk_params.append(doc_info)
@@ -178,17 +182,31 @@ class SummaryVectorIndex(object):
         
         return index_count
 
-    def semantic_search(self, index_name, query_vector, top_k=10):
+    def semantic_search(self, index_names, query_vector, top_k=10, time_from=None, time_to=None):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "project_id", "connection_id", "pk"],
+            "return_fields": ["ai_summary", "project_id", "connection_id", "pk", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
 
+        # Add time range filter if provided
+        if time_from is not None or time_to is not None:
+            range_filter = {}
+            if time_from is not None:
+                range_filter["gte"] = time_from
+            if time_to is not None:
+                range_filter["lte"] = time_to
+            
+            data["filter"] = {
+                "range": {
+                    "modified_time": range_filter
+                }
+            }
+
         search_results = self.seasearch_api.vector_search(
-            index_name=index_name,
+            index_names=index_names,
             data=data
         )
 
@@ -205,6 +223,7 @@ class SummaryVectorIndex(object):
                 'project_id': fields.get('project_id', [''])[0],
                 'connection_id': fields.get('connection_id', [''])[0],
                 'pk': fields.get('pk', [''])[0],
+                'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0)
             })
         return topk_search_results

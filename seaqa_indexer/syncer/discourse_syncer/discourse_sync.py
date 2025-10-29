@@ -13,6 +13,7 @@ from seaqa_indexer.utils import time_to_utc_time, need_update_connection_last_sy
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 
+
 logger = logging.getLogger(__name__)
 
 MAX_CONTENT_LENGTH = 10000

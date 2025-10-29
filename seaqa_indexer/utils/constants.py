@@ -21,6 +21,7 @@ class AIStatus:
     COMPLETED = 'completed'
     FAILED = 'failed'
 
+
 class ConnectionType(Enum):
     EMAIL = 'email'
     GITHUB_ISSUE = 'github_issue'
@@ -64,3 +65,7 @@ SEADB_CONTENT_SIZE_LIMIT = 100 * 1000
 SYNC_FILE_SUFFIXES = office_suffixes + text_suffixes
 
 INDEX_CONTENT_LIMIT = 100 * 1000
+
+SUPPORT_VECTOR_RETRIEVAL_TYPES = {
+    ConnectionType.SITE.value
+}

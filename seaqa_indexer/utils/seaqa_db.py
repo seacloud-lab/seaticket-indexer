@@ -12,7 +12,7 @@ class SeaqaDB(object):
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, pc.ai_status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.ai_indexed_at, pc.is_active, pc.created_at
+            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, pc.ai_status, pc.content_vector_status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.ai_indexed_at, pc.vector_indexed_at, pc.is_active, pc.created_at
             FROM project_connection pc 
             INNER JOIN projects p 
             ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
@@ -99,12 +99,25 @@ class SeaqaDB(object):
             session.execute(text(cmd), {'connection_id': connection_id, 'ai_indexed_at': ai_indexed_at, 'ai_status': ai_status})
             session.commit()
 
+    def update_content_vector_status_and_time(self, connection_id, content_vector_status, last_content_vector_indexed_time=None):
+        """Update chunk vector index status and time"""
+        with self.db_session_class() as session:
+            cmd = """UPDATE project_connection SET content_vector_status=:content_vector_status"""
+            params = {'connection_id': connection_id, 'content_vector_status': content_vector_status}
+            if last_content_vector_indexed_time:
+                cmd += ", vector_indexed_at=:vector_indexed_at"
+                params['vector_indexed_at'] = last_content_vector_indexed_time
+            cmd += " WHERE id = :connection_id"
+            session.execute(text(cmd), params)
+            session.commit()
+
     def get_connections_to_recover(self, need_recover_sync_types):
         with self.db_session_class() as session:
             need_sync_types_combine_str = ','.join([f"'{t}'" for t in need_recover_sync_types])
             sql = f"""SELECT id FROM `project_connection` 
                      WHERE (JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_sync_status')) in ('crawling', 'pending')
-                      OR JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_index_status')) = 'indexing') 
+                      OR JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_index_status')) = 'indexing'
+                      OR JSON_UNQUOTE(JSON_EXTRACT(`ai_status`, '$.last_ai_index_status')) = 'indexing')
                      AND deleted=false 
                      AND is_active=true 
                      AND type IN ({need_sync_types_combine_str})"""

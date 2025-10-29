@@ -7,10 +7,14 @@ import signal
 from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
 
 from seaqa_indexer import config
+from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.seasearch.summary_index_connection import update_connection_summary_index
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
+from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
+from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +31,10 @@ class SummaryIndexTaskWorker(object):
         self.LOCK_TIMEOUT = 1800  # 30 minutes
         self.REFRESH_INTERVAL = 600
         self.locked_keys = set()
+
+        self.seadb_api = SeaDBAPI()
+        self.seaqa_db = SeaqaDB(self.db_session_class)
+        self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
 
@@ -102,7 +110,7 @@ class SummaryIndexTaskWorker(object):
 
     def update_ai_index(self, connection_id):
         try:
-            update_connection_summary_index(connection_id, self.db_session_class)
+            update_connection_summary_index(connection_id, self.seaqa_db, self.seadb_api, self.seasearch_api)
         except Exception as e:
             logger.exception('Summary index connection: %s failed, error: %s', connection_id, e)
 
