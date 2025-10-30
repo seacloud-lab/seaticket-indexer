@@ -168,6 +168,14 @@ class GitHubSeaDBAPI:
                 }
                 self.seadb_api.add_column_option(self.base_id, column_option)
 
+    def get_issue_by_id(self, issue_id, connection_id):
+        table_name = GithubIssuesTable.gen_table_name(connection_id)
+        sql = f"SELECT * FROM `{table_name}` WHERE `issue_id` = {issue_id}"
+        result = self.seadb_api.query_rows(self.base_id, sql)
+        if result and 'results' in result and result['results']:
+            return result['results'][0]
+        return None
+
     # *** github_issue index function ***
     def delete_issues_from_db(self, connection_id, need_delete_issue_pks, need_deleted_comment_issue_ids):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
