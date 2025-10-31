@@ -50,14 +50,6 @@ class GithubIssuesSyncManager:
 
         self.add_issues_index_task(connection_id)
 
-    def handle_github_app_installation(self, connection_id, installation_id):
-        project_connection = self.seaqa_db.get_project_connection_by_id(connection_id)
-        connection_config = json.loads(project_connection.config)
-        decrypt_connection_config= decrypt_config(connection_config)
-        decrypt_connection_config['installation_id'] = installation_id
-        encrypt_connection_config = encrypt_config(decrypt_connection_config)
-        self.seaqa_db.update_connection_config(connection_id, encrypt_connection_config)
-
     def add_github_issues_sync_task(self, connection_id):
         logger.info('add github issues sync task: %s', connection_id)
         msg_content = {
