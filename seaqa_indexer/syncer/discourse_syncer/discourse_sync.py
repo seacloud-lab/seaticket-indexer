@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 from functools import wraps
 from dateutil.relativedelta import relativedelta
 
-from seaqa_indexer.utils import time_str_to_utc_time, need_update_connection_last_sync_count
+from seaqa_indexer.utils import time_to_utc_time, need_update_connection_last_sync_count
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 
@@ -80,16 +80,16 @@ class DiscourseSync:
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
         if existing_topic:
-            bumped_at = time_str_to_utc_time(topic_data.get('last_posted_at'))
+            bumped_at = time_to_utc_time(topic_data.get('last_posted_at'))
             self.update_topic(title, slug, views, category_id, topic_id, connection_id, bumped_at)
             logger.debug(f"Updated existing topic {topic_id}")
         else:
             # When using webhook, the returned value does not have a bumped_at.
-            topic_created_at = time_str_to_utc_time(topic_data.get('created_at'))
+            topic_created_at = time_to_utc_time(topic_data.get('created_at'))
             if topic_data.get('bumped_at'):
-                bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
+                bumped_at = time_to_utc_time(topic_data.get('bumped_at'))
             else:
-                bumped_at = time_str_to_utc_time(topic_data.get('last_posted_at'))
+                bumped_at = time_to_utc_time(topic_data.get('last_posted_at'))
             self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at)
             logger.debug(f"Created new topic {topic_id}")
 
@@ -100,7 +100,7 @@ class DiscourseSync:
         existing_reply = self.check_existing_reply(topic_id, post_number, connection_id)
         content = reply_data.get('cooked', '')
         author = reply_data.get('username', '')
-        updated_at = time_str_to_utc_time(reply_data.get('updated_at'))
+        updated_at = time_to_utc_time(reply_data.get('updated_at'))
         if existing_reply:
             self.update_reply(content, author, topic_id, post_number, updated_at, connection_id)
             logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
@@ -196,8 +196,8 @@ class DiscourseSync:
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
-        bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
-        topic_created_at = time_str_to_utc_time(topic_data.get('created_at'))
+        bumped_at = time_to_utc_time(topic_data.get('bumped_at'))
+        topic_created_at = time_to_utc_time(topic_data.get('created_at'))
 
         self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at)
 
@@ -207,7 +207,7 @@ class DiscourseSync:
             post_number = reply.get('post_number')
             content = reply.get('cooked')
             author = reply.get('username')
-            updated_at = time_str_to_utc_time(reply.get('updated_at'))
+            updated_at = time_to_utc_time(reply.get('updated_at'))
 
             self.insert_reply(topic_id, post_number, content, author, updated_at, connection_id)
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
@@ -272,10 +272,10 @@ class DiscourseSync:
         _status_last_update_count = 0
 
         if last_updated_at:
-            last_updated_at = time_str_to_utc_time(str(last_updated_at))
+            last_updated_at = time_to_utc_time(str(last_updated_at))
 
         # Calculate sync_earliest_time by subtracting sync_years from project_created_at
-        project_created_at_utc = time_str_to_utc_time(str(project_created_at))
+        project_created_at_utc = time_to_utc_time(str(project_created_at))
         sync_earliest_time = project_created_at_utc - relativedelta(years=sync_years)
 
         while True:
@@ -285,7 +285,7 @@ class DiscourseSync:
                 return sync_count
 
             for topic_data in topics:
-                topic_bumped_at = time_str_to_utc_time(topic_data.get('bumped_at'))
+                topic_bumped_at = time_to_utc_time(topic_data.get('bumped_at'))
 
                 if last_updated_at and topic_bumped_at <= last_updated_at and not topic_data.get('pinned'):
                     should_stop = True
@@ -302,7 +302,7 @@ class DiscourseSync:
                 # Check if topic already exists in DB
                 existing_topic = self.check_existing_topic(topic_id, connection_id)
                 if existing_topic:
-                    existing_bumped_at = time_str_to_utc_time(str(existing_topic.get('bumped_at')))
+                    existing_bumped_at = time_to_utc_time(str(existing_topic.get('bumped_at')))
                     if topic_bumped_at <= existing_bumped_at:
                         logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
                         continue

@@ -102,15 +102,18 @@ def time_difference_to_midnight():
     return seconds_diff
 
 
-def time_str_to_utc_time(time_str):
-    """Think of the time string as UTC time and convert it to datetime"""
-    if not time_str.endswith('Z') and '+' not in time_str and '-' not in time_str[-6:]:
-        time_str += '+00:00'
+def time_to_utc_time(time_data):
+    """Think of the time as UTC time and convert it to datetime"""
+    if isinstance(time_data, int):
+        return datetime.fromtimestamp(time_data, tz=timezone.utc)
 
-    if time_str.endswith('Z'):
+    if not time_data.endswith('Z') and '+' not in time_data and '-' not in time_data[-6:]:
+        time_data += '+00:00'
+
+    if time_data.endswith('Z'):
         # python 3.12 can convert but 3.10 not support
-        time_str = time_str[:-1] + '+00:00'
-    dt = datetime.fromisoformat(time_str)
+        time_data = time_data[:-1] + '+00:00'
+    dt = datetime.fromisoformat(time_data)
     return dt.astimezone(timezone.utc)
 
 

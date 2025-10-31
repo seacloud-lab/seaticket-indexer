@@ -3,7 +3,7 @@ import json
 import logging
 import pytz
 
-from seaqa_indexer.utils import md5
+from seaqa_indexer.utils import md5, time_to_utc_time
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.storage import get_storage
@@ -42,8 +42,11 @@ class SiteIndex(object):
                 'highlightable': True
             },
             'last_modified': {
-                'type': 'text'
+                'type': 'date'
             },
+            'updated_at': {
+                'type': 'date',
+            }
         }
     }
 
@@ -121,11 +124,23 @@ class SiteIndex(object):
             query_map['bool']['filter'].append({'terms': {'connection_id': connection_ids}})
         return query_map
 
-    def get_search_param(self, index_name, keyword, start, size, connection_ids=None, search_title_only=False):
+    def get_search_param(self, index_name, keyword, start, size, time_from, time_to, connection_ids=None, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
         query_map = self._add_connection_id_filter(query_map, connection_ids)
+
+        if time_from or time_to:
+            range_filter = {'range': {'updated_at': {}}}
+            if time_from:
+                time_from = time_to_utc_time(time_from).isoformat()
+                range_filter['range']['updated_at']['gte'] = time_from
+            if time_to:
+                time_to = time_to_utc_time(time_to).isoformat()
+                range_filter['range']['updated_at']['lte'] = time_to
+
+            self._ensure_filter_exists(query_map)
+            query_map['bool']['filter'].append(range_filter)
 
         data = {
             'query': query_map,
@@ -146,9 +161,9 @@ class SiteIndex(object):
         }
         return site_query_info
 
-    def search(self, index_name, keyword, start, size, search_title_only=False):
+    def search(self, index_name, keyword, start, size, time_from, time_to, search_title_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(index_name, keyword, start, size, search_title_only)
+        search_param = self.get_search_param(index_name, keyword, start, size, time_from, time_to, search_title_only)
         bulk_search_params.append(search_param)
         query_body = json.dumps({
             'index_queries': bulk_search_params
@@ -256,6 +271,7 @@ class SiteIndex(object):
                 url = row.get('url')
                 etag = row.get('etag')
                 last_modified = row.get('last_modified')
+                updated_at = row.get('updated_at')
                 title = row.get('title')
                 deleted = row.get('deleted')
                 pk = row.get('_pk')
@@ -281,6 +297,7 @@ class SiteIndex(object):
                     'etag': etag,
                     'title': title,
                     'last_modified': last_modified,
+                    'updated_at': updated_at,
                 }
                 bulk_params.append(index_info)
                 bulk_params.append(doc_info)

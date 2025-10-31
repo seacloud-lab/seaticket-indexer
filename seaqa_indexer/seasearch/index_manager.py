@@ -1,5 +1,6 @@
 import logging
 import json
+from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT
@@ -68,18 +69,18 @@ class IndexManager:
             connection_id_to_config[connection_id] = json.loads(project_connection.config)
 
             if connection_type == ConnectionType.SEAFILE.value:
-                seafile_search_param = self.seafile_index.get_search_param(index_name, keyword, start, size)
+                seafile_search_param = self.seafile_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
                 bulk_search_params.append(seafile_search_param)
             elif connection_type == ConnectionType.SITE.value:
-                site_search_param = self.site_index.get_search_param(index_name, keyword, start, size)
+                site_search_param = self.site_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
                 bulk_search_params.append(site_search_param)
             elif connection_type == ConnectionType.EMAIL.value:
                 pass
             elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                issues_search_param = self.github_issues_index.get_search_param(index_name, keyword, start, size)
+                issues_search_param = self.github_issues_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
                 bulk_search_params.append(issues_search_param)
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                discourse_search_param = self.discourse_index.get_search_param(index_name, keyword, start, size)
+                discourse_search_param = self.discourse_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
                 bulk_search_params.append(discourse_search_param)
 
         if not bulk_search_params:
@@ -147,8 +148,12 @@ class IndexManager:
                 pass
             elif index_name.startswith(ConnectionType.GITHUB_ISSUE.value):
                 config = connection_id_to_config.get(source['connection_id'])
-                repository = config.get('repository')
-                url = repository.rstrip('/') + '/' + 'issues' + '/' + str(source['issue_number'])
+                server_url = config.get('repository')
+                url_parsed = urlparse(server_url)
+                base_url = url_parsed.scheme + "://" + url_parsed.netloc
+                parts = url_parsed.path.strip("/").split("/")
+                repo_owner, repo_name = parts[0], parts[1]
+                url = f'{base_url}/{repo_owner}/{repo_name}/issues/' + str(source['issue_number'])
                 r = {
                     'title': source['title'],
                     'repo_owner': source['repo_owner'],

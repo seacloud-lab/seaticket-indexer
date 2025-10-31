@@ -171,7 +171,7 @@ def search():
     except:
         count = 20
 
-    results = application.app.index_manager.search(project_uuid, connection_ids, time_from=time_from, time_to=time_to, query, start=0, size=count)
+    results = application.app.index_manager.search(project_uuid, connection_ids, time_from, time_to, query, start=0, size=count)
 
     return {'results': results}, 200
 
