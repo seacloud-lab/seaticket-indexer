@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT
-from seaqa_indexer.utils import decrypt_config, time_str_to_utc_time, encrypt_config, get_file_suffix
+from seaqa_indexer.utils import decrypt_config, time_to_utc_time, encrypt_config, get_file_suffix
 from seaqa_indexer.utils import need_update_connection_last_sync_count
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seasearch.utils import get_content_by_download_link
@@ -108,7 +108,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             if not since:
                 since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
                 is_first_update = True
-            since = time_str_to_utc_time(str(since)).isoformat()
+            since = time_to_utc_time(str(since)).isoformat()
             seahub_api = SeahubAPI(server_url, api_token)
             repo_info = seahub_api.get_repo_info()
             repo_id = repo_info.get('repo_id')
@@ -201,8 +201,8 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
             issue_id = issue['id']
             existing_issue = github_seadb_api.get_issue_by_id(issue_id, connection_id)
             if existing_issue:
-                existing_updated_at = time_str_to_utc_time(str(existing_issue.get('updated_at')))
-                if time_str_to_utc_time(issue.get('updated_at')) <= existing_updated_at:
+                existing_updated_at = time_to_utc_time(str(existing_issue.get('updated_at')))
+                if time_to_utc_time(issue.get('updated_at')) <= existing_updated_at:
                     logger.debug(f'Issue {issue_id} is up to date, skipping sync.')
                     continue
 
@@ -259,8 +259,8 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
 
             existing_file = seafile_seadb_api.get_file_by_path(connection_id, parent_dir, dirent_name)
             if existing_file:
-                existing_mtime = time_str_to_utc_time(str(existing_file.get('mtime')))
-                if time_str_to_utc_time(mtime) <= existing_mtime:
+                existing_mtime = time_to_utc_time(str(existing_file.get('mtime')))
+                if time_to_utc_time(mtime) <= existing_mtime:
                     logger.debug(f'connection_id % parent_dir % filename: %s is up to date, skipping sync.', connection_id, parent_dir, dirent_name)
                     continue
 

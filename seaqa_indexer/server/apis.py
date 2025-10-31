@@ -157,6 +157,8 @@ def search():
     query = data.get('query').strip()
     project_uuid = data.get('project_uuid')
     connection_ids = data.get('connection_ids')
+    time_from = data.get('time_from')
+    time_to = data.get('time_to')
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
@@ -169,7 +171,7 @@ def search():
     except:
         count = 20
 
-    results = application.app.index_manager.search(project_uuid, connection_ids, query, start=0, size=count)
+    results = application.app.index_manager.search(project_uuid, connection_ids, time_from, time_to, query, start=0, size=count)
 
     return {'results': results}, 200
 

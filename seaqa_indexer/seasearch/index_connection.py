@@ -12,7 +12,7 @@ from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssues
 from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type
-from seaqa_indexer.utils import time_str_to_utc_time, decrypt_config
+from seaqa_indexer.utils import time_to_utc_time, decrypt_config
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
@@ -93,7 +93,7 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
     since = old_indexed_at
     if not since:
         since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_str_to_utc_time(str(since)).isoformat()
+    since = time_to_utc_time(str(since)).isoformat()
 
     seafile_index_name = gen_index_name_by_type(connection_id, connection_type)
     seafile_index.create_index_if_missing(seafile_index_name)
@@ -129,7 +129,7 @@ def update_github_issues_index(project_connection, seasearch_api, seaqa_db):
     since = old_indexed_at
     if not since:
         since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_str_to_utc_time(str(since)).isoformat()
+    since = time_to_utc_time(str(since)).isoformat()
 
     index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, since)
     # finish index
@@ -157,7 +157,7 @@ def update_discourse_forum_index(project_connection, seasearch_api, seaqa_db):
     since = old_indexed_at
     if not since:
         since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_str_to_utc_time(str(since)).isoformat()
+    since = time_to_utc_time(str(since)).isoformat()
 
     index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db, discourse_seadb_api, since)
     indexed_at = datetime.datetime.now(datetime.UTC)

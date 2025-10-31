@@ -45,6 +45,9 @@ class DiscourseIndex(object):
             'created_at': {
                 'type': 'date'
             },
+            'updated_at': {
+                'type': 'date',
+            }
         }
     }
 
@@ -120,10 +123,22 @@ class DiscourseIndex(object):
             query_map['bool']['filter'] = []
         return query_map
 
-    def get_search_param(self, index_name, keyword, start=0, size=10, search_title_only=False):
+    def get_search_param(self, index_name, keyword, start, size, time_from, time_to, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
         searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
+
+        if time_from or time_to:
+            range_filter = {'range': {'updated_at': {}}}
+            if time_from:
+                time_from = time_to_utc_time(time_from).isoformat()
+                range_filter['range']['updated_at']['gte'] = time_from
+            if time_to:
+                time_to = time_to_utc_time(time_to).isoformat()
+                range_filter['range']['updated_at']['lte'] = time_to
+
+            self._ensure_filter_exists(query_map)
+            query_map['bool']['filter'].append(range_filter)
 
         data = {
             'query': query_map,
@@ -149,9 +164,9 @@ class DiscourseIndex(object):
 
         return repo_query_info
 
-    def search(self, index_name, keyword, start, size, search_filename_only=False):
+    def search(self, index_name, keyword, start, size, time_from, time_to, search_filename_only=False):
         bulk_search_params = []
-        search_param = self.get_search_param(index_name, keyword, start, size, search_filename_only)
+        search_param = self.get_search_param(index_name, keyword, start, size, time_from, time_to, search_filename_only)
         bulk_search_params.append(search_param)
 
         query_body = json.dumps({
@@ -252,6 +267,7 @@ class DiscourseIndex(object):
                         'slug': topic.get('slug', ''),
                         'bumped_at': topic.get('bumped_at'),
                         'created_at': topic.get('created_at'),
+                        'updated_at': topic.get('updated_at'),
                     }
 
                     index_info = {'index': {'_index': index_name, '_id': key}}
