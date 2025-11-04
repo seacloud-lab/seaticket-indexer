@@ -6,6 +6,7 @@ import pytz
 from seaqa_indexer.utils import md5, time_to_utc_time
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
+from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class GitHubIssuesIndex(object):
                     }
                 }
             },
-            'body': {
+            'content': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
@@ -49,10 +50,6 @@ class GitHubIssuesIndex(object):
             },
             'labels': {
                 'type': 'keyword',
-            },
-            'comments_body': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
             },
             'updated_at': {
                 'type': 'date',
@@ -89,7 +86,7 @@ class GitHubIssuesIndex(object):
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
             self.mapping['properties']['title']['analyzer'] = 'standard'
-            self.mapping['properties']['body']['analyzer'] = 'standard'
+            self.mapping['properties']['content']['analyzer'] = 'standard'
             self.index_settings['analysis'].pop('char_filter', None)
             self.index_settings['analysis']['analyzer'].pop('gse_standard_analyzer', None)
 
@@ -107,6 +104,8 @@ class GitHubIssuesIndex(object):
 
     def _make_query_searches(self, keyword, search_title_only):
         match_query_kwargs = {'minimum_should_match': '-25%'}
+        title_boost_kwargs = {'boost': 7}
+        content_boost_kwargs = {'boost': 3}
 
         def _make_match_query(field, key_word, **kw):
             q = {'query': key_word}
@@ -114,11 +113,9 @@ class GitHubIssuesIndex(object):
             return {'match': {field: q}}
 
         searches = []
-        searches.append(_make_match_query('title', keyword, **match_query_kwargs))
+        searches.append(_make_match_query('title', keyword, **match_query_kwargs, **title_boost_kwargs))
         if not search_title_only:
-            searches.append(_make_match_query('body', keyword, **match_query_kwargs))
-            searches.append(_make_match_query('labels', keyword, **match_query_kwargs))
-            searches.append(_make_match_query('comments_body', keyword, **match_query_kwargs))
+            searches.append(_make_match_query('content', keyword, **match_query_kwargs, **content_boost_kwargs))
 
         return searches
 
@@ -148,7 +145,7 @@ class GitHubIssuesIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'body', 'comments_body',
+            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'content',
                         'state', 'labels'],
             'sort': [
                 '_score'
@@ -157,7 +154,7 @@ class GitHubIssuesIndex(object):
                 'pre_tags': ['<mark>'],
                 'post_tags': ['</mark>'],
                 'fields': {
-                    'body': {}
+                    'content': {}
                 }
             }
         }
@@ -194,8 +191,7 @@ class GitHubIssuesIndex(object):
                 'issue_number': source.get('issue_number'),
                 'title': source.get('title'),
                 'connection_id': source.get('connection_id'),
-                'body': source.get('body'),
-                'comments_body': source.get('comments_body', []),
+                'content': source.get('content'),
                 'state': source.get('state'),
                 'labels': source.get('labels', []),
                 'score': hit.get('_score'),
@@ -244,25 +240,24 @@ class GitHubIssuesIndex(object):
             for issue in issues:
                 issue_id = issue.get('issue_id')
                 github_seadb_api.delete_comments_from_db(connection_id, issue_id)
-                comments = []
-                comments_offset = 0
-                comments_page_size = 1000
-                while True:
-                    comments_data = github_seadb_api.get_issue_comments_by_page(connection_id, issue_id, comments_page_size, comments_offset)
-                    if not comments_data:
-                        break
-                    comments.extend(comments_data)
-                    comments_offset += comments_page_size
-                comments_list = []
-                if comments:
-                    for comment in comments:
-                        comments_list.append(comment.get('body'))
                 key = self.gen_index_id(issue_id)
                 if issue.get('deleted'):
                     need_cleared_issues_index_set.add(key)
                     need_cleared_issues_pk_set.add(issue_id)
                     need_cleared_issues_id_set.add(issue.get('_pk'))
                 else:
+                    content = issue.get('body') or ''
+                    comments_offset = 0
+                    comments_page_size = 1000
+                    while True:
+                        comments_data = github_seadb_api.get_issue_comments_by_page(connection_id, issue_id,
+                                                                                    comments_page_size, comments_offset)
+                        if not comments_data or len(content) > INDEX_CONTENT_LIMIT:
+                            break
+                        for comment in comments_data:
+                            content += comment.get('body') or ''
+                        comments_offset += comments_page_size
+
                     doc = {
                         'connection_id': connection_id,
                         'repo_owner': repo_owner,
@@ -270,8 +265,7 @@ class GitHubIssuesIndex(object):
                         'issue_id': issue_id,
                         'issue_number': issue.get('issue_number'),
                         'title': issue.get('title'),
-                        'body': issue.get('body'),
-                        'comments_body': comments_list,
+                        'content': content,
                         'state': issue.get('state'),
                         'labels': issue.get('labels'),
                         'updated_at': issue.get('updated_at'),

@@ -116,9 +116,9 @@ class IndexManager:
                 server_url = list(repo_cache_info.keys())[0]
                 repo_name = list(repo_cache_info.values())[0]
 
-                url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + source['path'].strip('/') + '/' + source['filename']
+                url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + source['path'].strip('/') + '/' + source['title']
                 r = {
-                    'filename': source['filename'],
+                    'filename': source['title'],
                     'path': source['path'],
                     'repo_id': source['repo_id'],
                     'connection_id': source['connection_id'],
@@ -160,8 +160,7 @@ class IndexManager:
                     'repo_name': source['repo_name'],
                     'issue_number': source['issue_number'],
                     'connection_id': source['connection_id'],
-                    'content': source['body'],
-                    'comments_body': source['comments_body'],
+                    'content': source['content'],
                     'state': source['state'],
                     'labels': source['labels'],
                     'score': score,
@@ -181,7 +180,7 @@ class IndexManager:
                     'title': source['title'],
                     'topic_id': topic_id,
                     'connection_id': source['connection_id'],
-                    'content': source['body'],
+                    'content': source['content'],
                     'slug': slug,
                     'score': score,
                     'bumped_at': source['bumped_at'],
