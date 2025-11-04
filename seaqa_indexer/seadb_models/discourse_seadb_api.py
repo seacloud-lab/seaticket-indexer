@@ -92,18 +92,12 @@ class DiscourseSeaDBAPI:
         rows = [reply_data]
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
-    def update_reply(self, connection_id, topic_id, post_number, reply_data):
+    def update_reply(self, connection_id, reply_pk, reply_data):
         """Update reply records"""
-        reply = self.get_reply_by_id(connection_id, topic_id, post_number)
-        pk = reply.get('_pk')
-
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-
-        reply_data['topic_id'] = topic_id
-        reply_data['post_number'] = post_number
         rows = [reply_data]
         updates = [{
-            "pk": pk,
+            "pk": reply_pk,
             "row": rows
         }]
         return self.seadb_api.update_rows(

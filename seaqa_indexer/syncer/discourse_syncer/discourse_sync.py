@@ -106,7 +106,8 @@ class DiscourseSync:
         author = reply_data.get('username', '')
         updated_at = time_to_utc_time(reply_data.get('updated_at'))
         if existing_reply:
-            self.update_reply(content, author, topic_id, post_number, updated_at, connection_id)
+            reply_pk = existing_reply.get('_pk')
+            self.update_reply(content, author, topic_id, post_number, updated_at, connection_id, reply_pk)
             logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
         else:
             self.insert_reply(topic_id, post_number, content, author, updated_at, connection_id)
@@ -154,14 +155,17 @@ class DiscourseSync:
         """Check if a reply already exists"""
         return self.discourse_seadb_api.get_reply_by_id(topic_id, connection_id, post_number)
 
-    def update_reply(self, content, author, topic_id, post_number, updated_at, connection_id):
+    def update_reply(self, content, author, topic_id, post_number, updated_at, connection_id, reply_pk):
         """Update an existing reply"""
         reply_data = {
             self.replies_table.content.name: content,
             self.replies_table.author.name: author,
-            self.replies_table.updated_at.name: updated_at.isoformat()
+            self.replies_table.updated_at.name: updated_at.isoformat(),
+            self.replies_table.topic_id.name: topic_id,
+            self.replies_table.post_number.name: post_number
         }
-        self.discourse_seadb_api.update_reply(connection_id, topic_id, post_number, reply_data)
+        # Update reply
+        self.discourse_seadb_api.update_reply(connection_id, reply_pk, reply_data)
 
     def _build_api_headers(self, api_key, api_username):
         """Build API headers for Discourse requests"""
@@ -177,23 +181,38 @@ class DiscourseSync:
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
         bumped_at = time_to_utc_time(topic_data.get('bumped_at'))
+
+        # Fetch replies
+        topic_replies_data = self.get_discourse_topic_replies(forum_url, topic_id, headers)
+
         if primary_key:
             # Update existing topic
             self.update_topic(title, slug, views, category_id, connection_id, bumped_at, primary_key)
-            self.discourse_seadb_api.delete_replies_by_topic(connection_id, topic_id)
+            # Upate existing reply, but the deleted reply will be retained.
+            for reply in topic_replies_data.get('replies', []):
+                post_number = reply.get('post_number')
+                content = reply.get('cooked')
+                author = reply.get('username')
+                updated_at = time_to_utc_time(reply.get('updated_at'))
+
+                if existing_reply := self.check_existing_reply(topic_id, post_number, connection_id):
+                    reply_pk = existing_reply.get('_pk')
+                    self.update_reply(content, author, topic_id, post_number, updated_at, connection_id, reply_pk)
+                else:
+                    self.insert_reply(topic_id, post_number, content, author, updated_at, connection_id)
+                logger.debug(f"Successfully updated topic {topic_id} with replies.")
         else:
             # Create new topic
             topic_created_at = time_to_utc_time(topic_data.get('created_at'))
             self.insert_topic(topic_id, title, slug, views, category_id, connection_id, bumped_at, topic_created_at)
 
-        # Fetch and insert replies
-        topic_replies_data = self.get_discourse_topic_replies(forum_url, topic_id, headers)
-        if not topic_replies_data:
-            logger.info(f"fetch 0 replies for topic {topic_id}")
-            sync_logger.log(f"fetch 0 replies for topic {topic_id}")
-            return
-        self._insert_topic_replies(topic_replies_data, topic_id, connection_id)
-        logger.debug(f"Successfully recreated topic {topic_id} with replies.")
+            if not topic_replies_data:
+                logger.info(f"fetch 0 replies for topic {topic_id}")
+                sync_logger.log(f"fetch 0 replies for topic {topic_id}")
+                return
+            # Create new replies
+            self._insert_topic_replies(topic_replies_data, topic_id, connection_id)
+            logger.debug(f"Successfully recreated topic {topic_id} with replies.")
 
     def _insert_topic_replies(self, topic_replies_data, topic_id, connection_id):
         """Insert topic replies into database"""
