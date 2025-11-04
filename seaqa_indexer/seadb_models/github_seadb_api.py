@@ -1,5 +1,5 @@
 import json
-from seaqa_indexer.utils import time_str_to_utc_time
+from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import GithubIssuesTable, GithubIssueCommentsTable
 
@@ -18,7 +18,7 @@ class GitHubSeaDBAPI:
 
     def update_issue_record(self, connection_id, issue_id, updated_at, comments_count=None, deleted=False):
         row = {
-            GithubIssuesTable.updated_at.name: time_str_to_utc_time(updated_at).isoformat(),
+            GithubIssuesTable.updated_at.name: time_to_utc_time(updated_at).isoformat(),
         }
 
         if comments_count is not None:
@@ -73,9 +73,9 @@ class GitHubSeaDBAPI:
             GithubIssuesTable.body.name: body,
             GithubIssuesTable.state.name: issue.get('state'),
             GithubIssuesTable.assignees.name: json.dumps(assignees_list),
-            GithubIssuesTable.created_at.name: time_str_to_utc_time(issue.get('created_at')).isoformat(),
-            GithubIssuesTable.updated_at.name: time_str_to_utc_time(issue.get('updated_at')).isoformat(),
-            GithubIssuesTable.closed_at.name: time_str_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
+            GithubIssuesTable.created_at.name: time_to_utc_time(issue.get('created_at')).isoformat(),
+            GithubIssuesTable.updated_at.name: time_to_utc_time(issue.get('updated_at')).isoformat(),
+            GithubIssuesTable.closed_at.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
             GithubIssuesTable.comments_count.name: issue.get('comments'),
             GithubIssuesTable.deleted.name: False,
         }
@@ -116,8 +116,8 @@ class GitHubSeaDBAPI:
             GithubIssueCommentsTable.issue_id.name: issue_id,
             GithubIssueCommentsTable.author.name: comment.get('user', {}).get('login', ''),
             GithubIssueCommentsTable.body.name: body,
-            GithubIssueCommentsTable.created_at.name: time_str_to_utc_time(comment.get('created_at')).isoformat(),
-            GithubIssueCommentsTable.updated_at.name: time_str_to_utc_time(comment.get('updated_at')).isoformat(),
+            GithubIssueCommentsTable.created_at.name: time_to_utc_time(comment.get('created_at')).isoformat(),
+            GithubIssueCommentsTable.updated_at.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
         }
 
         table_name = GithubIssueCommentsTable.gen_table_name(connection_id)

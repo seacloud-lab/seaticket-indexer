@@ -71,8 +71,8 @@ class SeafileSeaDBAPI:
         table_name = SeafileTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
-        issues = res.get('results', [])
-        return issues
+        results = res.get('results', [])
+        return results
 
     def delete_files_from_db(self, connection_id, deleted_seadb_pk_list):
         table_name = SeafileTable.gen_table_name(connection_id)
