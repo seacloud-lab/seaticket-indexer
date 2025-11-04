@@ -81,6 +81,7 @@ class SiteIndex(object):
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
             self.mapping['properties']['content']['analyzer'] = 'standard'
+            self.mapping['properties']['title']['analyzer'] = 'standard'
             self.index_settings['analysis'].pop('char_filter')
             self.index_settings['analysis']['analyzer'].pop('gse_standard_analyzer')
         if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
@@ -96,6 +97,8 @@ class SiteIndex(object):
 
     def _make_query_searches(self, keyword, search_title_only):
         match_query_kwargs = {'minimum_should_match': '-25%'}
+        title_boost_kwargs = {'boost': 7}
+        content_boost_kwargs = {'boost': 3}
 
         def _make_match_query(field, key_word, **kw):
             q = {'query': key_word}
@@ -103,9 +106,9 @@ class SiteIndex(object):
             return {'match': {field: q}}
 
         searches = []
-        searches.append(_make_match_query('title', keyword, **match_query_kwargs))
+        searches.append(_make_match_query('title', keyword, **match_query_kwargs, **title_boost_kwargs))
         if not search_title_only:
-            searches.append(_make_match_query('content', keyword, **match_query_kwargs))
+            searches.append(_make_match_query('content', keyword, **match_query_kwargs, **content_boost_kwargs))
 
         return searches
 
@@ -238,7 +241,7 @@ class SiteIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_indexed_at):
+    def update(self, index_name, connection_id, project_uuid, connection_status, seaqa_db, since):
         new_index_ids_set = set()
         deleted_index_id_set = set()
         deleted_seadb_pk_set = set()
@@ -254,13 +257,9 @@ class SiteIndex(object):
                 self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 
-        if not last_indexed_at:
-            last_indexed_at = datetime.datetime(1970, 1, 1)
-
-        last_indexed_at = last_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
         table_name = WebCrawlTable.gen_table_name(connection_id)
         while True:
-            sql = f"""SELECT * FROM `{table_name}` WHERE updated_at > '{last_indexed_at}'
+            sql = f"""SELECT * FROM `{table_name}` WHERE updated_at > '{since}'
                             ORDER BY updated_at LIMIT {page_size} OFFSET {offset}"""
             result = self.seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])

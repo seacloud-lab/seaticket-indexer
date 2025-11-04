@@ -3,7 +3,8 @@ import json
 
 from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
-from seaqa_indexer.utils import need_update_connection_status
+from seaqa_indexer.utils import need_update_connection_status, time_to_utc_time
+from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class DiscourseIndex(object):
                     }
                 }
             },
-            'body': {
+            'content': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
@@ -80,7 +81,7 @@ class DiscourseIndex(object):
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
             self.mapping['properties']['title']['analyzer'] = 'standard'
-            self.mapping['properties']['body']['analyzer'] = 'standard'
+            self.mapping['properties']['content']['analyzer'] = 'standard'
             self.index_settings['analysis'].pop('char_filter', None)
             self.index_settings['analysis']['analyzer'].pop('gse_standard_analyzer', None)
 
@@ -97,6 +98,8 @@ class DiscourseIndex(object):
 
     def _make_query_searches(self, keyword, search_title_only):
         match_query_kwargs = {'minimum_should_match': '-25%'}
+        title_boost_kwargs = {'boost': 7}
+        content_boost_kwargs = {'boost': 3}
 
         def _make_match_query(field, key_word, **kw):
             q = {'query': key_word}
@@ -104,17 +107,9 @@ class DiscourseIndex(object):
             return {'match': {field: q}}
 
         searches = []
-        searches.append(_make_match_query('title', keyword, **match_query_kwargs))
-        searches.append({
-            'match': {
-                'title.ngram': {
-                    'query': keyword,
-                    'minimum_should_match': '80%',
-                }
-            }
-        })
+        searches.append(_make_match_query('title', keyword, **match_query_kwargs, **title_boost_kwargs))
         if not search_title_only:
-            searches.append(_make_match_query('body', keyword, **match_query_kwargs))
+            searches.append(_make_match_query('content', keyword, **match_query_kwargs, **content_boost_kwargs))
 
         return searches
 
@@ -144,7 +139,7 @@ class DiscourseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'topic_id', 'title', 'body', 'slug', 'bumped_at', 'created_at'],
+            '_source': ['connection_id', 'topic_id', 'title', 'content', 'slug', 'bumped_at', 'created_at'],
             'sort': [
                 '_score'
             ],
@@ -152,7 +147,7 @@ class DiscourseIndex(object):
                 'pre_tags': ['<mark>'],
                 'post_tags': ['</mark>'],
                 'fields': {
-                    'body': {}
+                    'content': {}
                 }
             }
         }
@@ -186,7 +181,7 @@ class DiscourseIndex(object):
                 'connection_id': source['connection_id'],
                 'topic_id': source['topic_id'],
                 'title': source['title'],
-                'body': source['body'],
+                'content': source['content'],
                 'category_id': source.get('category_id'),
                 'slug': source['slug'],
                 'bumped_at': source['bumped_at'],
@@ -233,15 +228,6 @@ class DiscourseIndex(object):
                 break
             for topic in topics:
                 topic_id = topic.get('topic_id')
-                replies = []
-                replies_offset = 0
-                replies_page_size = 1000
-                while True:
-                    replies_data = discourse_seadb_api.get_topic_replies_by_page(connection_id, topic_id, replies_page_size, replies_offset)
-                    if not replies_data:
-                        break
-                    replies.extend(replies_data)
-                    replies_offset += replies_page_size
 
                 key = self.gen_index_id(topic_id)
                 if topic.get('deleted') == True:
@@ -249,20 +235,23 @@ class DiscourseIndex(object):
                     need_cleared_topic_index_id_set.add(key)
                     need_cleared_topics_pk_set.add(topic.get('_pk'))
                 else:
+                    replies_offset = 0
+                    replies_page_size = 1000
                     body_content = ''
-                    for reply in replies:
-                        content = reply.get('content')
-                        if content:
-                            if body_content:
-                                body_content += '\n\n' + content
-                            else:
-                                body_content = content
+                    while True:
+                        replies_data = discourse_seadb_api.get_topic_replies_by_page(connection_id, topic_id,
+                                                                                     replies_page_size, replies_offset)
+                        if not replies_data or len(body_content) > INDEX_CONTENT_LIMIT:
+                            break
+                        for reply in replies_data:
+                            body_content += reply.get('content') or ''
+                        replies_offset += replies_page_size
 
                     doc = {
                         'connection_id': connection_id,
                         'topic_id': topic['topic_id'],
                         'title': topic['title'],
-                        'body': body_content,
+                        'content': body_content,
                         'category_id': topic.get('category_id'),
                         'slug': topic.get('slug', ''),
                         'bumped_at': topic.get('bumped_at'),

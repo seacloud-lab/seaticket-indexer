@@ -21,7 +21,7 @@ class SeafileIndex(object):
             'path': {
                 'type': 'keyword'
             },
-            'filename': {
+            'title': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
                 'fields': {
@@ -73,6 +73,7 @@ class SeafileIndex(object):
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
             self.mapping['properties']['content']['analyzer'] = 'standard'
+            self.mapping['properties']['title']['analyzer'] = 'standard'
             self.index_settings['analysis'].pop('char_filter')
             self.index_settings['analysis']['analyzer'].pop('gse_standard_analyzer')
         if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
@@ -88,6 +89,8 @@ class SeafileIndex(object):
 
     def _make_query_searches(self, keyword, search_filename_only):
         match_query_kwargs = {'minimum_should_match': '-25%'}
+        title_boost_kwargs = {'boost': 7}
+        content_boost_kwargs = {'boost': 3}
 
         def _make_match_query(field, key_word, **kw):
             q = {'query': key_word}
@@ -95,9 +98,9 @@ class SeafileIndex(object):
             return {'match': {field: q}}
 
         searches = []
-        searches.append(_make_match_query('filename', keyword, **match_query_kwargs))
+        searches.append(_make_match_query('title', keyword, **match_query_kwargs, **title_boost_kwargs))
         if not search_filename_only:
-            searches.append(_make_match_query('content', keyword, **match_query_kwargs))
+            searches.append(_make_match_query('content', keyword, **match_query_kwargs, **content_boost_kwargs))
 
         return searches
 
@@ -127,7 +130,7 @@ class SeafileIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'repo_id', 'path', 'filename', 'content', 'mtime'],
+            '_source': ['connection_id', 'repo_id', 'path', 'title', 'content', 'mtime'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -162,7 +165,7 @@ class SeafileIndex(object):
             score = hit.get('_score')
             _id = hit.get('_id')
             r = {
-                'filename': source['filename'],
+                'title': source['title'],
                 'path': source['path'],
                 'repo_id': source['repo_id'],
                 'connection_id': source['connection_id'],
@@ -230,7 +233,7 @@ class SeafileIndex(object):
                         'connection_id': connection_id,
                         'repo_id': repo_id,
                         'path': parent_dir,
-                        'filename': filename,
+                        'title': filename,
                         'mtime': file.get('mtime'),
                         'content': file.get('content'),
                         'updated_at': file.get('updated_at'),
