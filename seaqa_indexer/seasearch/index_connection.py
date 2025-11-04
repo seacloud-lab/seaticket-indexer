@@ -70,7 +70,12 @@ def update_site_index(project_connection, seasearch_api, seaqa_db):
     site_index_name = gen_index_name_by_type(connection_id, connection_type)
     site_index.create_index_if_missing(site_index_name)
 
-    index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db, old_indexed_at)
+    since = old_indexed_at
+    if not since:
+        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    since = time_to_utc_time(str(since)).isoformat()
+
+    index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db, since)
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
     indexed_at = datetime.datetime.now(datetime.UTC)
