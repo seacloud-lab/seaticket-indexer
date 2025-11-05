@@ -21,6 +21,9 @@ MYSQL_UNIX_SOCKET = ''
 # SeaDB Configuration
 SEADB_SERVER_URL = ''
 
+# SeaQA AI
+SEAQA_AI_SERVER_URL = ''
+
 # index setting
 LANG = 'chinese'
 
@@ -62,3 +65,5 @@ S3_HOST = os.environ.get('S3_HOST')
 S3_WEB_CRAWL_BUCKET = os.environ.get('S3_WEB_CRAWL_BUCKET')
 S3_KEY_ID = os.environ.get('S3_KEY_ID')
 S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY')
+
+SEAQA_AI_SERVER_URL = os.getenv('SEAQA_AI_SERVER_URL') or SEAQA_AI_SERVER_URL
