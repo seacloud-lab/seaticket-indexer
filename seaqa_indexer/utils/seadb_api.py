@@ -100,7 +100,6 @@ class SeaDBAPI:
         response = requests.post(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
 
-
     def update_rows(self, base_id, table_name, rows):
         base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
