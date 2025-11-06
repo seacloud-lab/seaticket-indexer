@@ -39,10 +39,10 @@ class SiteIndex(object):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
-            'last_modified': {
+            'modified_time': {
                 'type': 'date'
             },
-            'updated_at': {
+            'sync_time': {
                 'type': 'date',
             }
         }
@@ -132,13 +132,13 @@ class SiteIndex(object):
         query_map = self._add_connection_id_filter(query_map, connection_ids)
 
         if time_from or time_to:
-            range_filter = {'range': {'updated_at': {}}}
+            range_filter = {'range': {'sync_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['updated_at']['gte'] = time_from
+                range_filter['range']['sync_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['updated_at']['lte'] = time_to
+                range_filter['range']['sync_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -235,8 +235,8 @@ class SiteIndex(object):
 
         table_name = WebCrawlTable.gen_table_name(connection_id)
         while True:
-            sql = f"""SELECT * FROM `{table_name}` WHERE updated_at > '{since}'
-                            ORDER BY updated_at LIMIT {page_size} OFFSET {offset}"""
+            sql = f"""SELECT * FROM `{table_name}` WHERE sync_time > '{since}'
+                            ORDER BY sync_time LIMIT {page_size} OFFSET {offset}"""
             result = self.seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])
             if not rows:
@@ -245,8 +245,8 @@ class SiteIndex(object):
             for row in rows:
                 url = row.get('url')
                 etag = row.get('etag')
-                last_modified = row.get('last_modified')
-                updated_at = row.get('updated_at')
+                modified_time = row.get('modified_time')
+                sync_time = row.get('sync_time')
                 title = row.get('title')
                 deleted = row.get('deleted')
                 pk = row.get('_pk')
@@ -271,8 +271,8 @@ class SiteIndex(object):
                     'url': url,
                     'etag': etag,
                     'title': title,
-                    'last_modified': last_modified,
-                    'updated_at': updated_at,
+                    'modified_time': modified_time,
+                    'sync_time': sync_time,
                 }
                 bulk_params.append(index_info)
                 bulk_params.append(doc_info)

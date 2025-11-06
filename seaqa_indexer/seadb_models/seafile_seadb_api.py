@@ -12,19 +12,19 @@ class SeafileSeaDBAPI:
     def save_or_update_file_to_db(self, connection_id, file):
         content = file.get('content')
         path = file['path']
-        filename = file['filename']
+        title = file['title']
 
         insert_row = {
             SeafileTable.path.name: path,
-            SeafileTable.filename.name: filename,
+            SeafileTable.title.name: title,
             SeafileTable.content.name: content[:SEADB_CONTENT_SIZE_LIMIT],
-            SeafileTable.mtime.name: file.get('mtime'),
-            SeafileTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SeafileTable.modified_time.name: file.get('modified_time'),
+            SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             SeafileTable.deleted.name: False,
         }
         table_name = SeafileTable.gen_table_name(connection_id)
 
-        sql = f"SELECT * FROM `{table_name}` WHERE `path`='{path}' AND filename='{filename}'"
+        sql = f"SELECT * FROM `{table_name}` WHERE `path`='{path}' AND title='{title}'"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if issues:
             _pk = issues[0].get('_pk')
@@ -52,7 +52,7 @@ class SeafileSeaDBAPI:
                     "pk": result.get('_pk'),
                     "row": {
                         SeafileTable.deleted.name: True,
-                        SeafileTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     }
                 }
                 rows.append(row)
@@ -66,7 +66,7 @@ class SeafileSeaDBAPI:
 
     def get_files_by_page(self, connection_id, since, page_size, offset):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results
@@ -75,9 +75,9 @@ class SeafileSeaDBAPI:
         table_name = SeafileTable.gen_table_name(connection_id)
         self.seadb_api.delete_rows(self.base_id, table_name, deleted_seadb_pk_list)
 
-    def get_file_by_path(self, connection_id, path, filename):
+    def get_file_by_path(self, connection_id, path, title):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT mtime FROM `{table_name}` WHERE `path` = '{path}' and filename='{filename}'"
+        sql = f"SELECT modified_time FROM `{table_name}` WHERE `path` = '{path}' and filename='{title}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         files = res.get('results', [])
         return files[0] if files else None

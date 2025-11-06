@@ -39,13 +39,13 @@ class DiscourseIndex(object):
             'slug': {
                 'type': 'keyword'
             },
-            'bumped_at': {
+            'modified_time': {
                 'type': 'date'
             },
-            'created_at': {
+            'created_time': {
                 'type': 'date'
             },
-            'updated_at': {
+            'sync_time': {
                 'type': 'date',
             }
         }
@@ -123,13 +123,13 @@ class DiscourseIndex(object):
         query_map['bool']['should'] = searches
 
         if time_from or time_to:
-            range_filter = {'range': {'updated_at': {}}}
+            range_filter = {'range': {'sync_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['updated_at']['gte'] = time_from
+                range_filter['range']['sync_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['updated_at']['lte'] = time_to
+                range_filter['range']['sync_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -138,7 +138,7 @@ class DiscourseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'topic_id', 'title', 'content', 'slug', 'bumped_at', 'created_at'],
+            '_source': ['connection_id', 'topic_id', 'title', 'content', 'slug', 'modified_time', 'created_time'],
             'sort': [
                 '_score'
             ],
@@ -183,8 +183,8 @@ class DiscourseIndex(object):
                 'content': source['content'],
                 'category_id': source.get('category_id'),
                 'slug': source['slug'],
-                'bumped_at': source['bumped_at'],
-                'created_at': source['created_at'],
+                'modified_time': source['modified_time'],
+                'created_time': source['created_time'],
             }
             discourse_posts.append(post)
 
@@ -226,7 +226,7 @@ class DiscourseIndex(object):
                 topic_id = topic.get('topic_id')
                 pk = topic.get('_pk')
                 key = str(pk)
-                if topic.get('deleted') == True:
+                if topic.get('deleted'):
                     need_cleared_topic_id_set.add(topic_id)
                     need_cleared_topic_index_id_set.add(key)
                     need_cleared_topics_pk_set.add(pk)
@@ -250,9 +250,9 @@ class DiscourseIndex(object):
                         'content': body_content,
                         'category_id': topic.get('category_id'),
                         'slug': topic.get('slug', ''),
-                        'bumped_at': topic.get('bumped_at'),
-                        'created_at': topic.get('created_at'),
-                        'updated_at': topic.get('updated_at'),
+                        'modified_time': topic.get('modified_time'),
+                        'created_time': topic.get('created_time'),
+                        'sync_time': topic.get('sync_time'),
                     }
 
                     index_info = {'index': {'_index': index_name, '_id': key}}

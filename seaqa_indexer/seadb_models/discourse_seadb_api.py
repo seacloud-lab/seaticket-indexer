@@ -21,25 +21,24 @@ class DiscourseSeaDBAPI:
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
     def get_topics_by_page(self, connection_id, since, page_size, offset):
-        issues_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
-        issues = res.get('results', [])
-        return issues
+        results = res.get('results', [])
+        return results
 
-    def get_topics_by_connection_id(self, connection_id, update_at_gt=None, topic_id=None):
+    def get_topics_by_connection_id(self, connection_id, start, limit):
         """Retrieve all topics for the specified connection_id."""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}`"
-        if update_at_gt is not None:
-            if isinstance(update_at_gt, datetime.datetime):
-                update_at_gt = update_at_gt.isoformat()
-            sql += f" WHERE `update_at` > '{update_at_gt}'"
-        if topic_id is not None:
-            if 'WHERE' in sql:
-                sql += f" AND `topic_id` = {topic_id}"
-            else:
-                sql += f" WHERE `topic_id` = {topic_id}"
+        sql = f"SELECT * FROM `{table_name}` LIMIT {limit} OFFSET {start}"
+        result = self.seadb_api.query_rows(self.base_id, sql)
+        if result and 'results' in result:
+            return result['results']
+        return []
+
+    def get_topic_by_topic_id(self, connection_id, topic_id):
+        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id}"
         result = self.seadb_api.query_rows(self.base_id, sql)
         if result and 'results' in result:
             return result['results']
@@ -69,7 +68,7 @@ class DiscourseSeaDBAPI:
     def delete_topic(self, connection_id, topic_id):
         """Delete topic record"""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        topics = self.get_topics_by_connection_id(connection_id, topic_id=topic_id)
+        topics = self.get_topic_by_topic_id(connection_id, topic_id)
         if not topics:
             logger.debug(f"Topic {topic_id} not found in connection {connection_id}, skipping deletion")
             return None

@@ -35,10 +35,10 @@ class SeafileIndex(object):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
-            'mtime': {
+            'modified_time': {
                 'type': 'date',
             },
-            'updated_at': {
+            'sync_time': {
                 'type': 'date',
             }
         }
@@ -115,13 +115,13 @@ class SeafileIndex(object):
         query_map['bool']['should'] = searches
 
         if time_from or time_to:
-            range_filter = {'range': {'updated_at': {}}}
+            range_filter = {'range': {'sync_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['updated_at']['gte'] = time_from
+                range_filter['range']['sync_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['updated_at']['lte'] = time_to
+                range_filter['range']['sync_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -130,7 +130,7 @@ class SeafileIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'repo_id', 'path', 'title', 'content', 'mtime'],
+            '_source': ['connection_id', 'repo_id', 'path', 'title', 'content', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -170,7 +170,7 @@ class SeafileIndex(object):
                 'repo_id': source['repo_id'],
                 'connection_id': source['connection_id'],
                 'content': source['content'],
-                'mtime': source['mtime'],
+                'modified_time': source['modified_time'],
                 'score': score,
                 '_id': _id,
             }
@@ -218,7 +218,7 @@ class SeafileIndex(object):
 
             for file in files:
                 parent_dir = file.get('path')
-                filename = file.get('filename')
+                title = file.get('title')
                 deleted = file.get('deleted')
                 pk = file.get('_pk')
                 key = str(pk)
@@ -230,10 +230,10 @@ class SeafileIndex(object):
                         'connection_id': connection_id,
                         'repo_id': repo_id,
                         'path': parent_dir,
-                        'title': filename,
-                        'mtime': file.get('mtime'),
+                        'title': title,
+                        'modified_time': file.get('modified_time'),
                         'content': file.get('content'),
-                        'updated_at': file.get('updated_at'),
+                        'sync_time': file.get('sync_time'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)

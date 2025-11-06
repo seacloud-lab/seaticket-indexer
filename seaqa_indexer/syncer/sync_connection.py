@@ -68,9 +68,9 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             discourse_api_username = config['api_username']
             sync_years = config.get('sync_years', 5)
 
-            project_uuuid = project_connection.project_uuid
+            project_uuid = project_connection.project_uuid
             project_created_at = project_connection.created_at
-            discourse_sync = DiscourseSync(project_uuuid, seaqa_db)
+            discourse_sync = DiscourseSync(project_uuid, seaqa_db)
             sync_count = discourse_sync.sync(
                 connection_id,
                 forum_url,
@@ -228,8 +228,8 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
             issue_id = issue['id']
             existing_issue = github_seadb_api.get_issue_by_id(issue_id, connection_id)
             if existing_issue:
-                existing_updated_at = time_to_utc_time(str(existing_issue.get('updated_at')))
-                if time_to_utc_time(issue.get('updated_at')) <= existing_updated_at:
+                existing_modified_time = time_to_utc_time(str(existing_issue.get('modified_time')))
+                if time_to_utc_time(issue.get('updated_at')) <= existing_modified_time:
                     logger.debug(f'Issue {issue_id} is up to date, skipping sync.')
                     continue
 
@@ -277,7 +277,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
         for file in recently_changed_files:
             parent_dir = file.get('_parent_dir')
             dirent_name = file.get('_name')
-            mtime = file.get('_file_mtime')
+            modified_time = file.get('_file_mtime')
             size = file.get('_size')
 
             file_suffix = get_file_suffix(dirent_name)
@@ -286,9 +286,9 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
 
             existing_file = seafile_seadb_api.get_file_by_path(connection_id, parent_dir, dirent_name)
             if existing_file:
-                existing_mtime = time_to_utc_time(str(existing_file.get('mtime')))
-                if time_to_utc_time(mtime) <= existing_mtime:
-                    logger.debug(f'connection_id %s parent_dir %s filename: %s is up to date, skipping sync.', connection_id, parent_dir, dirent_name)
+                existing_modified_time = time_to_utc_time(str(existing_file.get('modified_time')))
+                if time_to_utc_time(modified_time) <= existing_modified_time:
+                    logger.debug(f'connection_id % parent_dir % filename: %s is up to date, skipping sync.', connection_id, parent_dir, dirent_name)
                     continue
 
             content = ''
@@ -307,8 +307,8 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
                     content = extractor.extract(connection_id, repo_id, content, file_path)
             file_info = {
                 'path': parent_dir,
-                'filename': dirent_name,
-                'mtime': mtime,
+                'title': dirent_name,
+                'modified_time': modified_time,
                 'size': size,
                 'content': content if content else '',
             }

@@ -1,9 +1,10 @@
+import datetime
 import json
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import GithubIssuesTable, GithubIssueCommentsTable
 
-MAX_BODY_LENGTH = 10000
+MAX_CONTENT_LENGTH = 10000
 
 
 class GitHubSeaDBAPI:
@@ -16,9 +17,9 @@ class GitHubSeaDBAPI:
         sql = f"UPDATE `{table_name}` SET deleted = True WHERE comment_id = {comment_id}"
         self.seadb_api.query_rows(self.base_id, sql)
 
-    def update_issue_record(self, connection_id, issue_id, updated_at, comments_count=None, deleted=False):
+    def update_issue_record(self, connection_id, issue_id, modified_time, comments_count=None, deleted=False):
         row = {
-            GithubIssuesTable.updated_at.name: time_to_utc_time(updated_at).isoformat(),
+            GithubIssuesTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
         }
 
         if comments_count is not None:
@@ -58,11 +59,11 @@ class GitHubSeaDBAPI:
             type_name = None
 
         issue_id = issue['id']
-        body = issue.get('body')
+        content = issue.get('body')
         state_reason = issue.get('state_reason')
 
-        if body and len(body) > MAX_BODY_LENGTH:
-            body = body[:MAX_BODY_LENGTH]
+        if content and len(content) > MAX_CONTENT_LENGTH:
+            content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
             GithubIssuesTable.issue_id.name: issue['id'],
@@ -70,11 +71,12 @@ class GitHubSeaDBAPI:
             GithubIssuesTable.title.name: issue.get('title'),
             GithubIssuesTable.author.name: issue.get('user', {}).get('login', ''),
             GithubIssuesTable.url.name: issue.get('html_url', ''),
-            GithubIssuesTable.body.name: body,
+            GithubIssuesTable.content.name: content,
             GithubIssuesTable.state.name: issue.get('state'),
             GithubIssuesTable.assignees.name: json.dumps(assignees_list),
-            GithubIssuesTable.created_at.name: time_to_utc_time(issue.get('created_at')).isoformat(),
-            GithubIssuesTable.updated_at.name: time_to_utc_time(issue.get('updated_at')).isoformat(),
+            GithubIssuesTable.created_time.name: time_to_utc_time(issue.get('created_at')).isoformat(),
+            GithubIssuesTable.modified_time.name: time_to_utc_time(issue.get('updated_at')).isoformat(),
+            GithubIssuesTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             GithubIssuesTable.closed_at.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
             GithubIssuesTable.comments_count.name: issue.get('comments'),
             GithubIssuesTable.deleted.name: False,
@@ -107,17 +109,18 @@ class GitHubSeaDBAPI:
     def save_or_update_issue_comment_to_db(self, connection_id, issue_id, comment):
         comment_id = comment['id']
         issue_id = int(issue_id)
-        body = comment.get('body', '')
-        if body and len(body) > MAX_BODY_LENGTH:
-            body = body[:MAX_BODY_LENGTH]
+        content = comment.get('body', '')
+        if content and len(content) > MAX_CONTENT_LENGTH:
+            content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
             GithubIssueCommentsTable.comment_id.name: comment_id,
             GithubIssueCommentsTable.issue_id.name: issue_id,
             GithubIssueCommentsTable.author.name: comment.get('user', {}).get('login', ''),
-            GithubIssueCommentsTable.body.name: body,
-            GithubIssueCommentsTable.created_at.name: time_to_utc_time(comment.get('created_at')).isoformat(),
-            GithubIssueCommentsTable.updated_at.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
+            GithubIssueCommentsTable.content.name: content,
+            GithubIssueCommentsTable.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
+            GithubIssueCommentsTable.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
+            GithubIssueCommentsTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
 
         table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
@@ -193,7 +196,7 @@ class GitHubSeaDBAPI:
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
         issues_table_name = GithubIssuesTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{last_indexed_at}' LIMIT {page_size} OFFSET {offset}"
+        sql = f"SELECT * FROM `{issues_table_name}` WHERE sync_time >= '{last_indexed_at}' LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
         issues = res.get('results', [])
         return issues

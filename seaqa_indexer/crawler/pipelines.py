@@ -33,7 +33,7 @@ class BatchCrawlPipeline:
                     "pk": result.get('_pk'),
                     "row": {
                         WebCrawlTable.deleted.name: True,
-                        WebCrawlTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        WebCrawlTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     }
                 }
                 rows.append(row)
@@ -70,7 +70,7 @@ class BatchCrawlPipeline:
         content = item['content']
         hash = item.get('hash') if item else None
         etag = item.get('etag') if item else None
-        last_modified = item.get('last_modified') if item else None
+        modified_time = item.get('last_modified') if item else None
         filename = url_to_filename(url)
 
         table_name = WebCrawlTable.gen_table_name(self.site_id)
@@ -88,8 +88,8 @@ class BatchCrawlPipeline:
                     "row": {
                         WebCrawlTable.title.name: title,
                         WebCrawlTable.etag.name: etag,
-                        WebCrawlTable.last_modified.name: last_modified,
-                        WebCrawlTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        WebCrawlTable.modified_time.name: modified_time,
+                        WebCrawlTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                         WebCrawlTable.hash.name: hash,
                     }
                 }
@@ -102,8 +102,8 @@ class BatchCrawlPipeline:
                     WebCrawlTable.url.name: url,
                     WebCrawlTable.title.name: title,
                     WebCrawlTable.etag.name: etag,
-                    WebCrawlTable.last_modified.name: last_modified,
-                    WebCrawlTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                    WebCrawlTable.modified_time.name: modified_time,
+                    WebCrawlTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     WebCrawlTable.hash.name: hash,
                 }
             ]
