@@ -234,7 +234,7 @@ class EmailIndex(object):
                 else:
                     doc = {
                         'connection_id': connection_id,
-                        'title': email.get('title'),
+                        'title': email.get('subject'),
                         'email_from': email.get('email_from'),
                         'email_to': email.get('email_to'),
                         'message_id': email.get('message_id'),
