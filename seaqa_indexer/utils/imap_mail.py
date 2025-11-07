@@ -4,9 +4,8 @@ from imapclient import IMAPClient
 from imapclient.imapclient import SENT
 from email.parser import Parser
 from email.header import decode_header
-from datetime import datetime, timedelta
+from datetime import timedelta
 from email.utils import parseaddr, parsedate_to_datetime
-from tzlocal import get_localzone
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +179,6 @@ class ImapMail(object):
         td = timedelta(days=1)
         before_send_date = send_date - td
         after_send_date = send_date + td
-        total_email_list = []
         sent_box = self.server.find_special_folder(SENT)
         inbox = 'INBOX'
 
@@ -208,10 +206,7 @@ class ImapMail(object):
             for uid, message_data in emails.items():
                 mail_body = message_data[b'BODY[]']
                 email_dict = self.gen_email_dict(mail_body, mode, is_sender, send_date)
-                if email_dict:
-                    total_email_list.append(email_dict)
-
-        return total_email_list
+                yield email_dict
 
     def close(self):
         self.server.logout()
