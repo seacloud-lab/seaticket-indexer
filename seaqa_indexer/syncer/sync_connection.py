@@ -4,6 +4,7 @@ import datetime
 import os
 
 from urllib.parse import urlparse
+from dateutil.relativedelta import relativedelta
 
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
@@ -14,11 +15,15 @@ from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seasearch.utils import get_content_by_download_link
 from seaqa_indexer.utils.seahub_api import FileNotFoundException
 from seaqa_indexer.seasearch.extract import ExtractorFactory
-from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT, SEADB_CONTENT_SIZE_LIMIT, SYNC_FILE_SUFFIXES
+from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT, SYNC_FILE_SUFFIXES
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
+from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.sync_logger import SyncLogger
+from seaqa_indexer.syncer.utils import upload_email_attachment
+from seaqa_indexer.utils.imap_mail import ImapMail
+from seaqa_indexer.crawler.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +127,28 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
 
             seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
             sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
+        if connection_type == ConnectionType.EMAIL.value:
+            imap_host = config.get('imap_host')
+            imap_port = config.get('imap_port')
+            email_user = config.get('username')
+            email_password = config.get('password')
+            sync_years = config.get('sync_years', 5)
+            since = old_last_sync_time
+            if not since:
+                since = datetime.datetime.now(datetime.UTC) - relativedelta(years=sync_years)
+            since = time_to_utc_time(str(since)).isoformat()
+            email_seadb_api = EmailSeaDBAPI(project_uuid)
+            storage = get_storage()
+            try:
+                imap = ImapMail(imap_host, email_user, email_password, port=imap_port)
+            except Exception as e:
+                logger.error("connection_id %s imap_host: %s, email_user: %s, login error: %s", connection_id, imap_host, email_user, e)
+                sync_logger.log(f"imap account is invalid")
+                connection_status['last_sync_status'] = CrawlStatus.FAILED
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                sync_logger.stop_capture()
+                return
+            sync_count, total_count = sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage)
     except Exception as e:
         logger.exception('connection: %s, sync failed, error: %s', connection_id, e)
         try:
@@ -261,7 +288,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
             if existing_file:
                 existing_mtime = time_to_utc_time(str(existing_file.get('mtime')))
                 if time_to_utc_time(mtime) <= existing_mtime:
-                    logger.debug(f'connection_id % parent_dir % filename: %s is up to date, skipping sync.', connection_id, parent_dir, dirent_name)
+                    logger.debug(f'connection_id %s parent_dir %s filename: %s is up to date, skipping sync.', connection_id, parent_dir, dirent_name)
                     continue
 
             content = ''
@@ -283,7 +310,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
                 'filename': dirent_name,
                 'mtime': mtime,
                 'size': size,
-                'content': content[:SEADB_CONTENT_SIZE_LIMIT] if content else '',
+                'content': content if content else '',
             }
             seafile_seadb_api.save_or_update_file_to_db(connection_id, file_info)
             should, new_time, new_count = need_update_connection_last_sync_count(
@@ -320,3 +347,39 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
 
     total_count = seafile_seadb_api.get_file_total_count(connection_id)
     return sync_count, total_count
+
+
+def sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage):
+    sync_count = 0
+    _status_last_update_time = datetime.datetime.now()
+    _status_last_update_count = 0
+
+    send_date = time_to_utc_time(str(since))
+    email_list = imap.search_emails_by_send_date(send_date, 'SINCE')
+
+    for email in email_list:
+        message_id = email.get('message_id')
+        email_date = email.get('email_date')
+        existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
+        if existed_email:
+            existed_date = time_to_utc_time(str(existed_email.get('email_date')))
+            if time_to_utc_time(email_date) <= existed_date:
+                logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
+                continue
+
+        upload_email_attachment(connection_id, project_uuid, storage, email)
+
+        email_seadb_api.save_or_update_email_to_db(connection_id, email)
+        should, new_time, new_count = need_update_connection_last_sync_count(
+            sync_count, _status_last_update_time, _status_last_update_count
+        )
+        if should:
+            connection_status['last_sync_count'] = sync_count
+            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+            _status_last_update_time = new_time
+            _status_last_update_count = new_count
+        sync_count += 1
+
+    total_count = email_seadb_api.get_email_total_count(connection_id)
+    return sync_count, total_count
+

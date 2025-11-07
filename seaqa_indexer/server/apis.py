@@ -45,15 +45,21 @@ def auth_required(func):
     return decorated
 
 
-@application.route('/add-init-crawl-task', methods=['GET'])
+@application.route('/add-connection-sync-task', methods=['GET'])
 @auth_required
-def add_init_crawl_task():
+def add_connection_sync_task():
     connection_id = request.args.get('connection_id')
     task_type = request.args.get('type')
     if task_type == ConnectionType.SITE.value:
         application.app.web_crawl_manager.add_crawl_site_task(connection_id)
     elif task_type == ConnectionType.DISCOURSE_FORUM.value:
         application.app.discourse_sync_manager.add_discourse_sync_task(connection_id)
+    elif task_type == ConnectionType.GITHUB_ISSUE.value:
+        application.app.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
+    elif task_type == ConnectionType.SEAFILE.value:
+        application.app.seafile_sync_manager.add_sync_task(connection_id)
+    elif task_type == ConnectionType.EMAIL.value:
+        application.app.seafile_sync_manager.add_sync_task(connection_id)
     else:
         return jsonify({'success': False, 'error_msg': f'Unsupported type: {task_type}'}), 400
 
@@ -86,23 +92,6 @@ def manual_sync_connection():
         logger.exception('enqueue manual sync failed: %s', e)
         return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
 
-    return jsonify({'success': True}), 200
-
-
-@application.route('/add-index-seafile-task', methods=['GET'])
-@auth_required
-def add_index_seafile_task():
-    connection_id = request.args.get('connection_id')
-    application.app.seafile_sync_manager.add_sync_task(connection_id)
-
-    return jsonify({'success': True}), 200
-
-
-@application.route('/add-github-issues-index-task', methods=['GET'])
-@auth_required
-def add_github_issues_index_task():
-    connection_id = request.args.get('connection_id')
-    application.app.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
     return jsonify({'success': True}), 200
 
 
