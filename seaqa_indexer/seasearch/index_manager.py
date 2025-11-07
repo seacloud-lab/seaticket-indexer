@@ -9,6 +9,7 @@ from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
+from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type
 from seaqa_indexer.mq import get_mq
@@ -27,6 +28,7 @@ class IndexManager:
         self.seafile_index = SeafileIndex(self.seasearch_api)
         self.github_issues_index = GitHubIssuesIndex(self.seasearch_api)
         self.discourse_index = DiscourseIndex(self.seasearch_api)
+        self.email_index = EmailIndex(self.seasearch_api)
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
 
@@ -47,6 +49,8 @@ class IndexManager:
             self.github_issues_index.delete_index_by_index_name(index_name)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
             self.discourse_index.delete_index_by_index_name(index_name)
+        elif connection_type == ConnectionType.EMAIL.value:
+            self.email_index.delete_index_by_index_name(index_name)
 
     def add_connection_index_task(self, connection_id):
         msg_content = {
@@ -74,14 +78,15 @@ class IndexManager:
             elif connection_type == ConnectionType.SITE.value:
                 site_search_param = self.site_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
                 bulk_search_params.append(site_search_param)
-            elif connection_type == ConnectionType.EMAIL.value:
-                pass
             elif connection_type == ConnectionType.GITHUB_ISSUE.value:
                 issues_search_param = self.github_issues_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
                 bulk_search_params.append(issues_search_param)
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
                 discourse_search_param = self.discourse_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
                 bulk_search_params.append(discourse_search_param)
+            elif connection_type == ConnectionType.EMAIL.value:
+                email_search_param = self.email_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
+                bulk_search_params.append(email_search_param)
 
         if not bulk_search_params:
             return []
@@ -145,7 +150,18 @@ class IndexManager:
                 result_docs.append(r)
             # TODO other index type
             elif index_name.startswith(ConnectionType.EMAIL.value):
-                pass
+                r = {
+                    'title': source['title'],
+                    'email_from': source['email_from'],
+                    'email_to': source['email_to'],
+                    'message_id': source['message_id'],
+                    'connection_id': source['connection_id'],
+                    'content': source['content'],
+                    'score': score,
+                    '_id': _id,
+                    'type': 'email',
+                }
+                result_docs.append(r)
             elif index_name.startswith(ConnectionType.GITHUB_ISSUE.value):
                 config = connection_id_to_config.get(source['connection_id'])
                 server_url = config.get('repository')

@@ -9,6 +9,26 @@ class PropertyTypes:
     SINGLE_SELECT = 'single-select'
     MULTIPLE_SELECT = 'multiple-select'
     BOOL = 'bool'
+    IMAGE = 'image'
+    DATE = 'date'
+    LONG_TEXT = 'long-text'
+    CHECKBOX = 'checkbox'
+    URL = 'url'
+    DURATION = 'duration'
+    NUMBER = 'number'
+    FILE = 'file'
+    COLLABORATOR = 'collaborator'
+    EMAIL = 'email'
+    FORMULA = 'formula'
+    CREATOR = 'creator'
+    LAST_MODIFIER = 'last-modifier'
+    AUTO_NUMBER = 'auto-number'
+    LINK = 'link'
+    LINK_FORMULA = 'link-formula'
+    RATE = 'rate'
+    GEOLOCATION = 'geolocation'
+    BUTTON = 'button'
+    LIST = 'list'
 
 
 class SelectTypes:
@@ -199,3 +219,23 @@ class SeafileTable(BaseModel):
     @classmethod
     def gen_table_name(cls, connection_id):
         return ConnectionType.SEAFILE.value + '_' + str(connection_id)
+
+
+class EmailTable(BaseModel):
+    email_from = MappedColumn('email_from', PropertyTypes.TEXT)
+    email_to = MappedColumn('email_to', PropertyTypes.TEXT)
+    message_id = MappedColumn('message_id', PropertyTypes.TEXT)
+    subject = MappedColumn('subject', PropertyTypes.TEXT)
+    cc = MappedColumn('cc', PropertyTypes.TEXT)
+    content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    html_content = MappedColumn('html_content', PropertyTypes.TEXT, {'compressed': True})
+    email_date = MappedColumn('email_date', PropertyTypes.DATETIME)
+    reply_to_message_id = MappedColumn('reply_to_message_id', PropertyTypes.TEXT)
+    attachments = MappedColumn('attachments', PropertyTypes.LIST)
+    is_sender = MappedColumn('is_sender', PropertyTypes.BOOL)
+    updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.EMAIL.value + '_' + str(connection_id)

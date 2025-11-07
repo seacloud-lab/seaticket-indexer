@@ -1,8 +1,7 @@
 import datetime
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import SeafileTable
-
-MAX_CONTENT_LENGTH = 10 * 1000
+from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT
 
 
 class SeafileSeaDBAPI:
@@ -14,13 +13,11 @@ class SeafileSeaDBAPI:
         content = file.get('content')
         path = file['path']
         filename = file['filename']
-        if content:
-            content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
             SeafileTable.path.name: path,
             SeafileTable.filename.name: filename,
-            SeafileTable.content.name: content,
+            SeafileTable.content.name: content[:SEADB_CONTENT_SIZE_LIMIT],
             SeafileTable.mtime.name: file.get('mtime'),
             SeafileTable.updated_at.name: datetime.datetime.now(datetime.UTC).isoformat(),
             SeafileTable.deleted.name: False,
@@ -80,7 +77,7 @@ class SeafileSeaDBAPI:
 
     def get_file_by_path(self, connection_id, path, filename):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT mtime FROM `{table_name}` WHERE `path` >= '{path}' and filename='{filename}'"
+        sql = f"SELECT mtime FROM `{table_name}` WHERE `path` = '{path}' and filename='{filename}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         files = res.get('results', [])
         return files[0] if files else None
