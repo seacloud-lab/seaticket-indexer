@@ -105,7 +105,10 @@ class IndexManager:
             index_name = hit.get('_index')
             source = hit.get('_source')
             score = hit.get('_score')
-            _id = hit.get('_id')
+            try:
+                _id = int(hit.get('_id'))
+            except:
+                _id = hit.get('_id')
             if index_name.startswith(ConnectionType.SEAFILE.value):
                 repo_id = source['repo_id']
                 connection_id = source['connection_id']
