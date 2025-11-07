@@ -12,7 +12,8 @@ def upload_email_attachment(connection_id, project_uuid, storage, email):
         file_name = file.get('file_name')
         file_data = file.get('file_data')
         upload_file_name = message_id + '_' + file_name
-        storage.upload_file(connection_id, project_uuid, upload_file_name, file_data)
+        if file_data:
+            storage.upload_file(connection_id, project_uuid, upload_file_name, file_data)
         file_info_list.append(file_name)
         filename2url[file_name] = file_name
     email['attachment'] = file_info_list
