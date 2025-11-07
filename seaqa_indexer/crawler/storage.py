@@ -67,6 +67,10 @@ class S3Storage(BaseStorage):
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType='application/json; charset=utf-8')
 
+    def upload_file(self, site_id, project_uuid, filename, data):
+        key = self._key(project_uuid, site_id, filename)
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=data)
+
     def read_json(self, site_id, project_uuid, filename):
         key = self._key(project_uuid, site_id, filename)
         try:
@@ -77,7 +81,7 @@ class S3Storage(BaseStorage):
             if e.response['Error']['Code'] in ('NoSuchKey', '404'):
                 return None
             raise e
-        
+
         except Exception as e:
             logger.error('read_json error: %s', e)
             return None
@@ -85,7 +89,7 @@ class S3Storage(BaseStorage):
     def delete_file(self, site_id, project_uuid, filename):
         key = self._key(project_uuid, site_id, filename)
         self.client.delete_object(Bucket=self.bucket, Key=key)
-    
+
     def batch_delete_files(self, site_id, project_uuid, files):
         prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=site_id)
         objects = [{'Key': prefix + file} for file in files]
