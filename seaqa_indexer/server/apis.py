@@ -86,6 +86,8 @@ def manual_sync_connection():
             application.app.discourse_sync_manager.add_discourse_sync_task(connection_id)
         elif connection_type == ConnectionType.SEAFILE.value:
             application.app.seafile_sync_manager.add_sync_task(connection_id)
+        elif connection_type == ConnectionType.EMAIL.value:
+            application.app.seafile_sync_manager.add_sync_task(connection_id)
         else:
             return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
     except Exception as e:
