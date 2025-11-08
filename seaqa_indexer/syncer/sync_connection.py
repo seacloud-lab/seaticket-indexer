@@ -358,6 +358,8 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
     email_list = imap.search_emails_by_send_date(send_date, 'SINCE')
 
     for email in email_list:
+        if not email:
+            continue
         message_id = email.get('message_id')
         email_date = email.get('email_date')
         existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
