@@ -1,9 +1,7 @@
-import datetime
 import json
 import logging
-import pytz
 
-from seaqa_indexer.utils import md5, time_to_utc_time
+from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT
@@ -202,9 +200,6 @@ class GitHubIssuesIndex(object):
         logger.debug(f"GitHub issue search: {keyword} in {index_name}, found {len(issues)} results")
         return issues
 
-    def gen_index_id(self, issue_id):
-        return md5(f"{issue_id}")
-
     def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
         total = doc_item['hits']['total']['value']
@@ -240,11 +235,12 @@ class GitHubIssuesIndex(object):
             for issue in issues:
                 issue_id = issue.get('issue_id')
                 github_seadb_api.delete_comments_from_db(connection_id, issue_id)
-                key = self.gen_index_id(issue_id)
+                pk = issue.get('_pk')
+                key = str(pk)
                 if issue.get('deleted'):
                     need_cleared_issues_index_set.add(key)
                     need_cleared_issues_pk_set.add(issue_id)
-                    need_cleared_issues_id_set.add(issue.get('_pk'))
+                    need_cleared_issues_id_set.add(pk)
                 else:
                     content = issue.get('body') or ''
                     comments_offset = 0

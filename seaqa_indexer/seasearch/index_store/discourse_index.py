@@ -1,7 +1,6 @@
 import logging
 import json
 
-from seaqa_indexer.utils import md5
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status, time_to_utc_time
 from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT
@@ -192,9 +191,6 @@ class DiscourseIndex(object):
         logger.debug(f"Discourse search: {keyword} in {index_name}, found {len(discourse_posts)} results")
         return discourse_posts
 
-    def gen_index_id(self, topic_id):
-        return md5(f"{topic_id}")
-
     def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
         total = doc_item['hits']['total']['value']
@@ -228,12 +224,12 @@ class DiscourseIndex(object):
                 break
             for topic in topics:
                 topic_id = topic.get('topic_id')
-
-                key = self.gen_index_id(topic_id)
+                pk = topic.get('_pk')
+                key = str(pk)
                 if topic.get('deleted') == True:
                     need_cleared_topic_id_set.add(topic_id)
                     need_cleared_topic_index_id_set.add(key)
-                    need_cleared_topics_pk_set.add(topic.get('_pk'))
+                    need_cleared_topics_pk_set.add(pk)
                 else:
                     replies_offset = 0
                     replies_page_size = 1000

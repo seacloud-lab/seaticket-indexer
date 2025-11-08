@@ -1,7 +1,7 @@
 import json
 import logging
 
-from seaqa_indexer.utils import md5, need_update_connection_status, time_to_utc_time
+from seaqa_indexer.utils import need_update_connection_status, time_to_utc_time
 from seaqa_indexer.config import LANG
 
 logger = logging.getLogger(__name__)
@@ -186,9 +186,6 @@ class EmailIndex(object):
 
         return email_docs
 
-    def gen_index_id(self, message_id):
-        return md5(message_id)
-
     def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
         total = doc_item['hits']['total']['value']
@@ -224,10 +221,9 @@ class EmailIndex(object):
                 break
 
             for email in emails:
-                message_id = email.get('message_id')
                 deleted = email.get('deleted')
                 pk = email.get('_pk')
-                key = self.gen_index_id(message_id)
+                key = str(pk)
                 if deleted:
                     deleted_index_id_set.add(key)
                     deleted_seadb_pk_set.add(pk)
