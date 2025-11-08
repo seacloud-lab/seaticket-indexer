@@ -89,8 +89,8 @@ class SeafileIndex(object):
 
     def _make_query_searches(self, keyword, search_filename_only):
         match_query_kwargs = {'minimum_should_match': '-25%'}
-        title_boost_kwargs = {'boost': 7}
-        content_boost_kwargs = {'boost': 3}
+        title_boost_kwargs = {'boost': 0.7}
+        content_boost_kwargs = {'boost': 0.3}
 
         def _make_match_query(field, key_word, **kw):
             q = {'query': key_word}
