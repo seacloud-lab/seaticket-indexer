@@ -1,7 +1,7 @@
 import json
 import logging
 
-from seaqa_indexer.utils import md5, need_update_connection_status, time_to_utc_time
+from seaqa_indexer.utils import need_update_connection_status, time_to_utc_time
 from seaqa_indexer.config import LANG
 
 logger = logging.getLogger(__name__)
@@ -182,9 +182,6 @@ class SeafileIndex(object):
 
         return seafile_docs
 
-    def gen_index_id(self, repo_id, parent_dir, filename):
-        return md5(repo_id + parent_dir + filename)
-
     def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
         total = doc_item['hits']['total']['value']
@@ -224,7 +221,7 @@ class SeafileIndex(object):
                 filename = file.get('filename')
                 deleted = file.get('deleted')
                 pk = file.get('_pk')
-                key = self.gen_index_id(repo_id, parent_dir, filename)
+                key = str(pk)
                 if deleted:
                     deleted_index_id_set.add(key)
                     deleted_seadb_pk_set.add(pk)

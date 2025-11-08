@@ -1,9 +1,7 @@
-import datetime
 import json
 import logging
-import pytz
 
-from seaqa_indexer.utils import md5, time_to_utc_time
+from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.config import LANG
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.storage import get_storage
@@ -200,28 +198,6 @@ class SiteIndex(object):
 
         return site_docs
 
-    def update_document(self, index_name, connection_id, content, url, etag, title, last_modified):
-        self.add_document(index_name, connection_id, content, url, etag, title, last_modified)
-
-    def gen_index_id(self, url):
-        return md5(url)
-
-    def add_document(self, index_name, connection_id, content, url, etag, title, last_modified):
-        bulk_add_params = []
-        index_info = {'index': {'_index': index_name, '_id': self.gen_index_id(url)}}
-        doc_info = {
-            'connection_id': connection_id,
-            'content': content,
-            'url': url,
-            'etag': etag,
-            'title': title,
-            'last_modified': last_modified,
-        }
-
-        bulk_add_params.append(index_info)
-        bulk_add_params.append(doc_info)
-        self.seasearch_api.bulk(index_name, bulk_add_params)
-
     def normal_search(self, index_name, dsl):
         doc_item = self.seasearch_api.normal_search(index_name, dsl)
         total = doc_item['hits']['total']['value']
@@ -274,7 +250,7 @@ class SiteIndex(object):
                 title = row.get('title')
                 deleted = row.get('deleted')
                 pk = row.get('_pk')
-                key = self.gen_index_id(url)
+                key = str(pk)
                 if deleted:
                     deleted_index_id_set.add(key)
                     deleted_seadb_pk_set.add(pk)
