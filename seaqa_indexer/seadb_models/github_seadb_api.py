@@ -29,9 +29,9 @@ class GitHubSeaDBAPI:
 
         table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE issue_id={issue_id}"
-        issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        issue = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
 
-        _pk = issues[0].get('_pk')
+        _pk = issue[0].get('_pk')
         update_row = [
             {
                 "pk": _pk,
@@ -125,9 +125,9 @@ class GitHubSeaDBAPI:
 
         table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE comment_id={comment_id}"
-        comment_records = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if comment_records:
-            _pk = comment_records[0].get('_pk')
+        comment_record = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if comment_record:
+            _pk = comment_record[0].get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -171,7 +171,7 @@ class GitHubSeaDBAPI:
                 }
                 self.seadb_api.add_column_option(self.base_id, column_option)
 
-    def get_issue_by_id(self, issue_id, connection_id):
+    def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE `issue_id` = {issue_id}"
         result = self.seadb_api.query_rows(self.base_id, sql)

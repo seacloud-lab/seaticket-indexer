@@ -226,7 +226,7 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
 
             # Check if issue already exists in DB
             issue_id = issue['id']
-            existing_issue = github_seadb_api.get_issue_by_id(issue_id, connection_id)
+            existing_issue = github_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
             if existing_issue:
                 existing_modified_time = time_to_utc_time(str(existing_issue.get('modified_time')))
                 if time_to_utc_time(issue.get('updated_at')) <= existing_modified_time:

@@ -235,7 +235,7 @@ class EmailTable(BaseModel):
     reply_to_message_id = MappedColumn('reply_to_message_id', PropertyTypes.TEXT)
     attachments = MappedColumn('attachments', PropertyTypes.LIST)
     is_sender = MappedColumn('is_sender', PropertyTypes.BOOL)
-    updated_at = MappedColumn('updated_at', PropertyTypes.DATETIME)
+    sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
 
     @classmethod

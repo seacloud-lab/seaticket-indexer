@@ -25,9 +25,9 @@ class SeafileSeaDBAPI:
         table_name = SeafileTable.gen_table_name(connection_id)
 
         sql = f"SELECT * FROM `{table_name}` WHERE `path`='{path}' AND title='{title}'"
-        issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if issues:
-            _pk = issues[0].get('_pk')
+        result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if result:
+            _pk = result[0].get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -43,20 +43,17 @@ class SeafileSeaDBAPI:
         path = file.get('path')
         filename = file.get('filename')
         sql = f"""SELECT _pk FROM `{table_name}` WHERE `path`='{path}' AND filename='{filename}'"""
-        resp_results = self.seadb_api.query_rows(self.base_id, sql)
-        results = resp_results.get('results', [])
-        if results:
-            rows = []
-            for result in results:
-                row = {
-                    "pk": result.get('_pk'),
-                    "row": {
-                        SeafileTable.deleted.name: True,
-                        SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                    }
+        resp_result = self.seadb_api.query_rows(self.base_id, sql)
+        result = resp_result.get('results', [])
+        if result:
+            row = {
+                "pk": result[0].get('_pk'),
+                "row": {
+                    SeafileTable.deleted.name: True,
+                    SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                 }
-                rows.append(row)
-            self.seadb_api.update_rows(self.base_id, table_name, rows)
+            }
+            self.seadb_api.update_rows(self.base_id, table_name, row)
 
     def get_file_total_count(self, connection_id):
         table_name = SeafileTable.gen_table_name(connection_id)

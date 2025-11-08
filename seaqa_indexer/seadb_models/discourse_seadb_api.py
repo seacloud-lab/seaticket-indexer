@@ -1,8 +1,6 @@
 import logging
-import datetime
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 
 
@@ -26,15 +24,6 @@ class DiscourseSeaDBAPI:
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results
-
-    def get_topics_by_connection_id(self, connection_id, start, limit):
-        """Retrieve all topics for the specified connection_id."""
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` LIMIT {limit} OFFSET {start}"
-        result = self.seadb_api.query_rows(self.base_id, sql)
-        if result and 'results' in result:
-            return result['results']
-        return []
 
     def get_topic_by_topic_id(self, connection_id, topic_id):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
@@ -68,11 +57,11 @@ class DiscourseSeaDBAPI:
     def delete_topic(self, connection_id, topic_id):
         """Delete topic record"""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        topics = self.get_topic_by_topic_id(connection_id, topic_id)
-        if not topics:
+        topic = self.get_topic_by_topic_id(connection_id, topic_id)
+        if not topic:
             logger.debug(f"Topic {topic_id} not found in connection {connection_id}, skipping deletion")
             return None
-        primary_key = topics[0].get('_pk')
+        primary_key = topic[0].get('_pk')
         return self.seadb_api.delete_rows(self.base_id, table_name, [primary_key])
 
     def delete_topics_from_db(self, connection_id, need_delete_topic_pks, need_deleted_reply_topic_ids):
@@ -116,8 +105,8 @@ class DiscourseSeaDBAPI:
         """Delete all replies for the specified topic."""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
         sql = f"DELETE FROM `{table_name}` WHERE topic_id = {topic_id}"
-        result = self.seadb_api.query_rows(self.base_id, sql)
-        return result
+        results = self.seadb_api.query_rows(self.base_id, sql)
+        return results
 
     def get_topic_replies_by_page(self, connection_id, topic_id, page_size, offset):
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)

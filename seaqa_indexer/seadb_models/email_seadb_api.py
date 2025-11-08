@@ -23,7 +23,7 @@ class EmailSeaDBAPI:
             'email_date': time_to_utc_time(email['email_date']).isoformat(),
             'reply_to_message_id': email['reply_to_message_id'],
             'is_sender': email['is_sender'],
-            'updated_at': datetime.datetime.now(datetime.UTC).isoformat(),
+            'sync_time': datetime.datetime.now(datetime.UTC).isoformat(),
             'deleted': False,
         }
 
@@ -31,9 +31,9 @@ class EmailSeaDBAPI:
         message_id = email['message_id']
 
         sql = f"SELECT * FROM `{table_name}` WHERE `message_id`='{message_id}'"
-        issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if issues:
-            _pk = issues[0].get('_pk')
+        result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if result:
+            _pk = result[0].get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -54,8 +54,8 @@ class EmailSeaDBAPI:
         table_name = EmailTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
-        issues = res.get('results', [])
-        return issues
+        results = res.get('results', [])
+        return results
 
     def delete_emails_from_db(self, connection_id, deleted_seadb_pk_list):
         table_name = EmailTable.gen_table_name(connection_id)

@@ -41,7 +41,7 @@ class EmailIndex(object):
             'email_date': {
                 'type': 'date',
             },
-            'updated_at': {
+            'sync_time': {
                 'type': 'date',
             }
         }
@@ -118,13 +118,13 @@ class EmailIndex(object):
         query_map['bool']['should'] = searches
 
         if time_from or time_to:
-            range_filter = {'range': {'updated_at': {}}}
+            range_filter = {'range': {'sync_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['updated_at']['gte'] = time_from
+                range_filter['range']['sync_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['updated_at']['lte'] = time_to
+                range_filter['range']['sync_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -236,7 +236,7 @@ class EmailIndex(object):
                         'message_id': email.get('message_id'),
                         'content': email.get('content'),
                         'email_date': email.get('email_date'),
-                        'updated_at': email.get('updated_at'),
+                        'sync_time': email.get('sync_time'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)
