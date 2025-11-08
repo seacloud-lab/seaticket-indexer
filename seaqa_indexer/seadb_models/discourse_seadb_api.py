@@ -30,8 +30,8 @@ class DiscourseSeaDBAPI:
         sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id}"
         result = self.seadb_api.query_rows(self.base_id, sql)
         if result and 'results' in result:
-            return result['results']
-        return []
+            return result['results'][0]
+        return None
 
     def get_reply_by_id(self, connection_id, topic_id, post_number):
         """Get discourse reply by topic_id and post_number"""
@@ -61,7 +61,7 @@ class DiscourseSeaDBAPI:
         if not topic:
             logger.debug(f"Topic {topic_id} not found in connection {connection_id}, skipping deletion")
             return None
-        primary_key = topic[0].get('_pk')
+        primary_key = topic.get('_pk')
         return self.seadb_api.delete_rows(self.base_id, table_name, [primary_key])
 
     def delete_topics_from_db(self, connection_id, need_delete_topic_pks, need_deleted_reply_topic_ids):

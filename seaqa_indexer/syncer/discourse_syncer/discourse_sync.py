@@ -45,8 +45,8 @@ class DiscourseSync:
 
     def check_existing_topic(self, topic_id, connection_id):
         """Check if a topic already exists, if exists, return the topic record"""
-        if topics := self.discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id):
-            return topics[0]
+        if topic := self.discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id):
+            return topic
         else:
             # Default topic data structure is dict
             return {}
