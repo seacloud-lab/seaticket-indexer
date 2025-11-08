@@ -146,9 +146,9 @@ class ImapMail(object):
         send_time = header_info.get('Date')
 
         if mode == 'ON' and send_time.date() != send_date:
-            return
+            return email_dict
         if mode == 'SINCE' and send_time.date() < send_date.date():
-            return
+            return email_dict
 
         message_id = header_info.get('Message-ID')
         if not message_id:
@@ -198,15 +198,17 @@ class ImapMail(object):
             elif mode == 'SINCE':
                 results = self.server.search(['SINCE', before_send_date])
 
-            emails = self.server.fetch(results, ['BODY[]'])
-            is_sender = False
-            if email_folder == sent_box:
-                is_sender = True
+            offset = 100
+            for i in range(0, len(results), offset):
+                emails = self.server.fetch(results[i: i + offset], ['BODY[]'])
+                is_sender = False
+                if email_folder == sent_box:
+                    is_sender = True
 
-            for uid, message_data in emails.items():
-                mail_body = message_data[b'BODY[]']
-                email_dict = self.gen_email_dict(mail_body, mode, is_sender, send_date)
-                yield email_dict
+                for uid, message_data in emails.items():
+                    mail_body = message_data[b'BODY[]']
+                    email_dict = self.gen_email_dict(mail_body, mode, is_sender, send_date)
+                    yield email_dict
 
     def close(self):
         self.server.logout()
