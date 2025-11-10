@@ -339,8 +339,11 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
             file_suffix = get_file_suffix(file.get('obj_name'))
             if file_suffix not in SYNC_FILE_SUFFIXES:
                 continue
+            path = file.get('path')
+            if path != '/':
+                path = path.rstrip('/')
             file_info = {
-                'path': file.get('path'),
+                'path': path,
                 'filename': file.get('obj_name'),
             }
             seafile_seadb_api.mark_file_as_deleted(connection_id, file_info)
