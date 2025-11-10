@@ -12,7 +12,7 @@ class SeafileSeaDBAPI:
     def save_or_update_file_to_db(self, connection_id, file):
         content = file.get('content')
         path = file['path']
-        title = file['title']
+        filename = file['filename']
 
         insert_row = {
             SeafileTable.path.name: path,
@@ -24,10 +24,10 @@ class SeafileSeaDBAPI:
         }
         table_name = SeafileTable.gen_table_name(connection_id)
 
-        sql = f"SELECT * FROM `{table_name}` WHERE `path`='{path}' AND title='{title}'"
-        result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if result:
-            _pk = result[0].get('_pk')
+        sql = f"SELECT * FROM `{table_name}` WHERE `path`='{path}' AND title='{filename}'"
+        response = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if response:
+            _pk = response[0].get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -42,7 +42,7 @@ class SeafileSeaDBAPI:
         table_name = SeafileTable.gen_table_name(connection_id)
         path = file.get('path')
         filename = file.get('filename')
-        sql = f"""SELECT _pk FROM `{table_name}` WHERE `path`='{path}' AND filename='{filename}'"""
+        sql = f"""SELECT _pk FROM `{table_name}` WHERE `path`='{path}' AND title='{filename}'"""
         resp_result = self.seadb_api.query_rows(self.base_id, sql)
         result = resp_result.get('results', [])
         if result:
@@ -72,9 +72,9 @@ class SeafileSeaDBAPI:
         table_name = SeafileTable.gen_table_name(connection_id)
         self.seadb_api.delete_rows(self.base_id, table_name, deleted_seadb_pk_list)
 
-    def get_file_by_path(self, connection_id, path, title):
+    def get_file_by_path(self, connection_id, path, filename):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT modified_time FROM `{table_name}` WHERE `path` = '{path}' and filename='{title}'"
+        sql = f"SELECT modified_time FROM `{table_name}` WHERE `path` = '{path}' and title='{filename}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         files = res.get('results', [])
         return files[0] if files else None

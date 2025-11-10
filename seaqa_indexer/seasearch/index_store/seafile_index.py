@@ -38,9 +38,6 @@ class SeafileIndex(object):
             'modified_time': {
                 'type': 'date',
             },
-            'sync_time': {
-                'type': 'date',
-            }
         }
     }
 
@@ -115,13 +112,13 @@ class SeafileIndex(object):
         query_map['bool']['should'] = searches
 
         if time_from or time_to:
-            range_filter = {'range': {'sync_time': {}}}
+            range_filter = {'range': {'modified_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['sync_time']['gte'] = time_from
+                range_filter['range']['modified_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['sync_time']['lte'] = time_to
+                range_filter['range']['modified_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -233,7 +230,6 @@ class SeafileIndex(object):
                         'title': title,
                         'modified_time': file.get('modified_time'),
                         'content': file.get('content'),
-                        'sync_time': file.get('sync_time'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)

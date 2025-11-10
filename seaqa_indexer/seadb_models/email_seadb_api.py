@@ -15,12 +15,12 @@ class EmailSeaDBAPI:
             'email_from': email['email_from'],
             'email_to': email['email_to'],
             'message_id': email['message_id'],
-            'subject': email['subject'],
+            'title': email['title'],
             'cc': email['cc'],
             'content': email['content'][:SEADB_CONTENT_SIZE_LIMIT],
             'html_content': email['html_content'][:SEADB_CONTENT_SIZE_LIMIT],
             'attachment': email['attachment'],
-            'email_date': time_to_utc_time(email['email_date']).isoformat(),
+            'modified_time': time_to_utc_time(email['modified_time']).isoformat(),
             'reply_to_message_id': email['reply_to_message_id'],
             'is_sender': email['is_sender'],
             'sync_time': datetime.datetime.now(datetime.UTC).isoformat(),
@@ -52,7 +52,7 @@ class EmailSeaDBAPI:
 
     def get_emails_by_page(self, connection_id, since, page_size, offset):
         table_name = EmailTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results

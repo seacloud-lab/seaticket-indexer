@@ -43,10 +43,10 @@ class GitHubSeaDBAPI:
     def get_github_issues_count(self, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
-        issues_result = self.seadb_api.query_rows(self.base_id, sql)
+        response = self.seadb_api.query_rows(self.base_id, sql)
         issues_count = 0
-        if issues_result and 'results' in issues_result and issues_result['results']:
-            issues_count = issues_result['results'][0].get('count', 0)
+        if response and 'results' in response and response['results']:
+            issues_count = response['results'][0].get('count', 0)
         return issues_count
 
     def save_or_update_issue_to_db(self, connection_id, issue):
@@ -120,14 +120,13 @@ class GitHubSeaDBAPI:
             GithubIssueCommentsTable.content.name: content,
             GithubIssueCommentsTable.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
             GithubIssueCommentsTable.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
-            GithubIssueCommentsTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
 
         table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE comment_id={comment_id}"
-        comment_record = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if comment_record:
-            _pk = comment_record[0].get('_pk')
+        response = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if response:
+            _pk = response[0].get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -174,9 +173,9 @@ class GitHubSeaDBAPI:
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE `issue_id` = {issue_id}"
-        result = self.seadb_api.query_rows(self.base_id, sql)
-        if result and 'results' in result and result['results']:
-            return result['results'][0]
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        if response and 'results' in response and response['results']:
+            return response['results'][0]
         return None
 
     # *** github_issue index function ***

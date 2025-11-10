@@ -59,10 +59,10 @@ class DiscourseSync:
             self.topics_table.slug.name: slug,
             self.topics_table.views.name: views,
             self.topics_table.category_id.name: category_id,
-            self.topics_table.modified_time.name: modified_time.isoformat(),
+            self.topics_table.modified_time.name: modified_time,
             self.topics_table.deleted.name: False,
             self.topics_table.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            self.topics_table.created_time.name: topic_created_time.isoformat(),}
+            self.topics_table.created_time.name: topic_created_time,}
         self.discourse_seadb_api.insert_topic(connection_id, topic_data)
 
     def delete_topic_and_replies(self, topic_id, connection_id):
@@ -84,16 +84,16 @@ class DiscourseSync:
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
         if topic_pk := existing_topic.get('_pk'):
-            modified_time = time_to_utc_time(topic_data.get('last_posted_at'))
+            modified_time = time_to_utc_time(topic_data.get('last_posted_at')).isoformat()
             self.update_topic(title, slug, views, category_id, connection_id, modified_time, topic_pk)
             logger.debug(f"Updated existing topic {topic_id}")
         else:
             # When using webhook, the returned value does not have a modified_time.
-            topic_created_time = time_to_utc_time(topic_data.get('created_at'))
+            topic_created_time = time_to_utc_time(topic_data.get('created_at')).isoformat()
             if topic_data.get('bumped_at'):
-                modified_time = time_to_utc_time(topic_data.get('bumped_at'))
+                modified_time = time_to_utc_time(topic_data.get('bumped_at')).isoformat()
             else:
-                modified_time = time_to_utc_time(topic_data.get('last_posted_at'))
+                modified_time = time_to_utc_time(topic_data.get('last_posted_at')).isoformat()
             self.insert_topic(topic_id, title, slug, views, category_id, connection_id, modified_time, topic_created_time)
             logger.debug(f"Created new topic {topic_id}")
 
@@ -104,7 +104,7 @@ class DiscourseSync:
         existing_reply = self.check_existing_reply(topic_id, post_number, connection_id)
         content = reply_data.get('cooked', '')
         author = reply_data.get('username', '')
-        modified_time = time_to_utc_time(reply_data.get('updated_at'))
+        modified_time = time_to_utc_time(reply_data.get('updated_at')).isoformat()
         if existing_reply:
             reply_pk = existing_reply.get('_pk')
             self.update_reply(content, author, topic_id, post_number, modified_time, connection_id, reply_pk)
@@ -135,7 +135,7 @@ class DiscourseSync:
             self.replies_table.post_number.name: post_number,
             self.replies_table.content.name: content,
             self.replies_table.author.name: author,
-            self.replies_table.modified_time.name: modified_time.isoformat(),
+            self.replies_table.modified_time.name: modified_time,
         }
         self.discourse_seadb_api.insert_reply(connection_id, reply_data)
 
@@ -146,7 +146,7 @@ class DiscourseSync:
             self.topics_table.slug.name: slug,
             self.topics_table.views.name: views,
             self.topics_table.category_id.name: category_id,
-            self.topics_table.modified_time.name: modified_time.isoformat(),
+            self.topics_table.modified_time.name: modified_time,
             self.topics_table.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
         self.discourse_seadb_api.update_topic(connection_id, topic_data, primary_key)
@@ -160,7 +160,7 @@ class DiscourseSync:
         reply_data = {
             self.replies_table.content.name: content,
             self.replies_table.author.name: author,
-            self.replies_table.modified_time.name: modified_time.isoformat(),
+            self.replies_table.modified_time.name: modified_time,
             self.replies_table.topic_id.name: topic_id,
             self.replies_table.post_number.name: post_number
         }
@@ -180,7 +180,7 @@ class DiscourseSync:
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
-        modified_time = time_to_utc_time(topic_data.get('bumped_at'))
+        modified_time = time_to_utc_time(topic_data.get('bumped_at')).isoformat()
 
         # Fetch replies
         topic_replies_data = self.get_discourse_topic_replies(forum_url, topic_id, headers)
@@ -193,7 +193,7 @@ class DiscourseSync:
                 post_number = reply.get('post_number')
                 content = reply.get('cooked')
                 author = reply.get('username')
-                modified_time = time_to_utc_time(reply.get('modified_time'))
+                modified_time = time_to_utc_time(reply.get('modified_time')).isoformat()
 
                 if existing_reply := self.check_existing_reply(topic_id, post_number, connection_id):
                     reply_pk = existing_reply.get('_pk')
@@ -203,7 +203,7 @@ class DiscourseSync:
                 logger.debug(f"Successfully updated topic {topic_id} with replies.")
         else:
             # Create new topic
-            topic_created_time = time_to_utc_time(topic_data.get('created_at'))
+            topic_created_time = time_to_utc_time(topic_data.get('created_at')).isoformat()
             self.insert_topic(topic_id, title, slug, views, category_id, connection_id, modified_time, topic_created_time)
 
             if not topic_replies_data:
@@ -220,7 +220,7 @@ class DiscourseSync:
             post_number = reply.get('post_number')
             content = reply.get('cooked')
             author = reply.get('username')
-            modified_time = time_to_utc_time(reply.get('modified_time'))
+            modified_time = time_to_utc_time(reply.get('modified_time')).isoformat()
 
             self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id)
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")

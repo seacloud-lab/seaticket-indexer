@@ -42,12 +42,6 @@ class DiscourseIndex(object):
             'modified_time': {
                 'type': 'date'
             },
-            'created_time': {
-                'type': 'date'
-            },
-            'sync_time': {
-                'type': 'date',
-            }
         }
     }
 
@@ -123,13 +117,13 @@ class DiscourseIndex(object):
         query_map['bool']['should'] = searches
 
         if time_from or time_to:
-            range_filter = {'range': {'sync_time': {}}}
+            range_filter = {'range': {'modified_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['sync_time']['gte'] = time_from
+                range_filter['range']['modified_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['sync_time']['lte'] = time_to
+                range_filter['range']['modified_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -138,7 +132,7 @@ class DiscourseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'topic_id', 'title', 'content', 'slug', 'modified_time', 'created_time'],
+            '_source': ['connection_id', 'topic_id', 'title', 'content', 'slug', 'modified_time'],
             'sort': [
                 '_score'
             ],
@@ -184,7 +178,6 @@ class DiscourseIndex(object):
                 'category_id': source.get('category_id'),
                 'slug': source['slug'],
                 'modified_time': source['modified_time'],
-                'created_time': source['created_time'],
             }
             discourse_posts.append(post)
 
@@ -251,8 +244,6 @@ class DiscourseIndex(object):
                         'category_id': topic.get('category_id'),
                         'slug': topic.get('slug', ''),
                         'modified_time': topic.get('modified_time'),
-                        'created_time': topic.get('created_time'),
-                        'sync_time': topic.get('sync_time'),
                     }
 
                     index_info = {'index': {'_index': index_name, '_id': key}}

@@ -42,9 +42,6 @@ class SiteIndex(object):
             'modified_time': {
                 'type': 'date'
             },
-            'sync_time': {
-                'type': 'date',
-            }
         }
     }
 
@@ -132,13 +129,13 @@ class SiteIndex(object):
         query_map = self._add_connection_id_filter(query_map, connection_ids)
 
         if time_from or time_to:
-            range_filter = {'range': {'sync_time': {}}}
+            range_filter = {'range': {'modified_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['sync_time']['gte'] = time_from
+                range_filter['range']['modified_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['sync_time']['lte'] = time_to
+                range_filter['range']['modified_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -246,7 +243,6 @@ class SiteIndex(object):
                 url = row.get('url')
                 etag = row.get('etag')
                 modified_time = row.get('modified_time')
-                sync_time = row.get('sync_time')
                 title = row.get('title')
                 deleted = row.get('deleted')
                 pk = row.get('_pk')
@@ -272,7 +268,6 @@ class SiteIndex(object):
                     'etag': etag,
                     'title': title,
                     'modified_time': modified_time,
-                    'sync_time': sync_time,
                 }
                 bulk_params.append(index_info)
                 bulk_params.append(doc_info)
