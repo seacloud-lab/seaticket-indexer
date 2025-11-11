@@ -1,8 +1,6 @@
 import logging
-import datetime
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 
 
@@ -21,37 +19,27 @@ class DiscourseSeaDBAPI:
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
     def get_topics_by_page(self, connection_id, since, page_size, offset):
-        issues_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{issues_table_name}` WHERE updated_at >= '{since}' LIMIT {page_size} OFFSET {offset}"
-        res = self.seadb_api.query_rows(self.base_id, sql)
-        issues = res.get('results', [])
-        return issues
-
-    def get_topics_by_connection_id(self, connection_id, update_at_gt=None, topic_id=None):
-        """Retrieve all topics for the specified connection_id."""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}`"
-        if update_at_gt is not None:
-            if isinstance(update_at_gt, datetime.datetime):
-                update_at_gt = update_at_gt.isoformat()
-            sql += f" WHERE `update_at` > '{update_at_gt}'"
-        if topic_id is not None:
-            if 'WHERE' in sql:
-                sql += f" AND `topic_id` = {topic_id}"
-            else:
-                sql += f" WHERE `topic_id` = {topic_id}"
-        result = self.seadb_api.query_rows(self.base_id, sql)
-        if result and 'results' in result:
-            return result['results']
-        return []
+        sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        results = response.get('results', [])
+        return results
+
+    def get_topic_by_topic_id(self, connection_id, topic_id):
+        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id}"
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        if response and 'results' in response and response['results']:
+            return response['results'][0]
+        return None
 
     def get_reply_by_id(self, connection_id, topic_id, post_number):
         """Get discourse reply by topic_id and post_number"""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id} AND `post_number` = {post_number}"
-        result = self.seadb_api.query_rows(self.base_id, sql)
-        if result and 'results' in result and result['results']:
-            return result['results'][0]
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        if response and 'results' in response and response['results']:
+            return response['results'][0]
         return {}
 
     def update_topic(self, connection_id, topic_data, primary_key):
@@ -69,11 +57,11 @@ class DiscourseSeaDBAPI:
     def delete_topic(self, connection_id, topic_id):
         """Delete topic record"""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        topics = self.get_topics_by_connection_id(connection_id, topic_id=topic_id)
-        if not topics:
+        topic = self.get_topic_by_topic_id(connection_id, topic_id)
+        if not topic:
             logger.debug(f"Topic {topic_id} not found in connection {connection_id}, skipping deletion")
             return None
-        primary_key = topics[0].get('_pk')
+        primary_key = topic.get('_pk')
         return self.seadb_api.delete_rows(self.base_id, table_name, [primary_key])
 
     def delete_topics_from_db(self, connection_id, need_delete_topic_pks, need_deleted_reply_topic_ids):
@@ -117,8 +105,8 @@ class DiscourseSeaDBAPI:
         """Delete all replies for the specified topic."""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
         sql = f"DELETE FROM `{table_name}` WHERE topic_id = {topic_id}"
-        result = self.seadb_api.query_rows(self.base_id, sql)
-        return result
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        return response
 
     def get_topic_replies_by_page(self, connection_id, topic_id, page_size, offset):
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)

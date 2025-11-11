@@ -38,12 +38,9 @@ class EmailIndex(object):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
-            'email_date': {
+            'modified_time': {
                 'type': 'date',
             },
-            'updated_at': {
-                'type': 'date',
-            }
         }
     }
 
@@ -118,13 +115,13 @@ class EmailIndex(object):
         query_map['bool']['should'] = searches
 
         if time_from or time_to:
-            range_filter = {'range': {'updated_at': {}}}
+            range_filter = {'range': {'modified_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['updated_at']['gte'] = time_from
+                range_filter['range']['modified_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['updated_at']['lte'] = time_to
+                range_filter['range']['modified_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -133,7 +130,7 @@ class EmailIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'email_from', 'message_id', 'email_to', 'title', 'content', 'email_date'],
+            '_source': ['connection_id', 'email_from', 'message_id', 'email_to', 'title', 'content', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -174,7 +171,7 @@ class EmailIndex(object):
                 'message_id': source['message_id'],
                 'connection_id': source['connection_id'],
                 'content': source['content'],
-                'email_date': source['email_date'],
+                'modified_time': source['modified_time'],
                 'score': score,
                 '_id': _id,
             }
@@ -230,13 +227,12 @@ class EmailIndex(object):
                 else:
                     doc = {
                         'connection_id': connection_id,
-                        'title': email.get('subject'),
+                        'title': email.get('title'),
                         'email_from': email.get('email_from'),
                         'email_to': email.get('email_to'),
                         'message_id': email.get('message_id'),
                         'content': email.get('content'),
-                        'email_date': email.get('email_date'),
-                        'updated_at': email.get('updated_at'),
+                        'modified_time': email.get('modified_time'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)

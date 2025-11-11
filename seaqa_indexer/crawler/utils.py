@@ -88,7 +88,7 @@ def load_existing_site_info(connection_id, project_uuid, existing_site_info, sea
     offset = 0
     table_name = WebCrawlTable.gen_table_name(connection_id)
     while True:
-        sql = f"""SELECT `{WebCrawlTable.url.name}`, `{WebCrawlTable.etag.name}`, `{WebCrawlTable.last_modified.name}`, `{WebCrawlTable.hash.name}`
+        sql = f"""SELECT `{WebCrawlTable.url.name}`, `{WebCrawlTable.etag.name}`, `{WebCrawlTable.modified_time.name}`, `{WebCrawlTable.hash.name}`
         FROM `{table_name}`
         LIMIT {limit} OFFSET {offset}"""
         result = seadb_api.query_rows(project_uuid, sql)
