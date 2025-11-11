@@ -28,10 +28,12 @@ class GitHubSeaDBAPI:
             row[GithubIssuesTable.deleted.name] = deleted
 
         table_name = GithubIssuesTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE issue_id={issue_id}"
-        issue = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        sql = f"SELECT _pk FROM `{table_name}` WHERE issue_id={issue_id}"
+        issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if not issues:
+            return
 
-        _pk = issue[0].get('_pk')
+        _pk = issues[0].get('_pk')
         update_row = [
             {
                 "pk": _pk,
@@ -124,9 +126,9 @@ class GitHubSeaDBAPI:
 
         table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE comment_id={comment_id}"
-        response = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if response:
-            _pk = response[0].get('_pk')
+        comments = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if comments:
+            _pk = comments[0].get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -176,7 +178,7 @@ class GitHubSeaDBAPI:
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
-        return None
+        return {}
 
     # *** github_issue index function ***
     def delete_issues_from_db(self, connection_id, need_delete_issue_pks, need_deleted_comment_issue_ids):

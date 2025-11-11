@@ -15,12 +15,12 @@ class EmailSeaDBAPI:
             'email_from': email['email_from'],
             'email_to': email['email_to'],
             'message_id': email['message_id'],
-            'title': email['title'],
+            'title': email['subject'],
             'cc': email['cc'],
             'content': email['content'][:SEADB_CONTENT_SIZE_LIMIT],
             'html_content': email['html_content'][:SEADB_CONTENT_SIZE_LIMIT],
             'attachment': email['attachment'],
-            'modified_time': time_to_utc_time(email['modified_time']).isoformat(),
+            'modified_time': time_to_utc_time(email['email_date']).isoformat(),
             'reply_to_message_id': email['reply_to_message_id'],
             'is_sender': email['is_sender'],
             'sync_time': datetime.datetime.now(datetime.UTC).isoformat(),
@@ -30,10 +30,10 @@ class EmailSeaDBAPI:
         table_name = EmailTable.gen_table_name(connection_id)
         message_id = email['message_id']
 
-        sql = f"SELECT * FROM `{table_name}` WHERE `message_id`='{message_id}'"
-        result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if result:
-            _pk = result[0].get('_pk')
+        sql = f"SELECT _pk FROM `{table_name}` WHERE `message_id`='{message_id}'"
+        results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if results:
+            _pk = results[0].get('_pk')
             update_row = [
                 {
                 "pk":_pk,

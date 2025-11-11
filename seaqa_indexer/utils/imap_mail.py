@@ -166,11 +166,11 @@ class ImapMail(object):
         email_dict['attachment'] = file_list
         email_dict['email_from'] = header_info.get('From')
         email_dict['email_to'] = header_info.get('To')
-        email_dict['title'] = header_info.get('Subject')
+        email_dict['subject'] = header_info.get('Subject')
         email_dict['message_id'] = header_info.get('Message-ID')
         email_dict['reply_to_message_id'] = header_info.get('In-Reply-To')
         email_dict['cc'] = header_info.get('CC')
-        email_dict['modified_time'] = header_info.get('Date').isoformat()
+        email_dict['email_date'] = header_info.get('Date').isoformat()
         email_dict['is_sender'] = is_sender
 
         return email_dict

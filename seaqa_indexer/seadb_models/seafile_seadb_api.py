@@ -16,7 +16,7 @@ class SeafileSeaDBAPI:
 
         insert_row = {
             SeafileTable.path.name: path,
-            SeafileTable.title.name: title,
+            SeafileTable.title.name: filename,
             SeafileTable.content.name: content[:SEADB_CONTENT_SIZE_LIMIT],
             SeafileTable.modified_time.name: file.get('modified_time'),
             SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
@@ -24,10 +24,10 @@ class SeafileSeaDBAPI:
         }
         table_name = SeafileTable.gen_table_name(connection_id)
 
-        sql = f"SELECT * FROM `{table_name}` WHERE `path`='{path}' AND title='{filename}'"
-        response = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if response:
-            _pk = response[0].get('_pk')
+        sql = f"SELECT _pk FROM `{table_name}` WHERE `path`='{path}' AND title='{filename}'"
+        results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if results:
+            _pk = results[0].get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -44,10 +44,10 @@ class SeafileSeaDBAPI:
         filename = file.get('filename')
         sql = f"""SELECT _pk FROM `{table_name}` WHERE `path`='{path}' AND title='{filename}'"""
         resp_result = self.seadb_api.query_rows(self.base_id, sql)
-        result = resp_result.get('results', [])
-        if result:
+        results = resp_result.get('results', [])
+        if results:
             row = {
-                "pk": result[0].get('_pk'),
+                "pk": results[0].get('_pk'),
                 "row": {
                     SeafileTable.deleted.name: True,
                     SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
