@@ -23,9 +23,9 @@ class GithubIssuesSyncManager:
 
         if event == "issues":
             logger.info(f"Received webhook for issue #{issue_id}, action: {action}, event: {event}")
-            updated_at = update_data.get("updated_at")
+            modified_time = update_data.get("updated_at")
             if action == 'deleted':
-                github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, deleted=True)
+                github_seadb_api.update_issue_record(connection_id, issue_id, modified_time, deleted=True)
                 self.add_issues_index_task(connection_id)
                 return
             github_seadb_api.save_or_update_issue_to_db(connection_id, update_data)
@@ -35,17 +35,17 @@ class GithubIssuesSyncManager:
             issue_data = update_data.get('issue')
             comment_count = issue_data.get('comments')
             comment_data = update_data.get('comment')
-            updated_at = comment_data.get('updated_at')
+            modified_time = comment_data.get('modified_time')
 
             if action == 'deleted':
                 comment_id = comment_data['id']
                 github_seadb_api.tag_comment_deleted(connection_id, comment_id)
-                github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, comment_count)
+                github_seadb_api.update_issue_record(connection_id, issue_id, modified_time, comment_count)
                 self.add_issues_index_task(connection_id)
                 return
 
             github_seadb_api.save_or_update_issue_comment_to_db(connection_id, issue_id, comment_data)
-            github_seadb_api.update_issue_record(connection_id, issue_id, updated_at, comment_count)
+            github_seadb_api.update_issue_record(connection_id, issue_id, modified_time, comment_count)
 
         self.add_issues_index_task(connection_id)
 

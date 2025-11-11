@@ -49,7 +49,7 @@ class GitHubIssuesIndex(object):
             'labels': {
                 'type': 'keyword',
             },
-            'updated_at': {
+            'modified_time': {
                 'type': 'date',
             }
         }
@@ -128,13 +128,13 @@ class GitHubIssuesIndex(object):
         query_map['bool']['should'] = searches
 
         if time_from or time_to:
-            range_filter = {'range': {'updated_at': {}}}
+            range_filter = {'range': {'modified_time': {}}}
             if time_from:
                 time_from = time_to_utc_time(time_from).isoformat()
-                range_filter['range']['updated_at']['gte'] = time_from
+                range_filter['range']['modified_time']['gte'] = time_from
             if time_to:
                 time_to = time_to_utc_time(time_to).isoformat()
-                range_filter['range']['updated_at']['lte'] = time_to
+                range_filter['range']['modified_time']['lte'] = time_to
 
             self._ensure_filter_exists(query_map)
             query_map['bool']['filter'].append(range_filter)
@@ -242,7 +242,7 @@ class GitHubIssuesIndex(object):
                     need_cleared_issues_pk_set.add(issue_id)
                     need_cleared_issues_id_set.add(pk)
                 else:
-                    content = issue.get('body') or ''
+                    content = issue.get('content') or ''
                     comments_offset = 0
                     comments_page_size = 1000
                     while True:
@@ -264,7 +264,7 @@ class GitHubIssuesIndex(object):
                         'content': content,
                         'state': issue.get('state'),
                         'labels': issue.get('labels'),
-                        'updated_at': issue.get('updated_at'),
+                        'modified_time': issue.get('modified_time'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)
