@@ -153,7 +153,7 @@ class DiscourseSync:
 
     def check_existing_reply(self, topic_id, post_number, connection_id):
         """Check if a reply already exists"""
-        return self.discourse_seadb_api.get_reply_by_id(topic_id, connection_id, post_number)
+        return self.discourse_seadb_api.get_reply_by_id(connection_id, topic_id, post_number)
 
     def update_reply(self, content, author, topic_id, post_number, modified_time, connection_id, reply_pk):
         """Update an existing reply"""
