@@ -203,7 +203,6 @@ class IndexManager:
                     'slug': slug,
                     'score': score,
                     'modified_time': source['modified_time'],
-                    'created_time': source['created_time'],
                     'url': topic_url,
                     '_id': _id,
                     'type': 'discourse_forum',
