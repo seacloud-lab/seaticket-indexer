@@ -81,10 +81,10 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
         
         for row in rows:
             ai_processed_time = row.get('ai_processed_time')
-            updated_at = row.get('updated_at')
+            sync_time = row.get('sync_time')
             pk = row.get('_pk')
             url = row.get('url')
-            if ai_processed_time and updated_at < ai_processed_time:
+            if ai_processed_time and sync_time < ai_processed_time:
                 continue
             try:
                 filename = url_to_filename(url)
@@ -141,11 +141,11 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
         
         for row in rows:
             ai_processed_time = row.get('ai_processed_time')
-            updated_at = row.get('updated_at')
+            sync_time = row.get('sync_time')
             pk = row.get('_pk')
             topic_id = row.get('topic_id')
             title = row.get('title', '')
-            if ai_processed_time and updated_at < ai_processed_time:
+            if ai_processed_time and sync_time < ai_processed_time:
                 continue
             
             first_content = topic_id_content_map.get(topic_id, '')
@@ -195,15 +195,15 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
             pk = row.get('_pk')
             issue_id = row.get('issue_id')
             title = row.get('title', '')
-            body = row.get('body', '')
-            updated_at = row.get('updated_at')
+            content = row.get('content', '')
+            sync_time = row.get('sync_time')
             ai_processed_time = row.get('ai_processed_time')
             
-            if ai_processed_time and updated_at < ai_processed_time:
+            if ai_processed_time and sync_time < ai_processed_time:
                 continue
             
             try:
-                full_content = f"Title: {title}\n\nBody: {body}\n\n"
+                full_content = f"Title: {title}\n\nBody: {content}\n\n"
                 params['content'] = full_content
                 summary, vector = _generate_ai_content(params)
                 if summary:
@@ -246,12 +246,12 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
         offset += page_size
         for row in rows:
             pk = row.get('_pk')
-            filename = row.get('filename')
+            title = row.get('title')
             content = row.get('content')
-            updated_at = row.get('updated_at')
+            sync_time = row.get('sync_time')
             ai_processed_time = row.get('ai_processed_time')
             
-            if ai_processed_time and updated_at < ai_processed_time:
+            if ai_processed_time and sync_time < ai_processed_time:
                 continue
             if not content:
                 updates.append({
@@ -265,7 +265,7 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
                 updates = _batch_update_rows(seadb_api, project_uuid, table_name, updates)
                 continue
             try:
-                full_content = f"Filename: {filename}\nContent: {content}\n"
+                full_content = f"Title: {title}\nContent: {content}\n"
                 params['content'] = full_content
                 summary, vector = _generate_ai_content(params)
                 if summary:
@@ -279,7 +279,7 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
                     })
                     updates = _batch_update_rows(seadb_api, project_uuid, table_name, updates)
             except Exception as e:
-                logger.exception('Error processing seafile file %s: %s', file_identifier, e)
+                logger.exception('Error processing seafile file %s: %s', title, e)
                 continue
     if updates:
         try:

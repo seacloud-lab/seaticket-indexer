@@ -81,7 +81,7 @@ class SeafileSeaDBAPI:
 
     def get_all_files_by_page(self, connection_id, page_size, offset):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` ORDER BY path, filename LIMIT {page_size} OFFSET {offset}"
+        sql = f"SELECT * FROM `{table_name}` ORDER BY path, title LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results
