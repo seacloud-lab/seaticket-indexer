@@ -5,6 +5,7 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
+from seaqa_indexer.utils import encrypt_config, decrypt_config
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 logger = logging.getLogger(__name__)

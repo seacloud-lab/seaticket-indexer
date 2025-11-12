@@ -1,30 +1,57 @@
+import logging
+import time
+import jwt
 import requests
+from cryptography.hazmat.primitives import serialization
+from seaqa_indexer.config import GITHUB_APP_ID, PRIVATE_KEY_PATH
 
+logger = logging.getLogger(__name__)
 
 class GitHubAPIException(Exception):
     pass
 
 
 class GitHubAPI:
-    def __init__(self, token, owner, repo, issues_sync_id, timeout=60):
+    def __init__(self, token, installation_id, owner, repo, connection_id, timeout=60):
         self.owner = owner
         self.repo = repo
-        self.token = token
-        self.issues_sync_id = issues_sync_id
-        self.timeout = timeout
-        self.headers = self._gen_headers()
         self.base_url = f'https://api.github.com/repos/{self.owner}/{self.repo}'
+        self.token = token
+        self.installation_id = installation_id
+        self.installation_token = None
+        self.connection_id = connection_id
+        self.timeout = timeout
+        self.jwt_token = None
+        self.jwt_exp = 0
+        self.installation_exp = 0
+        self.headers = self._gen_headers()
 
     def _gen_headers(self):
         headers = {
             'Accept': 'application/vnd.github+json'
         }
-        if self.token:
-            headers['Authorization'] = f'Bearer {self.token}'
+        if self.installation_id:
+            token = self.get_installation_token(self.installation_id)
+        else:
+            token = self.token
+        headers['Authorization'] = f'Bearer {token}'
         return headers
 
     def _request(self, url, params=None):
         response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+
+        remaining = int(response.headers.get("X-RateLimit-Remaining", "1"))
+        reset_time = int(response.headers.get("X-RateLimit-Reset", "0"))
+        if remaining <= 1:
+            wait_sec = max(0, reset_time - int(time.time()) + 5)
+            logger.warning(f"Rate limit reached. Sleeping {wait_sec} s")
+            time.sleep(wait_sec)
+
+        if response.status_code == 401:
+            logger.warning("Token expired, refreshing and retrying request")
+            self.headers = self._gen_headers()
+            response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+
         if response.status_code == 404:
             raise FileNotFoundError(f'Not found: {url}')
         elif response.status_code >= 400:
@@ -57,3 +84,42 @@ class GitHubAPI:
     def get_issues_labels(self, per_page=100, page=1):
         url = f'{self.base_url}/labels'
         return self._request(url)
+
+    def generate_jwt(self):
+        now = int(time.time())
+        if not self.jwt_token or now >= self.jwt_exp - 60:
+            logger.debug("Generating new JWT token")
+
+            with open(PRIVATE_KEY_PATH, "rb") as f:
+                private_key = serialization.load_pem_private_key(f.read(), password=None)
+
+            now = int(time.time())
+            payload = {
+                "iat": now,
+                "exp": now + (9 * 60),
+                "iss": GITHUB_APP_ID
+            }
+            encoded_jwt = jwt.encode(payload, private_key, algorithm="RS256")
+            self.jwt_token = encoded_jwt
+            self.jwt_exp = payload["exp"]
+        return self.jwt_token
+
+    def get_installation_token(self, installation_id):
+        now = int(time.time())
+        if not self.installation_token or now >= self.installation_exp - 60:
+            self.generate_jwt()
+            url = f"https://api.github.com/app/installations/{installation_id}/access_tokens"
+            headers = {
+                "Authorization": f"Bearer {self.jwt_token}",
+                "Accept": "application/vnd.github+json"
+            }
+            response = requests.post(url, headers=headers)
+            if response.status_code != 201:
+                raise GitHubAPIException(
+                    f"Failed to get installation token: {response.status_code}, {response.text}"
+                )
+            data = response.json()
+            self.installation_token = data["token"]
+            expires_at = time.strptime(data["expires_at"], "%Y-%m-%dT%H:%M:%SZ")
+            self.installation_exp = int(time.mktime(expires_at))
+        return self.installation_token

@@ -88,6 +88,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
             server_url = config.get('repository')
             token = config.get('access_token')
+            installation_id = config.get('installation_id', None)
             try:
                 path = urlparse(server_url).path
                 parts = path.strip("/").split("/")
@@ -100,7 +101,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
                 sync_logger.stop_capture()
                 return
             since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
-            github_api = GitHubAPI(token, repo_owner, repo_name, connection_id)
+            github_api = GitHubAPI(token, installation_id, repo_owner, repo_name, connection_id)
             github_seadb_api = GitHubSeaDBAPI(project_uuid)
             sync_count, total_count = sync_github_issue(connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api)
 
