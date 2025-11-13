@@ -12,6 +12,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.ai_processor.ai_processor import generate_summaries_and_vectors
+from seaqa_indexer.db import init_db_session_class
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class AIProcessTaskWorker(object):
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         self.storage = get_storage()
         self.seadb_api = SeaDBAPI()
+        self.db_session_class = init_db_session_class()
 
         self.set_signal()
         self.worker_list = []
@@ -71,9 +73,8 @@ class AIProcessTaskWorker(object):
                             logger.warning('ai_process_task: invalid.', res)
                         else:
                             connection_id = data.get('connection_id')
-                            project_uuid = data.get('project_uuid')
                             connection_type = data.get('connection_type')
-                            self.work_task_handler(connection_id, project_uuid, connection_type)
+                            self.work_task_handler(connection_id, connection_type)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -81,14 +82,14 @@ class AIProcessTaskWorker(object):
             logger.error(e, exc_info=True)
             time.sleep(0.3)
 
-    def work_task_handler(self, connection_id, project_uuid, connection_type):
+    def work_task_handler(self, connection_id, connection_type):
         if not self.should_stop.is_set():
             if self.mq.set(self._get_ai_process_lock_key(connection_id), time.time(),
                       ex=self.LOCK_TIMEOUT, nx=True):
                 logger.info('%s start AI process project connection: %s, type: %s' % (self.tname, connection_id, connection_type))
                 lock_key = self._get_ai_process_lock_key(connection_id)
                 self.locked_keys.add(lock_key)
-                self.process_ai_summary(connection_id, project_uuid, connection_type)
+                self.process_ai_summary(connection_id, connection_type)
                 try:
                     self.locked_keys.remove(lock_key)
                 except KeyError:
@@ -97,12 +98,12 @@ class AIProcessTaskWorker(object):
                 logger.info(
                     "%s Finish AI process connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
             else:
-                self.add_to_undo_task(connection_id, project_uuid, connection_type)
+                self.add_to_undo_task(connection_id, connection_type)
 
-    def process_ai_summary(self, connection_id, project_uuid, connection_type):
+    def process_ai_summary(self, connection_id, connection_type):
         try:
-            generate_summaries_and_vectors(self.seadb_api, self.storage, connection_id, project_uuid, connection_type)
-            self.send_to_index_queue(connection_id)
+            generate_summaries_and_vectors(self.seadb_api, self.storage, self.db_session_class, connection_id, connection_type)
+            # self.send_to_index_queue(connection_id)
         except Exception as e:
             logger.exception('AI process connection: %s failed, error: %s', connection_id, e)
 
@@ -115,12 +116,11 @@ class AIProcessTaskWorker(object):
         except Exception as e:
             logger.error('Failed to send connection %s to index queue: %s', connection_id, e)
 
-    def add_to_undo_task(self, connection_id, project_uuid, connection_type):
+    def add_to_undo_task(self, connection_id, connection_type):
         time.sleep(0.5)
 
         msg_content = {
             'connection_id': connection_id,
-            'project_uuid': project_uuid,
             'connection_type': connection_type,
         }
         self.mq.lpush('ai_process_task', json.dumps(msg_content))

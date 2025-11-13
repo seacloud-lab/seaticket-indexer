@@ -19,15 +19,17 @@ def craw_web(connection_id, db_session_class, mq):
 
     def success_call_back(msg, params):
         site_id = params[0]
-        project_uuid = params[1]
-        msg_content = {
-            'project_uuid': project_uuid,
+        index_msg_content = {
+            'connection_id': site_id,
+        }
+        ai_msg_content = {
             'connection_id': site_id,
             'connection_type': ConnectionType.SITE.value
         }
         sync_logger.log(f"Completed crawl connection: {connection_id}")
         sync_logger.stop_capture()
-        mq.lpush('ai_process_task', json.dumps(msg_content))
+        mq.lpush('ai_process_task', json.dumps(ai_msg_content))
+        mq.lpush('index_task', json.dumps(index_msg_content))
 
     logger.info(f"Start crawl connection: {connection_id}")
     sync_logger = SyncLogger(db_session_class).init(connection_id)

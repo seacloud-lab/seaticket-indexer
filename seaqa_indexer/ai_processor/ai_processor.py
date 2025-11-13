@@ -1,5 +1,6 @@
 import logging
 import datetime
+from sqlalchemy import text
 
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.ai_processor.utils import generate_summary
@@ -16,49 +17,33 @@ from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 
 logger = logging.getLogger(__name__)
 
+BATCH_SIZE = 50
 
-def generate_summaries_and_vectors(seadb_api, storage, connection_id, project_uuid, connection_type):
+def generate_summaries_and_vectors(seadb_api, storage, db_session_class, connection_id, connection_type):
     logger.info('Start AI processing for connection %s, type: %s', connection_id, connection_type)
+    with db_session_class() as session:
+        sql = """SELECT project_uuid
+        FROM project_connection 
+        WHERE id=:connection_id"""
+        result = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
+    if not result:
+        logger.warning('No project found for connection %s', connection_id)
+        return
+    project_uuid = result[0]
     
-    try:
-        if connection_type == ConnectionType.SITE.value:
-            process_site_ai(seadb_api, storage, connection_id, project_uuid)
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            process_discourse_ai(seadb_api, connection_id, project_uuid)
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            process_github_issue_ai(seadb_api, connection_id, project_uuid)
-        elif connection_type == ConnectionType.SEAFILE.value:
-            process_seafile_ai(seadb_api, connection_id, project_uuid)
-        else:
-            logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
-            return
-    except Exception as e:
-        logger.exception('AI processing failed for connection %s, type %s: %s', connection_id, connection_type, e)
-        raise
+    if connection_type == ConnectionType.SITE.value:
+        process_site_ai(seadb_api, storage, connection_id, project_uuid)
+    elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+        process_discourse_ai(seadb_api, connection_id, project_uuid)
+    elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+        process_github_issue_ai(seadb_api, connection_id, project_uuid)
+    elif connection_type == ConnectionType.SEAFILE.value:
+        process_seafile_ai(seadb_api, connection_id, project_uuid)
+    else:
+        logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
+        return
     
     logger.info('AI processing completed for connection %s', connection_id)
-
-
-def _batch_update_rows(seadb_api, project_uuid, table_name, updates, batch_size=50):
-    if len(updates) >= batch_size:
-        try:
-            seadb_api.update_rows(project_uuid, table_name, updates)
-            logger.debug('Batch updated %d rows in table %s', len(updates), table_name)
-            return []
-        except Exception as e:
-            logger.exception('Failed to batch update rows in table %s: %s', table_name, e)
-            raise e
-    return updates
-
-
-def _generate_ai_content(params):
-    try:
-        summary, vector = generate_summary(params)
-        return summary, vector
-    except Exception as e:
-        logger.exception('Failed to generate AI summary: %s', e)
-        return None, None
-
 
 def process_site_ai(seadb_api, storage, connection_id, project_uuid):
     page_size = 100
@@ -72,7 +57,14 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
     }
 
     while True:
-        sql = f"""SELECT * FROM `{table_name}` ORDER BY url LIMIT {page_size} OFFSET {offset}"""
+        sql = f"""
+            SELECT _pk, url FROM `{table_name}`
+            WHERE ai_processed_time IS NULL
+            OR ai_processed_time < sync_time
+            ORDER BY url
+            LIMIT {page_size}
+            OFFSET {offset}
+        """
         result = seadb_api.query_rows(project_uuid, sql)
         offset += page_size
         rows = result.get('results', [])
@@ -80,37 +72,28 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
             break
         
         for row in rows:
-            ai_processed_time = row.get('ai_processed_time')
-            sync_time = row.get('sync_time')
             pk = row.get('_pk')
             url = row.get('url')
-            if ai_processed_time and sync_time < ai_processed_time:
-                continue
-            try:
-                filename = url_to_filename(url)
-                file_json = storage.read_json(connection_id, project_uuid, filename)
-                content = file_json.get('content', '')
-                params['content'] = content[:LLM_INPUT_CHARACTERS_LIMIT]
-                summary, vector = _generate_ai_content(params)
-                if summary:
-                    updates.append({
-                        "pk": pk,
-                        "row": {
-                            "ai_summary": summary,
-                            "ai_summary_vector": vector,
-                            "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                        }
-                    })
-                    updates = _batch_update_rows(seadb_api, project_uuid, table_name, updates)
-            except Exception as e:
-                logger.exception('Error processing site URL %s: %s', url, e)
-                continue
+            filename = url_to_filename(url)
+            file_json = storage.read_json(connection_id, project_uuid, filename)
+            content = file_json.get('content', '')
+            params['content'] = content[:LLM_INPUT_CHARACTERS_LIMIT]
+            summary, vector = generate_summary(params)
+            if summary:
+                updates.append({
+                    "pk": pk,
+                    "row": {
+                        "ai_summary": summary,
+                        "ai_summary_vector": vector,
+                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                    }
+                })
+                if len(updates) >= BATCH_SIZE:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
     if updates:
-        try:
-            seadb_api.update_rows(project_uuid, table_name, updates)
-            logger.info('Final batch updated %d rows for site connection %s', len(updates), connection_id)
-        except Exception as e:
-            logger.exception('Failed to update final batch for connection %s', connection_id)
+        seadb_api.update_rows(project_uuid, table_name, updates)
+        logger.info('Final batch updated %d rows for site connection %s', len(updates), connection_id)
 
 
 def process_discourse_ai(seadb_api, connection_id, project_uuid):
@@ -126,7 +109,14 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
     }
     
     while True:
-        sql = f"""SELECT * FROM `{table_name}` ORDER BY topic_id LIMIT {page_size} OFFSET {offset}"""
+        sql = f"""
+            SELECT _pk, topic_id, title FROM `{table_name}`
+            WHERE ai_processed_time IS NULL
+            OR ai_processed_time < sync_time
+            ORDER BY topic_id
+            LIMIT {page_size}
+            OFFSET {offset}
+        """
         result = seadb_api.query_rows(project_uuid, sql)
         offset += page_size
         rows = result.get('results', [])
@@ -140,38 +130,29 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
             topic_id_content_map[topic_id] = content
         
         for row in rows:
-            ai_processed_time = row.get('ai_processed_time')
-            sync_time = row.get('sync_time')
             pk = row.get('_pk')
             topic_id = row.get('topic_id')
             title = row.get('title', '')
-            if ai_processed_time and sync_time < ai_processed_time:
-                continue
             
             first_content = topic_id_content_map.get(topic_id, '')
-            try:
-                full_content = f"Title: {title}\n\nBody: {first_content}\n"
-                params['content'] = full_content
-                summary, vector = _generate_ai_content(params)
-                if summary:
-                    updates.append({
-                        "pk": pk,
-                        "row": {
-                            "ai_summary": summary,
-                            "ai_summary_vector": vector,
-                            "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                        }
-                    })
-                    updates = _batch_update_rows(seadb_api, project_uuid, table_name, updates)
-            except Exception as e:
-                logger.exception('Error processing discourse topic %s: %s', topic_id, e)
-                continue
+            full_content = f"Title: {title}\n\nBody: {first_content}\n"
+            params['content'] = full_content
+            summary, vector = generate_summary(params)
+            if summary:
+                updates.append({
+                    "pk": pk,
+                    "row": {
+                        "ai_summary": summary,
+                        "ai_summary_vector": vector,
+                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                    }
+                })
+                if len(updates) >= BATCH_SIZE:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
     if updates:
-        try:
-            seadb_api.update_rows(project_uuid, table_name, updates)
-            logger.info('Final batch updated %d rows for discourse connection %s', len(updates), connection_id)
-        except Exception as e:
-            logger.exception('Failed to update final batch for connection %s', connection_id)
+        seadb_api.update_rows(project_uuid, table_name, updates)
+        logger.info('Final batch updated %d rows for discourse connection %s', len(updates), connection_id)
 
 
 def process_github_issue_ai(seadb_api, connection_id, project_uuid):
@@ -179,7 +160,7 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
     offset = 0
     updates = []
     table_name = GithubIssuesTable.gen_table_name(connection_id)
-    github_api = GitHubSeaDBAPI(project_uuid)
+    github_seadb_api = GitHubSeaDBAPI(project_uuid)
     params = {
         "username": "",
         "connection_type": ConnectionType.GITHUB_ISSUE.value,
@@ -187,44 +168,33 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
     }
     
     while True:
-        rows = github_api.get_all_issues_by_page(connection_id, page_size, offset)
+        rows = github_seadb_api.get_need_ai_issues_by_page(connection_id, page_size, offset)
         if not rows:
             break
         offset += page_size
         for row in rows:
             pk = row.get('_pk')
-            issue_id = row.get('issue_id')
             title = row.get('title', '')
             content = row.get('content', '')
-            sync_time = row.get('sync_time')
-            ai_processed_time = row.get('ai_processed_time')
             
-            if ai_processed_time and sync_time < ai_processed_time:
-                continue
-            
-            try:
-                full_content = f"Title: {title}\n\nBody: {content}\n"
-                params['content'] = full_content
-                summary, vector = _generate_ai_content(params)
-                if summary:
-                    updates.append({
-                        "pk": pk,
-                        "row": {
-                            "ai_summary": summary,
-                            "ai_summary_vector": vector,
-                            "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                        }
-                    })
-                    updates = _batch_update_rows(seadb_api, project_uuid, table_name, updates)
-            except Exception as e:
-                logger.exception('Error processing github issue %s: %s', issue_id, e)
-                continue
+            full_content = f"Title: {title}\n\nBody: {content}\n"
+            params['content'] = full_content
+            summary, vector = generate_summary(params)
+            if summary:
+                updates.append({
+                    "pk": pk,
+                    "row": {
+                        "ai_summary": summary,
+                        "ai_summary_vector": vector,
+                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                    }
+                })
+                if len(updates) >= BATCH_SIZE:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
     if updates:
-        try:
-            seadb_api.update_rows(project_uuid, table_name, updates)
-            logger.info('Final batch updated %d rows for github issue connection %s', len(updates), connection_id)
-        except Exception as e:
-            logger.exception('Failed to update final batch for connection %s', connection_id)
+        seadb_api.update_rows(project_uuid, table_name, updates)
+        logger.info('Final batch updated %d rows for github issue connection %s', len(updates), connection_id)
 
 
 def process_seafile_ai(seadb_api, connection_id, project_uuid):
@@ -240,7 +210,7 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
     }
     
     while True:
-        rows = seafile_api.get_all_files_by_page(connection_id, page_size, offset)
+        rows = seafile_api.get_need_ai_files_by_page(connection_id, page_size, offset)
         if not rows:
             break
         offset += page_size
@@ -248,11 +218,7 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
             pk = row.get('_pk')
             title = row.get('title')
             content = row.get('content')
-            sync_time = row.get('sync_time')
-            ai_processed_time = row.get('ai_processed_time')
             
-            if ai_processed_time and sync_time < ai_processed_time:
-                continue
             if not content:
                 updates.append({
                         "pk": pk,
@@ -262,28 +228,25 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
                             "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
                         }
                     })
-                updates = _batch_update_rows(seadb_api, project_uuid, table_name, updates)
+                if len(updates) >= BATCH_SIZE:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
                 continue
-            try:
-                full_content = f"Title: {title}\n\nContent: {content}\n"
-                params['content'] = full_content
-                summary, vector = _generate_ai_content(params)
-                if summary:
-                    updates.append({
-                        "pk": pk,
-                        "row": {
-                            "ai_summary": summary,
-                            "ai_summary_vector": vector,
-                            "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                        }
-                    })
-                    updates = _batch_update_rows(seadb_api, project_uuid, table_name, updates)
-            except Exception as e:
-                logger.exception('Error processing seafile file %s: %s', title, e)
-                continue
+            full_content = f"Title: {title}\n\nContent: {content}\n"
+            params['content'] = full_content
+            summary, vector = generate_summary(params)
+            if summary:
+                updates.append({
+                    "pk": pk,
+                    "row": {
+                        "ai_summary": summary,
+                        "ai_summary_vector": vector,
+                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                    }
+                })
+                if len(updates) >= BATCH_SIZE:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
     if updates:
-        try:
-            seadb_api.update_rows(project_uuid, table_name, updates)
-            logger.info('Final batch updated %d rows for seafile connection %s', len(updates), connection_id)
-        except Exception as e:
-            logger.exception('Failed to update final batch for connection %s', connection_id)
+        seadb_api.update_rows(project_uuid, table_name, updates)
+        logger.info('Final batch updated %d rows for seafile connection %s', len(updates), connection_id)
