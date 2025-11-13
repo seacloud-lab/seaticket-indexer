@@ -150,7 +150,7 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
             
             first_content = topic_id_content_map.get(topic_id, '')
             try:
-                full_content = f"Title: {title}\n" + "\n".join(first_content)
+                full_content = f"Title: {title}\n\nBody: {first_content}\n"
                 params['content'] = full_content
                 summary, vector = _generate_ai_content(params)
                 if summary:
@@ -203,7 +203,7 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
                 continue
             
             try:
-                full_content = f"Title: {title}\n\nBody: {content}\n\n"
+                full_content = f"Title: {title}\n\nBody: {content}\n"
                 params['content'] = full_content
                 summary, vector = _generate_ai_content(params)
                 if summary:
@@ -265,7 +265,7 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
                 updates = _batch_update_rows(seadb_api, project_uuid, table_name, updates)
                 continue
             try:
-                full_content = f"Title: {title}\nContent: {content}\n"
+                full_content = f"Title: {title}\n\nContent: {content}\n"
                 params['content'] = full_content
                 summary, vector = _generate_ai_content(params)
                 if summary:
