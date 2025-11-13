@@ -126,7 +126,7 @@ class IndexManager:
 
                 url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + source['path'].strip('/') + '/' + source['title']
                 r = {
-                    'filename': source['title'],
+                    'title': source['title'],
                     'path': source['path'],
                     'repo_id': source['repo_id'],
                     'connection_id': source['connection_id'],
