@@ -19,17 +19,19 @@ logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50
 
-def generate_summaries_and_vectors(seadb_api, storage, db_session_class, connection_id, connection_type):
-    logger.info('Start AI processing for connection %s, type: %s', connection_id, connection_type)
-    with db_session_class() as session:
-        sql = """SELECT project_uuid
-        FROM project_connection 
-        WHERE id=:connection_id"""
-        result = session.execute(text(sql), {'connection_id': connection_id}).fetchone()
-    if not result:
-        logger.warning('No project found for connection %s', connection_id)
+def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
+    project_connection = seaqa_db.get_project_connection_by_id(connection_id)
+    if not project_connection:
+        logger.warning('connection: %s not found', connection_id)
         return
-    project_uuid = result[0]
+
+    connection_is_active = project_connection.is_active
+    if not connection_is_active:
+        logger.warning('connection: %s is inactive', connection_id)
+        return
+    
+    project_uuid = project_connection.project_uuid
+    connection_type = project_connection.type
     
     if connection_type == ConnectionType.SITE.value:
         process_site_ai(seadb_api, storage, connection_id, project_uuid)
@@ -79,18 +81,17 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
             content = file_json.get('content', '')
             params['content'] = content[:LLM_INPUT_CHARACTERS_LIMIT]
             summary, vector = generate_summary(params)
-            if summary:
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                if len(updates) >= BATCH_SIZE:
-                    seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
+            updates.append({
+                "pk": pk,
+                "row": {
+                    "ai_summary": summary,
+                    "ai_summary_vector": vector,
+                    "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                }
+            })
+            if len(updates) >= BATCH_SIZE:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
     if updates:
         seadb_api.update_rows(project_uuid, table_name, updates)
         logger.info('Final batch updated %d rows for site connection %s', len(updates), connection_id)
@@ -101,7 +102,7 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
     offset = 0
     updates = []
     table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-    discourse_api = DiscourseSeaDBAPI(project_uuid)
+    discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
     params = {
         "username": "",
         "connection_type": ConnectionType.DISCOURSE_FORUM.value,
@@ -109,22 +110,13 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
     }
     
     while True:
-        sql = f"""
-            SELECT _pk, topic_id, title FROM `{table_name}`
-            WHERE ai_processed_time IS NULL
-            OR ai_processed_time < sync_time
-            ORDER BY topic_id
-            LIMIT {page_size}
-            OFFSET {offset}
-        """
-        result = seadb_api.query_rows(project_uuid, sql)
+        rows = discourse_seadb_api.get_need_ai_topics(connection_id, page_size, offset)
         offset += page_size
-        rows = result.get('results', [])
         if not rows:
             break
         
         topic_ids = [row.get('topic_id') for row in rows]
-        result = discourse_api.get_topics_first_reply(connection_id, topic_ids)
+        result = discourse_seadb_api.get_topics_first_reply(connection_id, topic_ids)
         topic_id_content_map = {}
         for topic_id, content in result.items():
             topic_id_content_map[topic_id] = content
@@ -138,18 +130,17 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
             full_content = f"Title: {title}\n\nBody: {first_content}\n"
             params['content'] = full_content
             summary, vector = generate_summary(params)
-            if summary:
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                if len(updates) >= BATCH_SIZE:
-                    seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
+            updates.append({
+                "pk": pk,
+                "row": {
+                    "ai_summary": summary,
+                    "ai_summary_vector": vector,
+                    "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                }
+            })
+            if len(updates) >= BATCH_SIZE:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
     if updates:
         seadb_api.update_rows(project_uuid, table_name, updates)
         logger.info('Final batch updated %d rows for discourse connection %s', len(updates), connection_id)
@@ -180,18 +171,17 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
             full_content = f"Title: {title}\n\nBody: {content}\n"
             params['content'] = full_content
             summary, vector = generate_summary(params)
-            if summary:
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                if len(updates) >= BATCH_SIZE:
-                    seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
+            updates.append({
+                "pk": pk,
+                "row": {
+                    "ai_summary": summary,
+                    "ai_summary_vector": vector,
+                    "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                }
+            })
+            if len(updates) >= BATCH_SIZE:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
     if updates:
         seadb_api.update_rows(project_uuid, table_name, updates)
         logger.info('Final batch updated %d rows for github issue connection %s', len(updates), connection_id)
@@ -235,18 +225,17 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
             full_content = f"Title: {title}\n\nContent: {content}\n"
             params['content'] = full_content
             summary, vector = generate_summary(params)
-            if summary:
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                if len(updates) >= BATCH_SIZE:
-                    seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
+            updates.append({
+                "pk": pk,
+                "row": {
+                    "ai_summary": summary,
+                    "ai_summary_vector": vector,
+                    "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                }
+            })
+            if len(updates) >= BATCH_SIZE:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
     if updates:
         seadb_api.update_rows(project_uuid, table_name, updates)
         logger.info('Final batch updated %d rows for seafile connection %s', len(updates), connection_id)

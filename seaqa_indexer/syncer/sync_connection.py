@@ -200,16 +200,11 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     sync_logger.log(f'Finish sync connection: {connection_id}')
     sync_logger.stop_capture()
 
-    index_msg_content = {
+    msg_content = {
         'connection_id': connection_id
     }
-    mq.lpush('index_task', json.dumps(index_msg_content))
-    
-    ai_msg_content = {
-        'connection_id': connection_id,
-        'connection_type': connection_type,
-    }
-    mq.lpush('ai_process_task', json.dumps(ai_msg_content))
+    mq.lpush('index_task', json.dumps(msg_content))
+    mq.lpush('ai_process_task', json.dumps(msg_content))
 
 
 def sync_github_issue(connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api):
