@@ -113,6 +113,19 @@ class DiscourseSeaDBAPI:
         sql = f"SELECT * FROM `{table_name}` WHERE topic_id = {topic_id} LIMIT {page_size} OFFSET {offset}"
         replies = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return replies
+    
+    def get_topics_first_reply(self, connection_id, topic_ids):
+        table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        if not topic_ids:
+            return None
+
+        topic_ids_str = ','.join(str(i) for i in topic_ids)
+        sql = f"SELECT topic_id, content FROM `{table_name}` WHERE topic_id IN ({topic_ids_str}) ORDER BY post_number ASC LIMIT 1"
+        result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if result:
+            return result[0]
+        return None
+        
 
     def delete_topic_from_db(self, topic_id, connection_id):
         """Delete topic from database"""
@@ -132,3 +145,14 @@ class DiscourseSeaDBAPI:
             topic_count = topics_result['results'][0].get('count', 0)
 
         return topic_count
+
+    def get_need_ai_topics(self, connection_id, page_size, offset):
+        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        sql = f"""SELECT _pk, topic_id, title FROM `{table_name}`
+        WHERE ai_processed_time IS NULL
+        OR ai_processed_time < sync_time
+        ORDER BY topic_id
+        LIMIT {page_size}
+        OFFSET {offset}"""
+        result = self.seadb_api.query_rows(self.base_id, sql)
+        return result.get('results', [])

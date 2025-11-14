@@ -1,10 +1,10 @@
 import logging
 import json
-
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.crawler.web_crawl import WebCrawl
 from seaqa_indexer.utils.sync_logger import SyncLogger
+from seaqa_indexer.utils.constants import ConnectionType
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +22,11 @@ def craw_web(connection_id, db_session_class, mq):
         msg_content = {
             'connection_id': site_id,
         }
-        mq.lpush('index_task', json.dumps(msg_content))
         sync_logger.log(f"Completed crawl connection: {connection_id}")
         sync_logger.stop_capture()
+        mq.lpush('ai_process_task', json.dumps(msg_content))
+        mq.lpush('index_task', json.dumps(msg_content))
+
     logger.info(f"Start crawl connection: {connection_id}")
     sync_logger = SyncLogger(db_session_class).init(connection_id)
     sync_logger.log(f"Start crawl connection: {connection_id}")

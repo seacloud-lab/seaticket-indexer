@@ -79,3 +79,16 @@ class SeafileSeaDBAPI:
         files = res.get('results', [])
         return files[0] if files else None
 
+    def get_need_ai_files_by_page(self, connection_id, page_size, offset):
+        table_name = SeafileTable.gen_table_name(connection_id)
+        sql = f"""
+            SELECT * FROM `{table_name}`
+            WHERE ai_processed_time IS NULL
+            OR ai_processed_time < sync_time
+            ORDER BY path, title
+            LIMIT {page_size}
+            OFFSET {offset}
+        """
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        results = res.get('results', [])
+        return results

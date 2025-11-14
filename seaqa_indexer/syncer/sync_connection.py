@@ -199,10 +199,12 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     logger.info('Finish sync connection: %s', connection_id)
     sync_logger.log(f'Finish sync connection: {connection_id}')
     sync_logger.stop_capture()
+
     msg_content = {
-        'connection_id': connection_id,
+        'connection_id': connection_id
     }
     mq.lpush('index_task', json.dumps(msg_content))
+    mq.lpush('ai_process_task', json.dumps(msg_content))
 
 
 def sync_github_issue(connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api):
