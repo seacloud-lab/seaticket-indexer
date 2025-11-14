@@ -150,6 +150,6 @@ class WebCrawl:
                 sync_logger=self.sync_logger
             )
 
-        d.addCallback(success_call_back, (site_id,))
+        d.addCallback(success_call_back, (site_id, project_uuid))
         d.addErrback(fail_call_back, (site_id, site_url, connection_status))
         return d
