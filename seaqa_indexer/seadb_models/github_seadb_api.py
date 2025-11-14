@@ -207,3 +207,17 @@ class GitHubSeaDBAPI:
         sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql_comments).get('results', [])
         return comments
+
+    def get_need_ai_issues_by_page(self, connection_id, page_size, offset):
+        issues_table_name = GithubIssuesTable.gen_table_name(connection_id)
+        sql = f"""
+            SELECT * FROM `{issues_table_name}`
+            WHERE ai_processed_time IS NULL
+            OR ai_processed_time < sync_time
+            ORDER BY issue_id
+            LIMIT {page_size}
+            OFFSET {offset}
+        """
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        issues = res.get('results', [])
+        return issues

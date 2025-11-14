@@ -10,7 +10,7 @@ from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import Discour
 from seaqa_indexer.syncer.seafile_syncer.seafile_sync_manager import SeafileSyncManager
 from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
-
+from seaqa_indexer.workers.ai_process_worker_starter import AIProcessWorkerStarter
 
 class SeaqaIndexerApp(object):
     def __init__(self, ):
@@ -23,6 +23,7 @@ class SeaqaIndexerApp(object):
         self.web_crawl_worker_starter = WebCrawlWorkerStarter()
         self.index_worker_starter = IndexWorkerStarter()
         self.connection_sync_starter = ConnectionSyncWorkerStarter()
+        self.ai_process_worker_starter = AIProcessWorkerStarter()
 
         self.http_server = HttpServer(self)
         self.project_connection_cleaner_starter = ProjectConnectionCleanerStarter()
@@ -33,6 +34,7 @@ class SeaqaIndexerApp(object):
         self.web_crawl_worker_starter.start()
         self.index_worker_starter.start()
         self.connection_sync_starter.start()
+        self.ai_process_worker_starter.start()
 
         self.project_connection_cleaner_starter.start()
         self.sync_task_publisher.start()
