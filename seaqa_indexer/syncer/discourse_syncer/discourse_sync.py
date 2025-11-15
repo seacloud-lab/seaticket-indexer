@@ -15,6 +15,8 @@ from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRep
 
 logger = logging.getLogger(__name__)
 
+MAX_CONTENT_LENGTH = 10000
+
 
 def retry_with_exponential_backoff(max_retries=5, base_delay=3, max_delay=60):
     def decorator(func):
@@ -103,6 +105,9 @@ class DiscourseSync:
 
         existing_reply = self.check_existing_reply(topic_id, post_number, connection_id)
         content = reply_data.get('cooked', '')
+        if content and len(content) > MAX_CONTENT_LENGTH:
+            content = content[:MAX_CONTENT_LENGTH]
+
         author = reply_data.get('username', '')
         modified_time = time_to_utc_time(reply_data.get('updated_at')).isoformat()
         if existing_reply:
@@ -192,6 +197,9 @@ class DiscourseSync:
             for reply in topic_replies_data.get('replies', []):
                 post_number = reply.get('post_number')
                 content = reply.get('cooked')
+                if content and len(content) > MAX_CONTENT_LENGTH:
+                    content = content[:MAX_CONTENT_LENGTH]
+
                 author = reply.get('username')
                 modified_time = time_to_utc_time(reply.get('modified_time')).isoformat()
 
@@ -219,6 +227,9 @@ class DiscourseSync:
         for reply in topic_replies_data.get('replies', []):
             post_number = reply.get('post_number')
             content = reply.get('cooked')
+            if content and len(content) > MAX_CONTENT_LENGTH:
+                content = content[:MAX_CONTENT_LENGTH]
+
             author = reply.get('username')
             modified_time = time_to_utc_time(reply.get('modified_time')).isoformat()
 
