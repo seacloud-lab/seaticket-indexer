@@ -53,7 +53,7 @@ class SeafileSeaDBAPI:
                     SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                 }
             }
-            self.seadb_api.update_rows(self.base_id, table_name, row)
+            self.seadb_api.update_rows(self.base_id, table_name, [row])
 
     def get_file_total_count(self, connection_id):
         table_name = SeafileTable.gen_table_name(connection_id)
