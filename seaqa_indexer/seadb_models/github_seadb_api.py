@@ -34,13 +34,11 @@ class GitHubSeaDBAPI:
             return
 
         _pk = issues[0].get('_pk')
-        update_row = [
-            {
-                "pk": _pk,
-                "row": row
-            }
-        ]
-        self.seadb_api.update_rows(self.base_id, table_name, update_row)
+        update_row = {
+            "pk": _pk,
+            "row": row
+        }
+        self.seadb_api.update_rows(self.base_id, table_name, [update_row])
 
     def get_github_issues_count(self, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
@@ -98,13 +96,11 @@ class GitHubSeaDBAPI:
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if issues:
             _pk = issues[0].get('_pk')
-            update_row = [
-                {
+            update_row = {
                 "pk":_pk,
                 "row":insert_row,
-                }
-            ]
-            self.seadb_api.update_rows(self.base_id, table_name, update_row)
+            }
+            self.seadb_api.update_rows(self.base_id, table_name, [update_row])
         else:
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 

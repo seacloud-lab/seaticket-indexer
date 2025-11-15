@@ -30,11 +30,19 @@ def kill_project_connetion_cleaner():
     run(cmd)
 
 
+def kill_ai_processor():
+    cmd = [
+        'pkill', '-f', 'seaqa_indexer.ai_processor.ai_process_task_worker'
+    ]
+    run(cmd)
+
+
 def signal_term_handler(signal, frame):
     kill_web_crawler_task_worker()
     kill_index_task_worker()
     kill_project_connetion_cleaner()
     kill_connection_sync_task_worker()
+    kill_ai_processor()
     os._exit(0)
 
 
