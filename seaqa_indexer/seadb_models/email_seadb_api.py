@@ -63,7 +63,7 @@ class EmailSeaDBAPI:
 
     def get_email_by_message_id(self, connection_id, message_id):
         table_name = EmailTable.gen_table_name(connection_id)
-        sql = f"SELECT email_date FROM `{table_name}` WHERE message_id='{message_id}'"
+        sql = f"SELECT modified_time FROM `{table_name}` WHERE message_id='{message_id}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         result = res.get('results', [])
         return result[0] if result else None
