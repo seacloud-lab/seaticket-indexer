@@ -59,6 +59,12 @@ class SeaqaDB(object):
             cmd += " WHERE id = :connection_id"
             session.execute(text(cmd), params)
             session.commit()
+    
+    def update_ai_status_and_time(self, connection_id, status, last_ai_processing_time):
+        with self.db_session_class() as session:
+            cmd = """UPDATE project_connection SET last_ai_processing_time=:last_ai_processing_time, status=:status WHERE id=:connection_id"""
+            session.execute(text(cmd), {'connection_id': connection_id, 'last_ai_processing_time': last_ai_processing_time, 'status': status})
+            session.commit()
 
     def update_connection_config(self, connection_id, config):
         with self.db_session_class() as session:
