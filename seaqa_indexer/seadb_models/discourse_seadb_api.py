@@ -146,13 +146,12 @@ class DiscourseSeaDBAPI:
 
         return topic_count
 
-    def get_need_ai_topics(self, connection_id, page_size, offset):
+    def get_need_ai_topics(self, connection_id, page_size):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
         sql = f"""SELECT _pk, topic_id, title FROM `{table_name}`
         WHERE ai_processed_time IS NULL
         OR ai_processed_time < sync_time
         ORDER BY topic_id
-        LIMIT {page_size}
-        OFFSET {offset}"""
+        LIMIT {page_size}"""
         result = self.seadb_api.query_rows(self.base_id, sql)
         return result.get('results', [])

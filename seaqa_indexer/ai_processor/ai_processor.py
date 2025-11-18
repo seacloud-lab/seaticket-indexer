@@ -66,22 +66,18 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
 
 def process_site_ai(seadb_api, storage, connection_id, project_uuid):
     page_size = 100
-    offset = 0
     updates = []
-    update_times = []
     ai_processing_count = 0
     table_name = WebCrawlTable.gen_table_name(connection_id)
     while True:
         sql = f"""
             SELECT _pk, url FROM `{table_name}`
-            WHERE ai_processed_time IS NULL
+            WHERE ai_processed_time IS NULL 
             OR ai_processed_time < sync_time
-            ORDER BY url
+            ORDER BY _pk
             LIMIT {page_size}
-            OFFSET {offset}
         """
         result = seadb_api.query_rows(project_uuid, sql)
-        offset += page_size
         rows = result.get('results', [])
         if not rows:
             break
@@ -98,37 +94,29 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
                 "row": {
                     "ai_summary": summary,
                     "ai_summary_vector": vector,
-                }
-            })
-            update_times.append({
-                "pk": pk,
-                "row": {
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+
                 }
             })
             ai_processing_count += 1
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
-    if updates:
-        seadb_api.update_rows(project_uuid, table_name, updates)
-    if update_times:
-        seadb_api.update_rows(project_uuid, table_name, update_times)
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
+            updates = []
     return ai_processing_count
 
 
 def process_discourse_ai(seadb_api, connection_id, project_uuid):
     page_size = 100
-    offset = 0
     updates = []
-    update_times = []
     table_name = DiscourseTopicsTable.gen_table_name(connection_id)
     discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
 
     ai_processing_count = 0
     while True:
-        rows = discourse_seadb_api.get_need_ai_topics(connection_id, page_size, offset)
-        offset += page_size
+        rows = discourse_seadb_api.get_need_ai_topics(connection_id, page_size)
         if not rows:
             break
 
@@ -151,11 +139,6 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
                 "row": {
                     "ai_summary": summary,
                     "ai_summary_vector": vector,
-                }
-            })
-            update_times.append({
-                "pk": pk,
-                "row": {
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
                 }
             })
@@ -163,27 +146,22 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
-    if updates:
-        seadb_api.update_rows(project_uuid, table_name, updates)
-    if update_times:
-        seadb_api.update_rows(project_uuid, table_name, update_times)
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
     return ai_processing_count
 
 
 def process_github_issue_ai(seadb_api, connection_id, project_uuid):
     page_size = 100
-    offset = 0
     updates = []
-    update_times = []
     table_name = GithubIssuesTable.gen_table_name(connection_id)
     github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
     ai_processing_count = 0
     while True:
-        rows = github_seadb_api.get_need_ai_issues_by_page(connection_id, page_size, offset)
+        rows = github_seadb_api.get_need_ai_issues_by_page(connection_id, page_size)
         if not rows:
             break
-        offset += page_size
         for row in rows:
             pk = row.get('_pk')
             title = row.get('title', '')
@@ -196,11 +174,6 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
                 "row": {
                     "ai_summary": summary,
                     "ai_summary_vector": vector,
-                }
-            })
-            update_times.append({
-                "pk": pk,
-                "row": {
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
                 }
             })
@@ -208,27 +181,22 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
-    if updates:
-        seadb_api.update_rows(project_uuid, table_name, updates)
-    if update_times:
-        seadb_api.update_rows(project_uuid, table_name, update_times)
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
     return ai_processing_count
 
 
 def process_seafile_ai(seadb_api, connection_id, project_uuid):
     page_size = 100
-    offset = 0
     updates = []
-    update_times = []
     table_name = SeafileTable.gen_table_name(connection_id)
     seafile_api = SeafileSeaDBAPI(project_uuid)
 
     ai_processing_count = 0
     while True:
-        rows = seafile_api.get_need_ai_files_by_page(connection_id, page_size, offset)
+        rows = seafile_api.get_need_ai_files_by_page(connection_id, page_size)
         if not rows:
             break
-        offset += page_size
         for row in rows:
             pk = row.get('_pk')
             title = row.get('title')
@@ -243,11 +211,6 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
                 "row": {
                     "ai_summary": summary,
                     "ai_summary_vector": vector,
-                }
-            })
-            update_times.append({
-                "pk": pk,
-                "row": {
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
                 }
             })
@@ -255,8 +218,6 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
-    if updates:
-        seadb_api.update_rows(project_uuid, table_name, updates)
-    if update_times:
-        seadb_api.update_rows(project_uuid, table_name, update_times)
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
     return ai_processing_count
