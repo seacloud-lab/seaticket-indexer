@@ -33,14 +33,14 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
 
     project_uuid = project_connection.project_uuid
     connection_type = project_connection.type
-    connection_status = json.loads(project_connection.status)
-    last_ai_processing_status = connection_status.get('last_ai_processing_status')
+    ai_status = json.loads(project_connection.ai_status)
+    last_ai_processing_status = ai_status.get('last_ai_processing_status', AIStatus.PENDING)
     if last_ai_processing_status == AIStatus.PROCESSING:
         logger.warning('connection: %s is processing ai', connection_id)
         return
     
-    connection_status['last_ai_processing_status'] = AIStatus.PROCESSING
-    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    ai_status['last_ai_processing_status'] = AIStatus.PROCESSING
+    seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
     
     try:
         if connection_type == ConnectionType.SITE.value:
@@ -55,13 +55,13 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
         logger.info('AI processing completed for connection %s', connection_id)
-        connection_status['last_ai_processing_status'] = AIStatus.COMPLETED
-        connection_status['last_ai_processing_count'] = ai_processing_count
+        ai_status['last_ai_processing_status'] = AIStatus.COMPLETED
+        ai_status['last_ai_processing_count'] = ai_processing_count
         last_ai_processing_time = datetime.datetime.now(datetime.UTC)
-        seaqa_db.update_ai_status_and_time(connection_id, json.dumps(connection_status), last_ai_processing_time)
+        seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status), last_ai_processing_time)
     except Exception as e:
-        connection_status['last_ai_processing_status'] = AIStatus.FAILED
-        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        ai_status['last_ai_processing_status'] = AIStatus.FAILED
+        seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
         raise e
 
 def process_site_ai(seadb_api, storage, connection_id, project_uuid):

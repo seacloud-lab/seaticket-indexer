@@ -12,7 +12,7 @@ class SeaqaDB(object):
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.is_active, pc.created_at
+            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, pc.ai_status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.is_active, pc.created_at
             FROM project_connection pc 
             INNER JOIN projects p 
             ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.id=:connection_id AND pc.deleted=false"""
@@ -60,10 +60,15 @@ class SeaqaDB(object):
             session.execute(text(cmd), params)
             session.commit()
     
-    def update_ai_status_and_time(self, connection_id, status, last_ai_processing_time):
+    def update_ai_status_and_time(self, connection_id, ai_status, last_ai_processing_time=None):
         with self.db_session_class() as session:
-            cmd = """UPDATE project_connection SET last_ai_processing_time=:last_ai_processing_time, status=:status WHERE id=:connection_id"""
-            session.execute(text(cmd), {'connection_id': connection_id, 'last_ai_processing_time': last_ai_processing_time, 'status': status})
+            cmd = """UPDATE project_connection SET ai_status=:ai_status"""
+            params = {'connection_id': connection_id, 'ai_status': ai_status}
+            if last_ai_processing_time:
+                cmd += ", last_ai_processing_time=:last_ai_processing_time"
+                params['last_ai_processing_time'] = last_ai_processing_time
+            cmd += " WHERE id = :connection_id"
+            session.execute(text(cmd), params)
             session.commit()
 
     def update_connection_config(self, connection_id, config):
