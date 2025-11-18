@@ -1,5 +1,6 @@
 import logging
 import datetime
+import json
 
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.ai_processor.utils import generate_summary
@@ -13,6 +14,7 @@ from seaqa_indexer.seadb_models.models import (
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
+from seaqa_indexer.utils.constants import AIStatus
 
 logger = logging.getLogger(__name__)
 
@@ -31,38 +33,51 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
 
     project_uuid = project_connection.project_uuid
     connection_type = project_connection.type
-
-    if connection_type == ConnectionType.SITE.value:
-        process_site_ai(seadb_api, storage, connection_id, project_uuid)
-    elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-        process_discourse_ai(seadb_api, connection_id, project_uuid)
-    elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-        process_github_issue_ai(seadb_api, connection_id, project_uuid)
-    elif connection_type == ConnectionType.SEAFILE.value:
-        process_seafile_ai(seadb_api, connection_id, project_uuid)
-    else:
-        logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
+    ai_status = json.loads(project_connection.ai_status)
+    last_ai_processing_status = ai_status.get('last_ai_processing_status', AIStatus.PENDING)
+    if last_ai_processing_status == AIStatus.PROCESSING:
+        logger.warning('connection: %s is processing ai', connection_id)
         return
-
-    logger.info('AI processing completed for connection %s', connection_id)
+    
+    ai_status['last_ai_processing_status'] = AIStatus.PROCESSING
+    seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
+    
+    try:
+        if connection_type == ConnectionType.SITE.value:
+            ai_processing_count = process_site_ai(seadb_api, storage, connection_id, project_uuid)
+        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+            ai_processing_count = process_discourse_ai(seadb_api, connection_id, project_uuid)
+        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+            ai_processing_count = process_github_issue_ai(seadb_api, connection_id, project_uuid)
+        elif connection_type == ConnectionType.SEAFILE.value:
+            ai_processing_count = process_seafile_ai(seadb_api, connection_id, project_uuid)
+        else:
+            logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
+            return
+        logger.info('AI processing completed for connection %s', connection_id)
+        ai_status['last_ai_processing_status'] = AIStatus.COMPLETED
+        ai_status['last_ai_processing_count'] = ai_processing_count
+        last_ai_processing_time = datetime.datetime.now(datetime.UTC)
+        seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status), last_ai_processing_time)
+    except Exception as e:
+        ai_status['last_ai_processing_status'] = AIStatus.FAILED
+        seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
+        raise e
 
 def process_site_ai(seadb_api, storage, connection_id, project_uuid):
     page_size = 100
-    offset = 0
     updates = []
+    ai_processing_count = 0
     table_name = WebCrawlTable.gen_table_name(connection_id)
-
     while True:
         sql = f"""
             SELECT _pk, url FROM `{table_name}`
-            WHERE ai_processed_time IS NULL
+            WHERE ai_processed_time IS NULL 
             OR ai_processed_time < sync_time
-            ORDER BY url
+            ORDER BY _pk
             LIMIT {page_size}
-            OFFSET {offset}
         """
         result = seadb_api.query_rows(project_uuid, sql)
-        offset += page_size
         rows = result.get('results', [])
         if not rows:
             break
@@ -80,26 +95,28 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
                     "ai_summary": summary,
                     "ai_summary_vector": vector,
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+
                 }
             })
+            ai_processing_count += 1
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
-    if updates:
-        seadb_api.update_rows(project_uuid, table_name, updates)
-        logger.info('Final batch updated %d rows for site connection %s', len(updates), connection_id)
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
+            updates = []
+    return ai_processing_count
 
 
 def process_discourse_ai(seadb_api, connection_id, project_uuid):
     page_size = 100
-    offset = 0
     updates = []
     table_name = DiscourseTopicsTable.gen_table_name(connection_id)
     discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
 
+    ai_processing_count = 0
     while True:
-        rows = discourse_seadb_api.get_need_ai_topics(connection_id, page_size, offset)
-        offset += page_size
+        rows = discourse_seadb_api.get_need_ai_topics(connection_id, page_size)
         if not rows:
             break
 
@@ -125,26 +142,26 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
                 }
             })
+            ai_processing_count += 1
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
-    if updates:
-        seadb_api.update_rows(project_uuid, table_name, updates)
-        logger.info('Final batch updated %d rows for discourse connection %s', len(updates), connection_id)
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
+    return ai_processing_count
 
 
 def process_github_issue_ai(seadb_api, connection_id, project_uuid):
     page_size = 100
-    offset = 0
     updates = []
     table_name = GithubIssuesTable.gen_table_name(connection_id)
     github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
+    ai_processing_count = 0
     while True:
-        rows = github_seadb_api.get_need_ai_issues_by_page(connection_id, page_size, offset)
+        rows = github_seadb_api.get_need_ai_issues_by_page(connection_id, page_size)
         if not rows:
             break
-        offset += page_size
         for row in rows:
             pk = row.get('_pk')
             title = row.get('title', '')
@@ -160,26 +177,26 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
                 }
             })
+            ai_processing_count += 1
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
-    if updates:
-        seadb_api.update_rows(project_uuid, table_name, updates)
-        logger.info('Final batch updated %d rows for github issue connection %s', len(updates), connection_id)
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
+    return ai_processing_count
 
 
 def process_seafile_ai(seadb_api, connection_id, project_uuid):
     page_size = 100
-    offset = 0
     updates = []
     table_name = SeafileTable.gen_table_name(connection_id)
     seafile_api = SeafileSeaDBAPI(project_uuid)
 
+    ai_processing_count = 0
     while True:
-        rows = seafile_api.get_need_ai_files_by_page(connection_id, page_size, offset)
+        rows = seafile_api.get_need_ai_files_by_page(connection_id, page_size)
         if not rows:
             break
-        offset += page_size
         for row in rows:
             pk = row.get('_pk')
             title = row.get('title')
@@ -197,9 +214,10 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
                 }
             })
+            ai_processing_count += 1
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
-    if updates:
-        seadb_api.update_rows(project_uuid, table_name, updates)
-        logger.info('Final batch updated %d rows for seafile connection %s', len(updates), connection_id)
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
+    return ai_processing_count

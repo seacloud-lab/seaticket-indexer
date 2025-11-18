@@ -15,6 +15,12 @@ class IndexStatus:
     FAILED = 'failed'
 
 
+class AIStatus:
+    PENDING = 'pending'
+    PROCESSING = 'processing'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+
 class ConnectionType(Enum):
     EMAIL = 'email'
     GITHUB_ISSUE = 'github_issue'
