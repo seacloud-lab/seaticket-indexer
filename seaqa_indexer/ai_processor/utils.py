@@ -8,11 +8,13 @@ from seaqa_indexer.config import JWT_PRIVATE_KEY, SEAQA_AI_SERVER_URL
 from seaqa_indexer.utils.constants import LLM_INPUT_CHARACTERS_LIMIT
 
 
-def generate_summary(content, connection_type, username='seaqa-indexer', include_vector=True):
+def generate_summary(content, connection_type, project_uuid, username='seaqa-indexer', org_id=-1, include_vector=True):
     params = {
         'content': content[:LLM_INPUT_CHARACTERS_LIMIT],
         'username': username,
         'connection_type': connection_type,
+        'project_uuid': project_uuid,
+        'org_id': org_id,
         'include_vector': include_vector,
     }
     payload = {'exp': int(time.time()) + 300, }
