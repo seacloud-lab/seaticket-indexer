@@ -128,18 +128,12 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
         if not rows:
             break
 
-        topic_ids = [row.get('topic_id') for row in rows]
-        result = discourse_seadb_api.get_topics_first_reply(connection_id, topic_ids)
-        topic_id_content_map = {}
-        for topic_id, content in result.items():
-            topic_id_content_map[topic_id] = content
-
         for row in rows:
             pk = row.get('_pk')
             topic_id = row.get('topic_id')
             title = row.get('title', '')
-
-            first_content = topic_id_content_map.get(topic_id, '')
+            result = discourse_seadb_api.get_topic_first_reply(connection_id, topic_id)
+            first_content = result.get('content', '')
             full_content = f"Title: {title}\n\nBody: {first_content}\n"
             summary, vector = generate_summary(full_content, ConnectionType.DISCOURSE_FORUM.value)
             updates.append({
