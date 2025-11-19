@@ -83,10 +83,9 @@ class DiscourseSeaDBAPI:
     def update_reply(self, connection_id, reply_pk, reply_data):
         """Update reply records"""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        rows = [reply_data]
         updates = [{
             "pk": reply_pk,
-            "row": rows
+            "row": reply_data
         }]
         return self.seadb_api.update_rows(
             base_id=self.base_id,
@@ -113,7 +112,7 @@ class DiscourseSeaDBAPI:
         sql = f"SELECT * FROM `{table_name}` WHERE topic_id = {topic_id} LIMIT {page_size} OFFSET {offset}"
         replies = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return replies
-    
+
     def get_topic_first_reply(self, connection_id, topic_id):
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
         if not topic_id:
@@ -124,7 +123,7 @@ class DiscourseSeaDBAPI:
         if result:
             return result[0]
         return {}
-        
+
 
     def delete_topic_from_db(self, topic_id, connection_id):
         """Delete topic from database"""
