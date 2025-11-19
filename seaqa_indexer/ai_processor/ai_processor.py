@@ -96,7 +96,7 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
             filename = url_to_filename(url)
             file_json = storage.read_json(connection_id, project_uuid, filename)
             content = file_json.get('content', '')
-            summary, vector = generate_summary(content, ConnectionType.SITE.value)
+            summary, vector = generate_summary(content, ConnectionType.SITE.value, project_uuid)
             updates.append({
                 "pk": pk,
                 "row": {
@@ -135,7 +135,7 @@ def process_discourse_ai(seadb_api, connection_id, project_uuid):
             result = discourse_seadb_api.get_topic_first_reply(connection_id, topic_id)
             first_content = result.get('content', '')
             full_content = f"Title: {title}\n\nBody: {first_content}\n"
-            summary, vector = generate_summary(full_content, ConnectionType.DISCOURSE_FORUM.value)
+            summary, vector = generate_summary(full_content, ConnectionType.DISCOURSE_FORUM.value, project_uuid)
             updates.append({
                 "pk": pk,
                 "row": {
@@ -170,7 +170,7 @@ def process_github_issue_ai(seadb_api, connection_id, project_uuid):
             content = row.get('content', '')
 
             full_content = f"Title: {title}\n\nBody: {content}\n"
-            summary, vector = generate_summary(full_content, ConnectionType.GITHUB_ISSUE.value)
+            summary, vector = generate_summary(full_content, ConnectionType.GITHUB_ISSUE.value, project_uuid)
             updates.append({
                 "pk": pk,
                 "row": {
@@ -207,7 +207,7 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
             vector = []
             if content:
                 full_content = f"Title: {title}\n\nContent: {content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.SEAFILE.value)
+                summary, vector = generate_summary(full_content, ConnectionType.SEAFILE.value, project_uuid)
             updates.append({
                 "pk": pk,
                 "row": {
