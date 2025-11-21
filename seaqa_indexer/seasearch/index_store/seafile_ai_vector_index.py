@@ -139,8 +139,6 @@ class SeafileAIVectorIndex(object):
                 ai_summary_vector = row.get('ai_summary_vector')
                 deleted = row.get('deleted')
                 
-                key = str(pk)
-
                 if deleted:
                     deleted_seadb_pk_set.add(pk)
                     continue

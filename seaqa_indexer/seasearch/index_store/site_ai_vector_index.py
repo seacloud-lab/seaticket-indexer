@@ -2,10 +2,6 @@ import logging
 import json
 import datetime
 import pytz
-import jwt
-import time
-import requests
-from urllib.parse import urljoin
 
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.seadb_models.models import WebCrawlTable

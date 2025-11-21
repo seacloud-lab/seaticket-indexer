@@ -1,5 +1,6 @@
 import logging
 import json
+import datetime
 from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
@@ -16,6 +17,7 @@ from seaqa_indexer.seasearch.index_store.seafile_ai_vector_index import SeafileA
 from seaqa_indexer.seasearch.index_store.github_ai_vector_index import GitHubAIVectorIndex
 from seaqa_indexer.seasearch.index_store.discourse_ai_vector_index import DiscourseAIVectorIndex
 
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_summary_index_name
 from seaqa_indexer.mq import get_mq
@@ -44,6 +46,7 @@ class IndexManager:
 
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
+        self.seadb_api = SeaDBAPI()
 
     def delete_index_by_project(self, project_uuid):
         project_connections = self.seaqa_db.get_connections_by_project_uuid(project_uuid)
@@ -279,6 +282,96 @@ class IndexManager:
         
         return top_results
 
-    def fix_summary_by_connection(self, connection_id):
-        pass
+    def fix_summary_by_connection(self, connection_id, connection_type, project_uuid):
+        logger.info('Start fixing AI summary embeddings for connection %s', connection_id)
+        
+        try:
+            if connection_type == ConnectionType.SITE.value:
+                from seaqa_indexer.seadb_models.models import WebCrawlTable
+                table_name = WebCrawlTable.gen_table_name(connection_id)
+            elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+                from seaqa_indexer.seadb_models.models import DiscourseTopicsTable
+                table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                from seaqa_indexer.seadb_models.models import GithubIssuesTable
+                table_name = GithubIssuesTable.gen_table_name(connection_id)
+            elif connection_type == ConnectionType.SEAFILE.value:
+                from seaqa_indexer.seadb_models.models import SeafileTable
+                table_name = SeafileTable.gen_table_name(connection_id)
+            else:
+                logger.warning('Unsupported connection type: %s', connection_type)
+                return 0
+            
+            page_size = 100
+            fixed_count = 0
+            updates = []
+            while True:
+                sql = f"""
+                    SELECT _pk, ai_summary
+                    FROM `{table_name}`
+                    WHERE ai_summary IS NOT NULL 
+                    AND ai_summary != ''
+                    AND ai_summary_vector IS NULL
+                    AND deleted = false
+                    LIMIT {page_size}
+                """
+                
+                result = self.seadb_api.query_rows(project_uuid, sql)
+                rows = result.get('results', [])
+                
+                if not rows:
+                    break
+                
+                for row in rows:
+                    pk = row.get('_pk')
+                    ai_summary = row.get('ai_summary')
+                    
+                    if not ai_summary:
+                        continue
+                    
+                    try:
+                        embedding = generate_embedding(ai_summary)
+                        
+                        if not embedding:
+                            logger.warning('Failed to generate embedding for pk=%s', pk)
+                            continue
+                        
+                        processed_time = datetime.datetime.now(datetime.UTC).isoformat()
+                        
+                        update_data = {
+                            'pk': pk,
+                            'row': {
+                                'ai_summary_vector': embedding,
+                                'ai_processed_time': processed_time
+                            }
+                        }
+                        
+                        updates.append(update_data)
+                        
+                        if len(updates) >= 50:
+                            self.seadb_api.update_rows(
+                                project_uuid,
+                                table_name,
+                                updates
+                            )
+                            updates = []
+                        
+                        fixed_count += 1
+                    except Exception as e:
+                        logger.exception('Failed to fix embedding for pk=%s: %s', pk, e)
+                        continue
+                
+                if updates:
+                    self.seadb_api.update_rows(
+                        project_uuid,
+                        table_name,
+                        updates
+                    )
+            
+            logger.info('Finished fixing embeddings for connection %s, fixed %d records', connection_id, fixed_count)
+            return fixed_count
+            
+        except Exception as e:
+            logger.exception('Failed to fix embeddings for connection %s: %s', connection_id, e)
+            return 0
         

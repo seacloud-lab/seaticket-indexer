@@ -67,6 +67,12 @@ def update_connection_summary_index(connection_id, db_session_class):
     last_ai_indexed_at = connection.ai_indexed_at
     
     try:
+        from seaqa_indexer.seasearch.index_manager import IndexManager
+        index_manager = IndexManager()
+        fixed_count = index_manager.fix_summary_by_connection(connection_id, connection_type, project_uuid)
+        if fixed_count > 0:
+            logger.info('Fixed %d missing embeddings for connection %s before indexing', fixed_count, connection_id)
+        
         if connection_type == ConnectionType.SITE.value:
             ai_index = SiteAIVectorIndex(seasearch_api, seadb_api)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
