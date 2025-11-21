@@ -241,7 +241,7 @@ class IndexManager:
 
         all_results = []
         per_connection_limit = max(top_k, 20)
-        query_vector = generate_embedding(query_text)
+        query_vector = generate_embedding(query_text, project_uuid)
         if not query_vector:
             logger.warning('Failed to generate query vector for: %s', query_text)
             return []
@@ -329,7 +329,7 @@ class IndexManager:
                         continue
                     
                     try:
-                        embedding = generate_embedding(ai_summary)
+                        embedding = generate_embedding(ai_summary, project_uuid)
                         if not embedding:
                             logger.warning('Failed to generate embedding for pk=%s', pk)
                             continue

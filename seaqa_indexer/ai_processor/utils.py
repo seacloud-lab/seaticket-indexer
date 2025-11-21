@@ -30,11 +30,12 @@ def generate_summary(content, connection_type, project_uuid, username='seaqa-ind
     return summary, vector
 
 
-def generate_embedding(query_text, org_id=-1, username='seaqa-indexer'):
+def generate_embedding(query_text, project_uuid, org_id=-1, username='seaqa-indexer'):
     params = {
         'content': query_text,
         'username': username,
         'org_id': org_id,
+        'project_uuid': project_uuid,
     }
     payload = {'exp': int(time.time()) + 300}
     token = jwt.encode(payload, JWT_PRIVATE_KEY, algorithm='HS256')
