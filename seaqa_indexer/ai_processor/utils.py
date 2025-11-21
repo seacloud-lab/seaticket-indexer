@@ -28,3 +28,23 @@ def generate_summary(content, connection_type, project_uuid, username='seaqa-ind
     summary = resp_json.get('summary', '')
     vector = resp_json.get('embedding', [])
     return summary, vector
+
+
+def generate_embedding(query_text, org_id=-1, username='seaqa-indexer'):
+    params = {
+        'content': query_text,
+        'username': username,
+        'org_id': org_id,
+    }
+    payload = {'exp': int(time.time()) + 300}
+    token = jwt.encode(payload, JWT_PRIVATE_KEY, algorithm='HS256')
+    headers = {"Authorization": "Token %s" % token}
+    url = urljoin(SEAQA_AI_SERVER_URL, '/generate-embedding')
+    resp = requests.post(url, json=params, headers=headers, timeout=30)
+    
+    if resp.status_code != 200:
+        raise Exception('Generate embedding error status: %s body: %s', resp.status_code, resp.text)
+    
+    resp_json = resp.json()
+    embedding = resp_json.get('embedding', [])
+    return embedding

@@ -10,11 +10,18 @@ from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
+
+from seaqa_indexer.seasearch.index_store.site_ai_vector_index import SiteAIVectorIndex
+from seaqa_indexer.seasearch.index_store.seafile_ai_vector_index import SeafileAIVectorIndex
+from seaqa_indexer.seasearch.index_store.github_ai_vector_index import GitHubAIVectorIndex
+from seaqa_indexer.seasearch.index_store.discourse_ai_vector_index import DiscourseAIVectorIndex
+
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_index_name_by_type
+from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_summary_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.ai_processor.utils import generate_embedding
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +36,12 @@ class IndexManager:
         self.github_issues_index = GitHubIssuesIndex(self.seasearch_api)
         self.discourse_index = DiscourseIndex(self.seasearch_api)
         self.email_index = EmailIndex(self.seasearch_api)
+
+        self.site_ai_vector_index = SiteAIVectorIndex(self.seasearch_api)
+        self.seafile_ai_vector_index = SeafileAIVectorIndex(self.seasearch_api)
+        self.github_ai_vector_index = GitHubAIVectorIndex(self.seasearch_api)
+        self.discourse_ai_vector_index = DiscourseAIVectorIndex(self.seasearch_api)
+
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
 
@@ -213,3 +226,59 @@ class IndexManager:
                         project_uuid, result_docs)
 
         return result_docs
+
+
+
+    def semantic_summary_search(self, project_uuid, connection_ids, query_text, top_k=10):
+        connection_id_list = connection_ids.split(',') if connection_ids else None
+        project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
+
+        if not project_connections:
+            return []
+
+        all_results = []
+        per_connection_limit = max(top_k, 20)
+        query_vector = generate_embedding(query_text)
+        if not query_vector:
+            logger.warning('Failed to generate query vector for: %s', query_text)
+            return []
+        for project_connection in project_connections:
+            connection_type = project_connection.type
+            connection_id = project_connection.id
+            index_name = gen_summary_index_name(connection_id, connection_type)
+            
+            try:
+                if connection_type == ConnectionType.SITE.value:
+                    results = self.site_ai_vector_index.semantic_search(
+                        index_name, query_vector, per_connection_limit
+                    )
+                elif connection_type == ConnectionType.SEAFILE.value:
+                    results = self.seafile_ai_vector_index.semantic_search(
+                        index_name, query_vector, per_connection_limit
+                    )
+                elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                    results = self.github_ai_vector_index.semantic_search(
+                        index_name, query_vector, per_connection_limit
+                    )
+                elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+                    results = self.discourse_ai_vector_index.semantic_search(
+                        index_name, query_vector, per_connection_limit
+                    )
+                else:
+                    continue
+                    
+                all_results.extend(results)
+                
+            except Exception as e:
+                logger.warning('Semantic search failed for connection %s: %s', connection_id, e)
+                continue
+        
+        all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+        
+        top_results = all_results[:top_k]  
+        
+        return top_results
+
+    def fix_summary_by_connection(self, connection_id):
+        pass
+        
