@@ -13,7 +13,6 @@ SEASEARCH_BULK_OPETATE_LIMIT = 100
 
 
 class DiscourseAIVectorIndex(object):
-    
     mapping = {
         'properties': {
             'project_id': {
@@ -206,4 +205,3 @@ class DiscourseAIVectorIndex(object):
                 'score': hit.get('_score', 0)
             })
         return topk_search_results
-

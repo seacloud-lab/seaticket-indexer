@@ -325,19 +325,16 @@ class IndexManager:
                 for row in rows:
                     pk = row.get('_pk')
                     ai_summary = row.get('ai_summary')
-                    
                     if not ai_summary:
                         continue
                     
                     try:
                         embedding = generate_embedding(ai_summary)
-                        
                         if not embedding:
                             logger.warning('Failed to generate embedding for pk=%s', pk)
                             continue
                         
                         processed_time = datetime.datetime.now(datetime.UTC).isoformat()
-                        
                         update_data = {
                             'pk': pk,
                             'row': {
@@ -347,7 +344,6 @@ class IndexManager:
                         }
                         
                         updates.append(update_data)
-                        
                         if len(updates) >= 50:
                             self.seadb_api.update_rows(
                                 project_uuid,
@@ -360,7 +356,6 @@ class IndexManager:
                     except Exception as e:
                         logger.exception('Failed to fix embedding for pk=%s: %s', pk, e)
                         continue
-                
                 if updates:
                     self.seadb_api.update_rows(
                         project_uuid,
@@ -374,4 +369,3 @@ class IndexManager:
         except Exception as e:
             logger.exception('Failed to fix embeddings for connection %s: %s', connection_id, e)
             return 0
-        

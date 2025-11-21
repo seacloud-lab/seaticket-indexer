@@ -19,13 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 def update_connection_summary_index(connection_id, db_session_class):
-    """
-    Update summary vector index for a connection
-    
-    Args:
-        connection_id: Connection ID
-        db_session_class: Database session class
-    """
     logger.info('Start to index summary vectors for connection %s', connection_id)
     seaqa_db = SeaqaDB(db_session_class)
     connection = seaqa_db.get_project_connection_by_id(connection_id)
@@ -60,9 +53,6 @@ def update_connection_summary_index(connection_id, db_session_class):
     ai_status['last_ai_index_status'] = AIStatus.PROCESSING
     seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
 
-    seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
-    seadb_api = SeaDBAPI()
-
     project_uuid = connection.project_uuid
     last_ai_indexed_at = connection.ai_indexed_at
     
@@ -73,6 +63,8 @@ def update_connection_summary_index(connection_id, db_session_class):
         if fixed_count > 0:
             logger.info('Fixed %d missing embeddings for connection %s before indexing', fixed_count, connection_id)
         
+        seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
+        seadb_api = SeaDBAPI()
         if connection_type == ConnectionType.SITE.value:
             ai_index = SiteAIVectorIndex(seasearch_api, seadb_api)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:

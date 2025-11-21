@@ -33,7 +33,6 @@ class SiteAIVectorIndex(object):
                 'm': 64,
                 'nbits': 8,
                 'vec_index_type': 'flat'
-
             }
         }
     }

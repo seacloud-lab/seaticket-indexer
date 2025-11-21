@@ -13,7 +13,6 @@ SEASEARCH_BULK_OPETATE_LIMIT = 100
 
 
 class GitHubAIVectorIndex(object):
-    
     mapping = {
         'properties': {
             'project_id': {
