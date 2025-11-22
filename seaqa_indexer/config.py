@@ -31,14 +31,20 @@ def _read_yaml(yaml_file_path=None, component_name=None):
         return configs
     return {}
 
-def _check_number(func):
-    def wrapper(self, key, default=None, check_number=True):
+def _check_type(func):
+    def wrapper(self, key, default=None, check_type=True):
         result = func(self, key, default)
-        if check_number and (need_type := type(default)) in (int, float):
-            try:
-                result = need_type(result)
-            except:
-                raise ValueError(f'Type of {key} must be a number')
+        if check_type:
+            if (need_type := type(default)) in (int, float):
+                try:
+                    result = need_type(result)
+                except:
+                    raise ValueError(f'Type of {key} must be a number')
+            elif need_type == bool:
+                if isinstance(result, str):
+                    result = result.lower() in ('true', '1')
+                else:
+                    result = bool(result)
         return result
     return wrapper
 
@@ -52,7 +58,7 @@ class _ConfigParser(object):
         self.component_name = component_name or self.component_name
         self.yaml_configs = _read_yaml(self.yaml_file_path, self.component_name)
     
-    @_check_number
+    @_check_type
     def get(self, key, default=None):
         
         return os.getenv(key) if key in os.environ else self.yaml_configs.get(key, default)
@@ -63,8 +69,8 @@ yaml_file_path = os.path.join(CONF_DIR, os.environ.get('SEAQA_CONFIG_NAME', 'sea
 configs = _ConfigParser(yaml_file_path, 'seaqa-indexer')
 
 # Service info & logs
-LOG_LEVEL = configs.get('SEAQA_INDEXER_LOG_LEVEL', 'info')
-LOG_FILE = configs.get('SEAQA_INDEXER_LOG_FILE', 'seaqa-indexer.log')
+LOG_LEVEL = configs.get('LOG_LEVEL', 'info')
+LOG_FILE = os.path.join(configs.get('LOG_PATH', '/tmp'), 'seaqa-indexer.log')
 
 HOST = configs.get('SEAQA_INDEXER_LISTEN_HOST', '0.0.0.0')
 PORT = configs.get('SEAQA_INDEXER_LISTEN_PORT', 8888)
