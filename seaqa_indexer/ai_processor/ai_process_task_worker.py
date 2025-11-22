@@ -103,6 +103,10 @@ class AIProcessTaskWorker(object):
     def process_ai_summary(self, connection_id):
         try:
             generate_summaries_and_vectors(self.seadb_api, self.storage, self.seaqa_db, connection_id)
+            summary_index_msg = {
+                'connection_id': connection_id,
+            }
+            self.mq.lpush('summary_index_task', json.dumps(summary_index_msg))
         except Exception as e:
             logger.exception('AI process connection: %s failed, error: %s', connection_id, e)
 

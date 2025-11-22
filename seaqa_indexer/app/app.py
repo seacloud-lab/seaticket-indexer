@@ -4,6 +4,7 @@ from seaqa_indexer.workers.web_crawl_worker_starter import WebCrawlWorkerStarter
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 from seaqa_indexer.seasearch.index_manager import IndexManager
 from seaqa_indexer.workers.index_worker_starter import IndexWorkerStarter
+from seaqa_indexer.workers.ai_index_worker_starter import AIIndexWorkerStarter
 from seaqa_indexer.tasks.project_connection_cleaner_starter import ProjectConnectionCleanerStarter
 from seaqa_indexer.workers.connection_sync_starter import ConnectionSyncWorkerStarter
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import DiscourseSyncManager
@@ -22,6 +23,7 @@ class SeaqaIndexerApp(object):
 
         self.web_crawl_worker_starter = WebCrawlWorkerStarter()
         self.index_worker_starter = IndexWorkerStarter()
+        self.ai_index_worker_starter = AIIndexWorkerStarter()
         self.connection_sync_starter = ConnectionSyncWorkerStarter()
         self.ai_process_worker_starter = AIProcessWorkerStarter()
 
@@ -33,6 +35,7 @@ class SeaqaIndexerApp(object):
     def serve_forever(self):
         self.web_crawl_worker_starter.start()
         self.index_worker_starter.start()
+        self.ai_index_worker_starter.start()
         self.connection_sync_starter.start()
         self.ai_process_worker_starter.start()
 
