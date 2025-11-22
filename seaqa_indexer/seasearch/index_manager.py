@@ -12,10 +12,7 @@ from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssues
 from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
 
-from seaqa_indexer.seasearch.index_store.site_ai_vector_index import SiteAIVectorIndex
-from seaqa_indexer.seasearch.index_store.seafile_ai_vector_index import SeafileAIVectorIndex
-from seaqa_indexer.seasearch.index_store.github_ai_vector_index import GitHubAIVectorIndex
-from seaqa_indexer.seasearch.index_store.discourse_ai_vector_index import DiscourseAIVectorIndex
+from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
@@ -39,14 +36,11 @@ class IndexManager:
         self.discourse_index = DiscourseIndex(self.seasearch_api)
         self.email_index = EmailIndex(self.seasearch_api)
 
-        self.site_ai_vector_index = SiteAIVectorIndex(self.seasearch_api)
-        self.seafile_ai_vector_index = SeafileAIVectorIndex(self.seasearch_api)
-        self.github_ai_vector_index = GitHubAIVectorIndex(self.seasearch_api)
-        self.discourse_ai_vector_index = DiscourseAIVectorIndex(self.seasearch_api)
-
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
         self.seadb_api = SeaDBAPI()
+
+        self.summary_vector_index = SummaryVectorIndex(self.seasearch_api, self.seadb_api)
 
     def delete_index_by_project(self, project_uuid):
         project_connections = self.seaqa_db.get_connections_by_project_uuid(project_uuid)
@@ -250,26 +244,10 @@ class IndexManager:
             connection_id = project_connection.id
             index_name = gen_summary_index_name(connection_id, connection_type)
             
-            try:
-                if connection_type == ConnectionType.SITE.value:
-                    results = self.site_ai_vector_index.semantic_search(
-                        index_name, query_vector, per_connection_limit
-                    )
-                elif connection_type == ConnectionType.SEAFILE.value:
-                    results = self.seafile_ai_vector_index.semantic_search(
-                        index_name, query_vector, per_connection_limit
-                    )
-                elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                    results = self.github_ai_vector_index.semantic_search(
-                        index_name, query_vector, per_connection_limit
-                    )
-                elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                    results = self.discourse_ai_vector_index.semantic_search(
-                        index_name, query_vector, per_connection_limit
-                    )
-                else:
-                    continue
-                    
+            try:                
+                results = self.summary_vector_index.semantic_search(
+                    index_name, query_vector, per_connection_limit
+                ) 
                 all_results.extend(results)
                 
             except Exception as e:

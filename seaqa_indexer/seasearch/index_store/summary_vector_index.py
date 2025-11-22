@@ -4,7 +4,7 @@ import datetime
 import pytz
 
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.seadb_models.models import GithubIssuesTable
+from seaqa_indexer.seadb_models.models import WebCrawlTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 SEASEARCH_BULK_OPETATE_LIMIT = 100
 
 
-class GitHubAIVectorIndex(object):
+class SummaryVectorIndex(object):
     mapping = {
         'properties': {
             'project_id': {
@@ -41,6 +41,7 @@ class GitHubAIVectorIndex(object):
         self.seasearch_api = seasearch_api
         self.seadb_api = seadb_api or SeaDBAPI()
         self.shard_num = shard_num
+        
 
     def create_index_if_missing(self, index_name):
         if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
@@ -99,7 +100,7 @@ class GitHubAIVectorIndex(object):
         
         logger.info('Deleted %d index documents', len(doc_ids))
 
-    def update(self, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_ai_indexed_at):
+    def update(self, table_name, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_ai_indexed_at):
         deleted_seadb_pk_set = set()
 
         index_count = 0
@@ -117,7 +118,6 @@ class GitHubAIVectorIndex(object):
             last_ai_indexed_at = datetime.datetime(1970, 1, 1)
         
         last_ai_indexed_at = last_ai_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
-        table_name = GithubIssuesTable.gen_table_name(connection_id)
         
         while True:
             sql = f"""
@@ -143,6 +143,7 @@ class GitHubAIVectorIndex(object):
                     deleted_seadb_pk_set.add(pk)
                     continue
 
+                # Skip if no AI summary or vector
                 if not ai_summary or not ai_summary_vector:
                     logger.debug('Skip document without AI summary or vector, pk=%s', pk)
                     continue
@@ -169,8 +170,10 @@ class GitHubAIVectorIndex(object):
 
         _flush_bulk_if_needed(force=True)
         
+        # Delete deleted index records by querying with pk
         if deleted_seadb_pk_set:
             self.delete_indexes_by_pks(index_name, deleted_seadb_pk_set)
+            # Delete deleted seadb data
             self.seadb_api.delete_rows(project_uuid, table_name, list(deleted_seadb_pk_set))
         
         return index_count

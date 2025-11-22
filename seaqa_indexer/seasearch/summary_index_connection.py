@@ -4,14 +4,12 @@ import datetime
 
 from seaqa_indexer.utils.constants import ConnectionType, AIStatus
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
-from seaqa_indexer.seasearch.index_store.site_ai_vector_index import SiteAIVectorIndex
-from seaqa_indexer.seasearch.index_store.discourse_ai_vector_index import DiscourseAIVectorIndex
-from seaqa_indexer.seasearch.index_store.github_ai_vector_index import GitHubAIVectorIndex
-from seaqa_indexer.seasearch.index_store.seafile_ai_vector_index import SeafileAIVectorIndex
+from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.seasearch.utils import gen_summary_index_name
+from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable
 
 
 logger = logging.getLogger(__name__)
@@ -66,23 +64,25 @@ def update_connection_summary_index(connection_id, db_session_class):
         seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
         seadb_api = SeaDBAPI()
         if connection_type == ConnectionType.SITE.value:
-            ai_index = SiteAIVectorIndex(seasearch_api, seadb_api)
+            table_name = WebCrawlTable.gen_table_name(connection_id)
         elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            ai_index = DiscourseAIVectorIndex(seasearch_api, seadb_api)
+            table_name = DiscourseTopicsTable.gen_table_name(connection_id)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            ai_index = GitHubAIVectorIndex(seasearch_api, seadb_api)
+            table_name = GithubIssuesTable.gen_table_name(connection_id)
         elif connection_type == ConnectionType.SEAFILE.value:
-            ai_index = SeafileAIVectorIndex(seasearch_api, seadb_api)
+            table_name = SeafileTable.gen_table_name(connection_id)
         else:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             ai_status['last_ai_index_status'] = AIStatus.FAILED
             seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
             return
-        
+            
+        summary_vector_index = SummaryVectorIndex(seasearch_api, seadb_api)
         ai_index_name = gen_summary_index_name(connection_id, connection_type)
-        ai_index.create_index_if_missing(ai_index_name)
+        summary_vector_index.create_index_if_missing(ai_index_name)
 
-        index_count = ai_index.update(
+        index_count = summary_vector_index.update(
+            table_name,
             ai_index_name, 
             connection_id, 
             project_uuid, 
