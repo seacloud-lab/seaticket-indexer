@@ -90,7 +90,7 @@ class DiscourseIndex(object):
         return self.seasearch_api.check_index_mapping(index_name).get('is_exist')
 
     def _make_query_searches(self, keyword, search_title_only):
-        match_query_kwargs = {'minimum_should_match': '-25%'}
+        match_query_kwargs = {'minimum_should_match': '-35%'}
         title_boost_kwargs = {'boost': 0.7}
         content_boost_kwargs = {'boost': 0.3}
 
