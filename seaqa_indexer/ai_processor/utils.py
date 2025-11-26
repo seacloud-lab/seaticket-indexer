@@ -40,7 +40,7 @@ def generate_embedding(query_text, project_uuid, org_id=-1, username='seaqa-inde
     payload = {'exp': int(time.time()) + 300}
     token = jwt.encode(payload, JWT_PRIVATE_KEY, algorithm='HS256')
     headers = {"Authorization": "Token %s" % token}
-    url = urljoin(SEAQA_AI_SERVER_URL, '/generate-embedding')
+    url = urljoin(SEAQA_AI_INNER_SERVER_URL, '/generate-embedding')
     resp = requests.post(url, json=params, headers=headers, timeout=30)
     
     if resp.status_code != 200:
