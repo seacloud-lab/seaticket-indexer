@@ -348,8 +348,8 @@ class IndexManager:
             logger.exception('Failed to fix embeddings for connection %s: %s', connection_id, e)
             return 0
 
-    def summary_vector_search(self, project_uuid, connection_ids, query_vector, top_k=10):
-        project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_ids) 
+    def summary_vector_search(self, project_uuid, connection_ids, query_vector, top_k=10, score_threshold=0.5):
+        project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_ids)
 
         if not project_connections:
             return []
@@ -372,7 +372,8 @@ class IndexManager:
                 search_results = self.summary_vector_index.semantic_search(
                         index_name, query_vector, per_connection_limit
                 )
-                all_results.extend(search_results)
+                filtered_results = [r for r in search_results if r.get('score', 0) >= score_threshold]
+                all_results.extend(filtered_results)
             except Exception as e:
                 logger.exception('Vector search failed for connection %s: %s', connection_id, e)
                 continue
