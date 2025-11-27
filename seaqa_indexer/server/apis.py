@@ -170,6 +170,35 @@ def search():
     return {'results': results}, 200
 
 
+@application.route('/summary_vector_search', methods=['POST'])
+@auth_required
+def summary_vector_search():
+    try:
+        data = json.loads(request.data)
+    except Exception as e:
+        logger.exception(e)
+        return {'error_msg': 'Bad request.'}, 400
+
+    query_vector = data.get('query_vector')
+    project_uuid = data.get('project_uuid')
+    connection_ids = data.get('connection_ids')
+
+    if not query_vector:
+        return {'error_msg': 'query_vector invalid.'}, 400
+
+    if not project_uuid:
+        return {'error_msg': 'project_uuid invalid.'}, 400
+
+    try:
+        count = int(data.get('count'))
+    except:
+        count = 10
+    results = application.app.index_manager.summary_vector_search(
+        project_uuid, connection_ids, query_vector, count
+    )
+    return {'results': results}, 200
+
+
 @application.route('/webhook/discourse/', methods=['POST'])
 @auth_required
 def discourse_webhook():
