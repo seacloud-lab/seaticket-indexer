@@ -1,6 +1,6 @@
 import datetime
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.models import EmailTable
+from seaqa_indexer.seadb_models.models import EmailTable, ThreadTable
 from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT
 from seaqa_indexer.utils import time_to_utc_time
 
@@ -44,6 +44,49 @@ class EmailSeaDBAPI:
         else:
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 
+    def update_email_thread_id(self, connection_id, message_id, thread_id):
+        table_name = EmailTable.gen_table_name(connection_id)
+
+        sql = f"SELECT _pk FROM `{table_name}` WHERE `message_id`='{message_id}'"
+        results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if results:
+            _pk = results[0].get('_pk')
+            update_row = [
+                {
+                "pk":_pk,
+                "row": {'thread_id': thread_id},
+                }
+            ]
+            self.seadb_api.update_rows(self.base_id, table_name, update_row)
+
+    def save_thread_to_db(self, connection_id, thread):
+        insert_row = {
+            'title': thread['subject'],
+            'modified_time': time_to_utc_time(thread['last_updated_at']).isoformat(),
+            'unread': thread.get('unread')
+        }
+
+        table_name = ThreadTable.gen_table_name(connection_id)
+        return self.seadb_api.insert_rows(self.base_id, table_name, [insert_row]).get('pks')[0]
+
+    def update_thread_to_db(self, connection_id, thread):
+        update_row = {}
+
+        if thread.get('last_updated_at'):
+            update_row['modified_time'] = time_to_utc_time(thread['last_updated_at']).isoformat()
+        if thread.get('unread') is not None:
+            update_row['unread'] = thread.get('unread')
+
+        table_name = ThreadTable.gen_table_name(connection_id)
+        _pk = thread['thread_id']
+        update_row = [
+            {
+            "pk":_pk,
+            "row":update_row,
+            }
+        ]
+        self.seadb_api.update_rows(self.base_id, table_name, update_row)
+
     def get_email_total_count(self, connection_id):
         table_name = EmailTable.gen_table_name(connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
@@ -53,6 +96,21 @@ class EmailSeaDBAPI:
     def get_emails_by_page(self, connection_id, since, page_size, offset):
         table_name = EmailTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        results = res.get('results', [])
+        return results
+
+    def get_thread_emails_by_page(self, connection_id, since, page_size, offset):
+        table_name = EmailTable.gen_table_name(connection_id)
+        sql = f"SELECT message_id, thread_id FROM `{table_name}` WHERE sync_time >= '{since}' and thread_id is not null LIMIT {page_size} OFFSET {offset}"
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        results = res.get('results', [])
+        return results
+
+    def get_thread_emails_by_message_ids(self, connection_id, message_ids):
+        message_ids_str = ', '.join([f"'{message_id}'" for message_id in message_ids])
+        table_name = EmailTable.gen_table_name(connection_id)
+        sql = f"SELECT message_id, thread_id FROM `{table_name}` WHERE `message_id`in ({message_ids_str}) and thread_id is not null"
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results

@@ -253,7 +253,21 @@ class EmailTable(BaseModel):
     is_sender = MappedColumn('is_sender', PropertyTypes.BOOL)
     sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    thread_id = MappedColumn('thread_id', PropertyTypes.INT)
 
     @classmethod
     def gen_table_name(cls, connection_id):
         return ConnectionType.EMAIL.value + '_' + str(connection_id)
+
+
+class ThreadTable(BaseModel):
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    unread = MappedColumn('unread', PropertyTypes.BOOL)
+    ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
+    ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
+    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.EMAIL.value + '_' + 'thread_' + str(connection_id)

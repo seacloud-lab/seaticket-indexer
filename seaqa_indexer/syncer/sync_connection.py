@@ -21,7 +21,7 @@ from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.sync_logger import SyncLogger
-from seaqa_indexer.syncer.utils import upload_email_attachment
+from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows
 from seaqa_indexer.utils.imap_mail import ImapMail
 from seaqa_indexer.crawler.storage import get_storage
 
@@ -134,8 +134,10 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             email_password = config.get('password')
             sync_years = config.get('sync_years', 5)
             since = old_last_sync_time
+            is_first_update = False
             if not since:
                 since = datetime.datetime.now(datetime.UTC) - relativedelta(years=sync_years)
+                is_first_update = True
             since = time_to_utc_time(str(since)).isoformat()
             email_seadb_api = EmailSeaDBAPI(project_uuid)
             storage = get_storage()
@@ -148,7 +150,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
                 sync_logger.stop_capture()
                 return
-            sync_count, total_count = sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage)
+            sync_count, total_count = sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_update)
     except Exception as e:
         logger.exception('connection: %s, sync failed, error: %s', connection_id, e)
         try:
@@ -339,9 +341,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
             file_suffix = get_file_suffix(file.get('obj_name'))
             if file_suffix not in SYNC_FILE_SUFFIXES:
                 continue
-            path = file.get('path')
-            if path != '/':
-                path = path.rstrip('/')
+            path = '/' + file.get('path').strip('/')
             file_info = {
                 'path': path,
                 'filename': file.get('obj_name'),
@@ -352,14 +352,15 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
     return sync_count, total_count
 
 
-def sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage):
+def sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_sync):
     sync_count = 0
     _status_last_update_time = datetime.datetime.now()
     _status_last_update_count = 0
 
-    send_date = time_to_utc_time(str(since))
-    email_list = imap.search_emails_by_send_date(send_date, 'SINCE')
+    since = time_to_utc_time(str(since))
+    email_list = imap.search_emails_by_send_date(since, 'SINCE')
 
+    new_email_list = []
     for email in email_list:
         if not email:
             continue
@@ -368,9 +369,18 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
         existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
         if existed_email:
             existed_date = time_to_utc_time(str(existed_email.get('modified_time')))
-            if time_to_utc_time(modified_time) <= existed_date:
+            email_thread_id = existed_email.get('thread_id')
+            if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
                 logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
                 continue
+        email_info = {
+            'message_id': email.get('message_id'),
+            'reply_to_message_id': email.get('reply_to_message_id'),
+            'email_date': email.get('email_date'),
+            'subject': email.get('subject'),
+            'is_sender': email.get('is_sender'),
+        }
+        new_email_list.append(email_info)
 
         upload_email_attachment(connection_id, project_uuid, storage, email)
 
@@ -384,6 +394,8 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
             _status_last_update_time = new_time
             _status_last_update_count = new_count
         sync_count += 1
+    if new_email_list:
+        insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
 
     total_count = email_seadb_api.get_email_total_count(connection_id)
     return sync_count, total_count

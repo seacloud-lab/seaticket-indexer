@@ -147,7 +147,7 @@ class ImapMail(object):
 
         if mode == 'ON' and send_time.date() != send_date:
             return email_dict
-        if mode == 'SINCE' and send_time.date() < send_date.date():
+        if mode == 'SINCE' and send_time < send_date:
             return email_dict
 
         message_id = header_info.get('Message-ID')
