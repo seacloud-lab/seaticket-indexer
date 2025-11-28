@@ -193,3 +193,20 @@ class SeaDBAPI:
         url = f'{self.server_url}/api/v1/{base_id}/column-options'
         response = requests.post(url, json=option_data, headers=headers, timeout=self.timeout)
         return parse_response(response)
+
+
+    def delete_column_option(self, base_id, table_id, column_key, option_id=None, option_ids=None):
+        base_id = uuid_str_to_36_chars(base_id)
+        headers = self.gen_headers(base_id)
+        url = f'{self.server_url}/api/v1/{base_id}/column-options'
+        data = {
+            'table_id': table_id,
+            'column_key': column_key
+        }
+        if option_id:
+            data['option_id'] = option_id
+        if option_ids:
+            data['option_ids'] = option_ids
+
+        response = requests.delete(url, json=data, headers=headers, timeout=self.timeout)
+        return parse_response(response)
