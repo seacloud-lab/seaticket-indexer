@@ -61,20 +61,34 @@ class SummaryVectorIndex(object):
             return []
         
         pks_str_list = [str(pk) for pk in pks]
+        doc_ids = []
         try:
-            query = {
-                "query": {
-                    "terms": {
-                        "pk": pks_str_list
-                    }
-                },
-                "_source": False,
-                "size": len(pks)
-            }
-            result = self.seasearch_api.normal_search(index_name, query)
-            hits = result.get('hits', {}).get('hits', [])
+            page_size = max(len(pks) * 10, 200)
+            offset = 0
+            while True:
+                query = {
+                    "query": {
+                        "terms": {
+                            "pk": pks_str_list
+                        }
+                    },
+                    "_source": False,
+                    "size": page_size,
+                    "from": offset
+                }
+                result = self.seasearch_api.normal_search(index_name, query)
+                hits = result.get('hits', {}).get('hits', [])
+                if not hits:
+                    break
+                
+                for hit in hits:
+                    if hit.get('_id'):
+                        doc_ids.append(hit.get('_id'))
+                
+                if len(hits) < page_size:
+                    break
+                offset += page_size
             
-            doc_ids = [hit.get('_id') for hit in hits if hit.get('_id')]
             logger.debug('Found %d index documents for %d pks', len(doc_ids), len(pks))
             return doc_ids
         except Exception as e:
