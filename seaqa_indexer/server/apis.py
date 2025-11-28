@@ -162,8 +162,8 @@ def search():
         count = int(data.get('count'))
     except:
         count = 20
-    if search_type == 'semantic_summary_search':
-        results = application.app.index_manager.semantic_summary_search(project_uuid, connection_ids, query, count)
+    if search_type == 'semantic_search':
+        results = application.app.index_manager.semantic_search(project_uuid, connection_ids, query, time_from, time_to, count)
     else:
         results = application.app.index_manager.search(project_uuid, connection_ids, time_from, time_to, query, start=0, size=count)
 

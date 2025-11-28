@@ -4,8 +4,9 @@ import datetime
 from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT
+from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT, SUPPORT_VECTOR_RETRIEVAL_TYPES
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
@@ -13,10 +14,11 @@ from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
 
 from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
+from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVectorIndex
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_summary_index_name
+from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_summary_index_name, gen_content_vector_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -41,6 +43,7 @@ class IndexManager:
         self.seadb_api = SeaDBAPI()
 
         self.summary_vector_index = SummaryVectorIndex(self.seasearch_api, self.seadb_api)
+        self.content_vector_index = ContentVectorIndex(self.seasearch_api, self.seadb_api, storage=None)
 
     def delete_index_by_project(self, project_uuid):
         project_connections = self.seaqa_db.get_connections_by_project_uuid(project_uuid)
@@ -225,8 +228,7 @@ class IndexManager:
         return result_docs
 
 
-
-    def semantic_summary_search(self, project_uuid, connection_ids, query_text, top_k=10):
+    def semantic_search(self, project_uuid, connection_ids, query_text, time_from, time_to, top_k=10):
         connection_id_list = connection_ids.split(',') if connection_ids else None
         project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
 
@@ -239,24 +241,193 @@ class IndexManager:
         if not query_vector:
             logger.warning('Failed to generate query vector for: %s', query_text)
             return []
+        
+        summary_index_names = []
+        content_index_names = []
+        
         for project_connection in project_connections:
             connection_type = project_connection.type
             connection_id = project_connection.id
-            index_name = gen_summary_index_name(connection_id, connection_type)
             
-            try:                
-                results = self.summary_vector_index.semantic_search(
-                    index_name, query_vector, per_connection_limit
-                ) 
-                all_results.extend(results)
-                
+            summary_index_name = gen_summary_index_name(connection_id, connection_type)
+            summary_index_names.append(summary_index_name)
+            
+            if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
+                content_index_name = gen_content_vector_index_name(connection_id, connection_type)
+                if self.content_vector_index.check_index(content_index_name):
+                    content_index_names.append(content_index_name)
+        
+        # Batch search summary indexes
+        if summary_index_names:
+            try:
+                summary_results = self.summary_vector_index.semantic_search(
+                    summary_index_names, query_vector, per_connection_limit, 
+                    time_from=time_from, time_to=time_to
+                )
+                for result in summary_results:
+                    result['source_type'] = 'summary'
+                all_results.extend(summary_results)
             except Exception as e:
-                logger.warning('Semantic search failed for connection %s: %s', connection_id, e)
-                continue
+                logger.warning('Summary semantic search failed: %s', e)
+        
+        # Batch search content indexes
+        if content_index_names:
+            try:
+                chunk_results = self.content_vector_index.semantic_search(
+                    content_index_names, query_vector, per_connection_limit,
+                    time_from=time_from, time_to=time_to
+                )
+                for result in chunk_results:
+                    result['source_type'] = 'chunk'
+                all_results.extend(chunk_results)
+            except Exception as e:
+                logger.exception(e)
+                logger.warning('Chunk semantic search failed: %s', e)
         
         all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
         
-        top_results = all_results[:top_k]  
+        # encapsulate data
+        connection_pks_map = {}  # {connection_id: {'pks': [pk1, pk2], 'results': [result1, result2]}}
+        connection_objects = {} 
+        
+        for result in all_results:
+            connection_id = int(result.get('connection_id'))
+            pk = result.get('pk')
+            
+            if connection_id not in connection_pks_map:
+                connection_pks_map[connection_id] = {'pks': [], 'results': []}
+            
+            connection_pks_map[connection_id]['pks'].append(pk)
+            connection_pks_map[connection_id]['results'].append(result)
+        
+        connection_ids = list(connection_pks_map.keys())
+        for connection in project_connections:
+            connection_objects[connection.id] = connection
+        
+        records_map = {}  # {connection_id: {pk: record}}
+        for connection_id, data in connection_pks_map.items():
+            if connection_id not in connection_objects:
+                logger.warning(f'Connection {connection_id} not found or deleted')
+                continue
+            
+            connection = connection_objects[connection_id]
+            connection_type = connection.type
+            table_name = None
+            if connection_type == ConnectionType.SITE.value:
+                table_name = WebCrawlTable.gen_table_name(connection_id)
+            elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+                table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                table_name = GithubIssuesTable.gen_table_name(connection_id)
+            elif connection_type == ConnectionType.SEAFILE.value:
+                table_name = SeafileTable.gen_table_name(connection_id)
+            
+            if not table_name:
+                logger.warning(f'Table name not found for connection {connection_id}')
+                continue
+            
+            pks = data['pks']
+            if not pks:
+                continue
+            
+            try:
+                pks_str = ','.join(map(str, pks))
+                sql = f"SELECT * FROM `{table_name}` WHERE _pk IN ({pks_str})"
+                res = self.seadb_api.query_rows(project_uuid, sql)
+                records = res.get('results', [])
+                
+                # pk -> record
+                records_map[connection_id] = {}
+                for record in records:
+                    record_pk = record.get('_pk')
+                    records_map[connection_id][record_pk] = record
+            except Exception as e:
+                logger.error(f'Error batch querying records for connection {connection_id}: {e}')
+                records_map[connection_id] = {}
+        
+        processed_results = []
+        for result in all_results:
+            connection_id = int(result.get('connection_id'))
+            pk = result.get('pk')
+            source_type = result.get('source_type')
+            score = result.get('score')
+            ai_summary = result.get('ai_summary', '')
+
+            if connection_id not in connection_objects:
+                continue
+            
+            connection = connection_objects[connection_id]
+            connection_type = connection.type
+            
+            record = records_map.get(connection_id, {}).get(pk)
+            if not record:
+                logger.warning(f'Record not found for connection {connection_id}, pk {pk}')
+                continue
+            
+            processed_result = {
+                '_id': pk,
+                'connection_id': connection_id,
+                'score': score,
+                'type': connection_type,
+                'content': ai_summary,
+            }
+            
+            if connection_type == ConnectionType.SITE.value:
+                url = record.get('url', '')
+                if source_type == 'chunk':
+                    processed_result['source_type'] = 'chunk'
+                    processed_result['content'] = result.get('content', '')
+                processed_result['title'] = record.get('title', '')
+                processed_result['url'] = url
+                
+            elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+                connection_config = json.loads(connection.config)
+                discourse_forum_url = connection_config.get('url')
+                slug = record.get('slug')
+                topic_id = record.get('topic_id')
+                topic_url = discourse_forum_url.rstrip('/') + '/t/' + slug + '/' + str(topic_id)
+                processed_result['title'] = record.get('title', '')
+                processed_result['slug'] = record.get('slug', '')
+                processed_result['topic_id'] = record.get('topic_id', '')
+                processed_result['modified_time'] = record.get('modified_time', '')
+                processed_result['url'] = topic_url
+                
+            elif connection_type == ConnectionType.SEAFILE.value:
+                connection_config = json.loads(connection.config)
+                repo_name = connection_config.get('repo_name')
+                repo_id = connection_config.get('repo_id')
+                server_url = connection_config.get('server_url')
+                url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + record.get('path', '').strip('/') + '/' + record.get('title', '')
+                processed_result['title'] = record.get('title', '')
+                processed_result['path'] = record.get('path', '')
+                processed_result['repo_id'] = repo_id
+                processed_result['repo_name'] = repo_name
+                processed_result['server_url'] = server_url
+                processed_result['modified_time'] = record.get('modified_time', '')
+                processed_result['url'] = url
+                
+            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                connection_config = json.loads(connection.config)
+                server_url = connection_config.get('repository')
+                url_parsed = urlparse(server_url)
+                base_url = url_parsed.scheme + "://" + url_parsed.netloc
+                parts = url_parsed.path.strip("/").split("/")
+                repo_owner, repo_name = parts[0], parts[1]
+                url = f'{base_url}/{repo_owner}/{repo_name}/issues/' + str(record.get('issue_number', ''))
+                processed_result['title'] = record.get('title', '')
+                processed_result['issue_number'] = record.get('issue_number', '')
+                processed_result['state'] = record.get('state', '')
+                processed_result['labels'] = record.get('labels')
+                processed_result['repo_name'] = repo_name
+                processed_result['repo_owner'] = repo_owner
+                processed_result['url'] = url
+            else:
+                logger.warning(f'Unsupported connection type: {connection_type}')
+                continue
+            
+            processed_results.append(processed_result)
+
+        top_results = processed_results[:top_k]
         
         return top_results
 
