@@ -43,7 +43,7 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
     seaqa_db.update_content_vector_status_and_time(connection_id, json.dumps(content_vector_status))
 
     project_uuid = connection.project_uuid
-    last_vector_indexed_at = connection.vector_indexed_at
+    last_content_vector_indexed_at = connection.content_vector_indexed_at
     
     try:
         # Only support SITE type for now
@@ -65,16 +65,16 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
             project_uuid, 
             content_vector_status, 
             seaqa_db, 
-            last_vector_indexed_at
+            last_content_vector_indexed_at
         )
         
         content_vector_status['last_content_vector_indexed_count'] = index_count
         content_vector_status['last_content_vector_index_status'] = IndexStatus.COMPLETED
-        vector_indexed_at = datetime.datetime.now(datetime.UTC)
+        content_vector_indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_content_vector_status_and_time(
             connection_id, 
             json.dumps(content_vector_status),
-            vector_indexed_at
+            content_vector_indexed_at
         )
             
         logger.info('Finish content vector indexing for connection %s, indexed %d chunks', connection_id, index_count)

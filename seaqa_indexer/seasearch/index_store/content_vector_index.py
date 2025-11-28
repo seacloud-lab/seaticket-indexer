@@ -101,7 +101,7 @@ class ContentVectorIndex(object):
         logger.debug('Deleted %d chunk index documents for pk=%s', len(doc_ids), pk)
 
     def update(self, table_name, index_name, connection_id, project_uuid, 
-               content_vector_status, seaqa_db, last_vector_indexed_at):
+               content_vector_status, seaqa_db, last_content_vector_indexed_at):
         deleted_pk_pairs = []
         
         index_count = 0
@@ -115,16 +115,16 @@ class ContentVectorIndex(object):
                 self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 
-        if not last_vector_indexed_at:
-            last_vector_indexed_at = datetime.datetime(1970, 1, 1)
+        if not last_content_vector_indexed_at:
+            last_content_vector_indexed_at = datetime.datetime(1970, 1, 1)
         
-        last_vector_indexed_at = last_vector_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
+        last_content_vector_indexed_at = last_content_vector_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
         
         while True:
             sql = f"""
                 SELECT _pk, url, deleted, sync_time, modified_time 
                 FROM `{table_name}` 
-                WHERE sync_time > '{last_vector_indexed_at}'
+                WHERE sync_time > '{last_content_vector_indexed_at}'
                 ORDER BY sync_time 
                 LIMIT {page_size} OFFSET {offset}
             """
