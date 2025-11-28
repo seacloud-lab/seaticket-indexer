@@ -61,20 +61,34 @@ class SummaryVectorIndex(object):
             return []
         
         pks_str_list = [str(pk) for pk in pks]
+        doc_ids = []
         try:
-            query = {
-                "query": {
-                    "terms": {
-                        "pk": pks_str_list
-                    }
-                },
-                "_source": False,
-                "size": len(pks)
-            }
-            result = self.seasearch_api.normal_search(index_name, query)
-            hits = result.get('hits', {}).get('hits', [])
+            page_size = max(len(pks) * 10, 200)
+            offset = 0
+            while True:
+                query = {
+                    "query": {
+                        "terms": {
+                            "pk": pks_str_list
+                        }
+                    },
+                    "_source": False,
+                    "size": page_size,
+                    "from": offset
+                }
+                result = self.seasearch_api.normal_search(index_name, query)
+                hits = result.get('hits', {}).get('hits', [])
+                if not hits:
+                    break
+                
+                for hit in hits:
+                    if hit.get('_id'):
+                        doc_ids.append(hit.get('_id'))
+                
+                if len(hits) < page_size:
+                    break
+                offset += page_size
             
-            doc_ids = [hit.get('_id') for hit in hits if hit.get('_id')]
             logger.debug('Found %d index documents for %d pks', len(doc_ids), len(pks))
             return doc_ids
         except Exception as e:
@@ -109,10 +123,15 @@ class SummaryVectorIndex(object):
         page_size = 1000
         offset = 0
         bulk_params = []
+        pending_pks = set()
 
         def _flush_bulk_if_needed(force=False):
-            nonlocal bulk_params
+            nonlocal bulk_params, pending_pks
             if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
+                # Delete old documents first, then insert new ones
+                if pending_pks:
+                    self.delete_indexes_by_pks(index_name, pending_pks)
+                    pending_pks = set()
                 self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 
@@ -162,6 +181,7 @@ class SummaryVectorIndex(object):
                 }
                 bulk_params.append(index_info)
                 bulk_params.append(doc_info)
+                pending_pks.add(pk)
                 
                 index_count += 1
                 if need_update_connection_status(index_count):
