@@ -2,3 +2,5 @@
 __pycache__
 logs
 local_settings.py
+.idea
+.env

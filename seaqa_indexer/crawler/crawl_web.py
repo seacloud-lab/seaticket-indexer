@@ -9,6 +9,7 @@ from seaqa_indexer.utils.constants import ConnectionType
 logger = logging.getLogger(__name__)
 
 def craw_web(connection_id, db_session_class, mq):
+
     def failed_crawl_site(error_msg, params):
         site_id, site_url, connection_status, sync_logger = params
         connection_status['last_sync_status'] = CrawlStatus.FAILED
@@ -26,6 +27,7 @@ def craw_web(connection_id, db_session_class, mq):
         sync_logger.stop_capture()
         mq.lpush('ai_process_task', json.dumps(msg_content))
         mq.lpush('index_task', json.dumps(msg_content))
+        mq.lpush('content_vector_index_task', json.dumps(msg_content))
 
     logger.info(f"Start crawl connection: {connection_id}")
     sync_logger = SyncLogger(db_session_class).init(connection_id)

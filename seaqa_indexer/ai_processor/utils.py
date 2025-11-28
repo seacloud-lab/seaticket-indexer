@@ -49,3 +49,22 @@ def generate_embedding(query_text, project_uuid, org_id=-1, username='seaqa-inde
     resp_json = resp.json()
     embedding = resp_json.get('embedding', [])
     return embedding
+
+def generate_chunks_embedding(content, project_uuid, username='seaqa-indexer', org_id=-1):
+    params = {
+        'content': content,
+        'username': username,
+        'project_uuid': project_uuid,
+        'org_id': org_id,
+    }
+    payload = {'exp': int(time.time()) + 300}
+    token = jwt.encode(payload, JWT_PRIVATE_KEY, algorithm='HS256')
+    headers = {"Authorization": "Token %s" % token}
+    url = urljoin(SEAQA_AI_INNER_SERVER_URL, '/generate-chunks-embedding')
+    resp = requests.post(url, json=params, headers=headers)
+    if resp.status_code != 200:
+        raise Exception('generate chunks embedding error status: %s body: %s', resp.status_code, resp.text)
+    resp_json = resp.json()
+    chunks = resp_json.get('chunks', [])
+    embeddings = resp_json.get('embeddings', [])
+    return chunks, embeddings

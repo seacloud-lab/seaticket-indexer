@@ -78,8 +78,12 @@ class SeaSearchAPI(object):
             raise Exception(error)
         return data
 
-    def vector_search(self, index_name, data):
-        url = self.server + '/api/' + index_name + '/_search/vector'
+    def vector_search(self, index_names, data):
+        if isinstance(index_names, (list, tuple, set)):
+            index_pattern = ','.join(index_names)
+        else:
+            index_pattern = index_names
+        url = self.server + '/api/' + index_pattern + '/_search/vector'
         response = requests.post(url, headers=self.headers, json=data, timeout=self.timeout)
 
         return parse_response(response)
