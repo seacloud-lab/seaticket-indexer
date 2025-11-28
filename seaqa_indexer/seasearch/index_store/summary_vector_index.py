@@ -109,10 +109,15 @@ class SummaryVectorIndex(object):
         page_size = 1000
         offset = 0
         bulk_params = []
+        pending_pks = set()
 
         def _flush_bulk_if_needed(force=False):
-            nonlocal bulk_params
+            nonlocal bulk_params, pending_pks
             if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
+                # Delete old documents first, then insert new ones
+                if pending_pks:
+                    self.delete_indexes_by_pks(index_name, pending_pks)
+                    pending_pks = set()
                 self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 
@@ -162,6 +167,7 @@ class SummaryVectorIndex(object):
                 }
                 bulk_params.append(index_info)
                 bulk_params.append(doc_info)
+                pending_pks.add(pk)
                 
                 index_count += 1
                 if need_update_connection_status(index_count):
