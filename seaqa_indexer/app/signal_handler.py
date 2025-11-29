@@ -44,6 +44,13 @@ def kill_summary_index_task_worker():
     run(cmd)
 
 
+def kill_content_vector_index_task_worker():
+    cmd = [
+        'pkill', '-f', 'seaqa_indexer.seasearch.content_vector_index_task_worker'
+    ]
+    run(cmd)
+
+
 def signal_term_handler(signal, frame):
     kill_web_crawler_task_worker()
     kill_index_task_worker()
@@ -51,6 +58,7 @@ def signal_term_handler(signal, frame):
     kill_connection_sync_task_worker()
     kill_ai_processor()
     kill_summary_index_task_worker()
+    kill_content_vector_index_task_worker()
     os._exit(0)
 
 
