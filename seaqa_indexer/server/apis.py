@@ -152,6 +152,7 @@ def search():
     time_to = data.get('time_to')
     search_type = data.get('search_type', 'normal_search')
     username = data.get('username', '')
+    extra_sources = data.get('extra_sources')
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
@@ -166,7 +167,7 @@ def search():
     if search_type == 'semantic_search':
         results = application.app.index_manager.semantic_search(project_uuid, connection_ids, query, username, time_from, time_to, count)
     else:
-        results = application.app.index_manager.search(project_uuid, connection_ids, time_from, time_to, query, start=0, size=count)
+        results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
 
     return {'results': results}, 200
 
