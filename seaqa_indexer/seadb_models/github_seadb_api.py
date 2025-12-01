@@ -77,7 +77,7 @@ class GitHubSeaDBAPI:
             GithubIssuesTable.created_time.name: time_to_utc_time(issue.get('created_at')).isoformat(),
             GithubIssuesTable.modified_time.name: time_to_utc_time(issue.get('updated_at')).isoformat(),
             GithubIssuesTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            GithubIssuesTable.closed_at.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
+            GithubIssuesTable.closed_time.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
             GithubIssuesTable.comments_count.name: issue.get('comments'),
             GithubIssuesTable.deleted.name: False,
         }
