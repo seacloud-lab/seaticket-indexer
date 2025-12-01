@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT, SUPPORT_VECTOR_RETRIEVAL_TYPES
+from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
+from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
@@ -37,6 +39,7 @@ class IndexManager:
         self.github_issues_index = GitHubIssuesIndex(self.seasearch_api)
         self.discourse_index = DiscourseIndex(self.seasearch_api)
         self.email_index = EmailIndex(self.seasearch_api)
+        self.knowledge_base_index = KnowledgeBaseIndex(self.seasearch_api)
 
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
@@ -71,7 +74,7 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
-    def search(self, project_uuid, connection_ids, time_from, time_to, keyword, start=0, size=20):
+    def search(self, project_uuid, connection_ids, extra_sources, time_from, time_to, keyword, start=0, size=20):
         result_docs = []
         bulk_search_params = []
 
@@ -100,6 +103,10 @@ class IndexManager:
             elif connection_type == ConnectionType.EMAIL.value:
                 email_search_param = self.email_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
                 bulk_search_params.append(email_search_param)
+        if "knowledge_base" in extra_sources:
+            kb_index_name = f"knowledge_base_{project_uuid}"
+            knowledge_base_search_param = self.knowledge_base_index.get_search_param(kb_index_name, keyword, start, size, time_from, time_to)
+            bulk_search_params.append(knowledge_base_search_param)
 
         if not bulk_search_params:
             return []
@@ -221,6 +228,19 @@ class IndexManager:
                     'type': 'discourse_forum',
                 }
                 result_docs.append(r)
+            elif index_name.startswith("knowledge_base_"):
+                r = {
+                    'question': source.get('question'),
+                    'answer': source.get('answer'),
+                    'project_id': source.get('base_id'),
+                    'table_name': source.get('table_name'),
+                    'pk': source.get('pk'),
+                    'modified_time': source.get('modified_time'),
+                    'score': score,
+                    '_id': _id,
+                    'type': 'knowledge_base',
+                }
+                result_docs.append(r)
 
         logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
                         project_uuid, result_docs)
@@ -241,27 +261,27 @@ class IndexManager:
         if not query_vector:
             logger.warning('Failed to generate query vector for: %s', query_text)
             return []
-        
+
         summary_index_names = []
         content_index_names = []
-        
+
         for project_connection in project_connections:
             connection_type = project_connection.type
             connection_id = project_connection.id
-            
+
             summary_index_name = gen_summary_index_name(connection_id, connection_type)
             summary_index_names.append(summary_index_name)
-            
+
             if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
                 content_index_name = gen_content_vector_index_name(connection_id, connection_type)
                 if self.content_vector_index.check_index(content_index_name):
                     content_index_names.append(content_index_name)
-        
+
         # Batch search summary indexes
         if summary_index_names:
             try:
                 summary_results = self.summary_vector_index.semantic_search(
-                    summary_index_names, query_vector, per_connection_limit, 
+                    summary_index_names, query_vector, per_connection_limit,
                     time_from=time_from, time_to=time_to
                 )
                 for result in summary_results:
@@ -269,7 +289,7 @@ class IndexManager:
                 all_results.extend(summary_results)
             except Exception as e:
                 logger.warning('Summary semantic search failed: %s', e)
-        
+
         # Batch search content indexes
         if content_index_names:
             try:
@@ -283,33 +303,33 @@ class IndexManager:
             except Exception as e:
                 logger.exception(e)
                 logger.warning('Chunk semantic search failed: %s', e)
-        
+
         all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
-        
+
         # encapsulate data
         connection_pks_map = {}  # {connection_id: {'pks': [pk1, pk2], 'results': [result1, result2]}}
-        connection_objects = {} 
-        
+        connection_objects = {}
+
         for result in all_results:
             connection_id = int(result.get('connection_id'))
             pk = result.get('pk')
-            
+
             if connection_id not in connection_pks_map:
                 connection_pks_map[connection_id] = {'pks': [], 'results': []}
-            
+
             connection_pks_map[connection_id]['pks'].append(pk)
             connection_pks_map[connection_id]['results'].append(result)
-        
+
         connection_ids = list(connection_pks_map.keys())
         for connection in project_connections:
             connection_objects[connection.id] = connection
-        
+
         records_map = {}  # {connection_id: {pk: record}}
         for connection_id, data in connection_pks_map.items():
             if connection_id not in connection_objects:
                 logger.warning(f'Connection {connection_id} not found or deleted')
                 continue
-            
+
             connection = connection_objects[connection_id]
             connection_type = connection.type
             table_name = None
@@ -321,11 +341,11 @@ class IndexManager:
                 table_name = GithubIssuesTable.gen_table_name(connection_id)
             elif connection_type == ConnectionType.SEAFILE.value:
                 table_name = SeafileTable.gen_table_name(connection_id)
-            
+
             if not table_name:
                 logger.warning(f'Table name not found for connection {connection_id}')
                 continue
-            
+
             pks = data['pks']
             if not pks:
                 continue
@@ -344,7 +364,7 @@ class IndexManager:
             except Exception as e:
                 logger.error(f'Error batch querying records for connection {connection_id}: {e}')
                 records_map[connection_id] = {}
-        
+
         processed_results = []
         for result in all_results:
             connection_id = int(result.get('connection_id'))
@@ -355,15 +375,15 @@ class IndexManager:
 
             if connection_id not in connection_objects:
                 continue
-            
+
             connection = connection_objects[connection_id]
             connection_type = connection.type
-            
+
             record = records_map.get(connection_id, {}).get(pk)
             if not record:
                 logger.warning(f'Record not found for connection {connection_id}, pk {pk}')
                 continue
-            
+
             processed_result = {
                 '_id': pk,
                 'connection_id': connection_id,
@@ -371,7 +391,7 @@ class IndexManager:
                 'type': connection_type,
                 'content': ai_summary,
             }
-            
+
             if connection_type == ConnectionType.SITE.value:
                 url = record.get('url', '')
                 if source_type == 'chunk':
@@ -379,7 +399,7 @@ class IndexManager:
                     processed_result['content'] = result.get('content', '')
                 processed_result['title'] = record.get('title', '')
                 processed_result['url'] = url
-                
+
             elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
                 connection_config = json.loads(connection.config)
                 discourse_forum_url = connection_config.get('url')
@@ -391,7 +411,7 @@ class IndexManager:
                 processed_result['topic_id'] = record.get('topic_id', '')
                 processed_result['modified_time'] = record.get('modified_time', '')
                 processed_result['url'] = topic_url
-                
+
             elif connection_type == ConnectionType.SEAFILE.value:
                 connection_config = json.loads(connection.config)
                 repo_name = connection_config.get('repo_name')
@@ -405,7 +425,7 @@ class IndexManager:
                 processed_result['server_url'] = server_url
                 processed_result['modified_time'] = record.get('modified_time', '')
                 processed_result['url'] = url
-                
+
             elif connection_type == ConnectionType.GITHUB_ISSUE.value:
                 connection_config = json.loads(connection.config)
                 server_url = connection_config.get('repository')
@@ -424,7 +444,7 @@ class IndexManager:
             else:
                 logger.warning(f'Unsupported connection type: {connection_type}')
                 continue
-            
+
             processed_results.append(processed_result)
 
         top_results = processed_results[:top_k]
@@ -527,18 +547,18 @@ class IndexManager:
 
         all_results = []
         per_connection_limit = max(top_k, 20)
-        
+
         for project_connection in project_connections:
             connection_type = project_connection.type
             connection_id = project_connection.id
-            
+
             index_name = gen_summary_index_name(connection_id, connection_type)
-            
+
             index_exists = self.summary_vector_index.check_index(index_name)
             if not index_exists:
                 logger.debug('Index %s does not exist, skipping connection %s', index_name, connection_id)
                 continue
-            
+
             try:
                 search_results = self.summary_vector_index.semantic_search(
                         index_name, query_vector, per_connection_limit
@@ -548,7 +568,7 @@ class IndexManager:
             except Exception as e:
                 logger.exception('Vector search failed for connection %s: %s', connection_id, e)
                 continue
-        
+
         all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
         top_results = all_results[:top_k]
 
