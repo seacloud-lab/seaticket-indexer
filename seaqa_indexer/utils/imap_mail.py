@@ -6,6 +6,7 @@ from email.parser import Parser
 from email.header import decode_header
 from datetime import timedelta
 from email.utils import parseaddr, parsedate_to_datetime
+from seaqa_indexer.utils import time_to_utc_time
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,7 @@ class ImapMail(object):
 
         return header_info
 
-    def gen_email_dict(self, mail_body, mode, is_sender, send_date=None):
+    def gen_email_dict(self, mail_body, mode, is_sender, since=None):
         email_dict = {}
         try:
             mail_body = mail_body.decode()
@@ -144,10 +145,12 @@ class ImapMail(object):
 
         header_info = self.get_email_header(msg)
         send_time = header_info.get('Date')
+        since = time_to_utc_time(str(since))
+        send_time = time_to_utc_time(str(send_time))
 
-        if mode == 'ON' and send_time.date() != send_date:
+        if mode == 'ON' and send_time.date() != since:
             return email_dict
-        if mode == 'SINCE' and send_time < send_date:
+        if mode == 'SINCE' and send_time < since:
             return email_dict
 
         message_id = header_info.get('Message-ID')
