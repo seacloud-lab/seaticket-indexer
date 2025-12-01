@@ -8,6 +8,16 @@ from seaqa_indexer.config import JWT_PRIVATE_KEY, SEAQA_AI_INNER_SERVER_URL
 from seaqa_indexer.utils.constants import LLM_INPUT_CHARACTERS_LIMIT
 
 
+def get_org_id_by_project_uuid(seaqa_db, project_uuid):
+    project = seaqa_db.get_project_by_uuid(project_uuid)
+    if not project:
+        return -1
+    workspace_id = project.workspace_id
+    workspace = seaqa_db.get_workspace_by_id(workspace_id)
+    if not workspace:
+        return -1
+    return workspace.org_id
+
 def generate_summary(content, connection_type, project_uuid, username='seaqa-indexer', org_id=-1, include_vector=True):
     params = {
         'content': content[:LLM_INPUT_CHARACTERS_LIMIT],
