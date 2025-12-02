@@ -15,9 +15,6 @@ SEASEARCH_BULK_OPETATE_LIMIT = 100
 class KnowledgeBaseIndex(object):
     mapping = {
         'properties': {
-            'base_id': {'type': 'keyword'},
-            'table_name': {'type': 'keyword'},
-            'pk': {'type': 'keyword'},
             'question': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
@@ -115,7 +112,7 @@ class KnowledgeBaseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['base_id', 'table_name', 'pk', 'question', 'answer', 'modified_time'],
+            '_source': ['question', 'answer', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
             'pre_tags': ['<mark>'],
@@ -138,9 +135,6 @@ class KnowledgeBaseIndex(object):
             score = hit.get('_score')
             _id = hit.get('_id')
             r = {
-                'base_id': source['base_id'],
-                'table_name': source['table_name'],
-                'pk': source['pk'],
                 'question': source['question'],
                 'answer': source['answer'],
                 'modified_time': source.get('modified_time'),
@@ -177,13 +171,12 @@ class KnowledgeBaseIndex(object):
             'table_name': tname,
             'question_col': 'question',
             'answer_col': 'answer',
-            'deleted_col': None,
+            'deleted_col': 'deleted',
             'time_col': 'modified_time'
         }]
 
     def update(self, index_name, base_id, seadb_api, since_dt=None):
         page_size = 1000
-        offset = 0
         bulk_params = []
         deleted_ids = set()
         indexed_count = 0
@@ -228,15 +221,12 @@ class KnowledgeBaseIndex(object):
                     question = row.get(t['question_col'])
                     answer = row.get(t['answer_col'])
                     deleted = t['deleted_col'] and row.get(t['deleted_col'])
+                    doc_id = str(pk)
                     if deleted:
-                        deleted_ids.add(f"{t['table_name']}:{pk}")
+                        deleted_ids.add(doc_id)
                         continue
-                    doc_id = f"{t['table_name']}:{pk}"
                     index_info = {'index': {'_index': index_name, '_id': doc_id}}
                     doc_info = {
-                        'base_id': base_id,
-                        'table_name': t['table_name'],
-                        'pk': str(pk),
                         'question': question,
                         'answer': answer,
                         'modified_time': row.get(t['time_col'])

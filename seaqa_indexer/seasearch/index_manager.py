@@ -4,7 +4,7 @@ import datetime
 from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT, SUPPORT_VECTOR_RETRIEVAL_TYPES
+from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES
 from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
@@ -48,6 +48,26 @@ class IndexManager:
         self.summary_vector_index = SummaryVectorIndex(self.seasearch_api, self.seadb_api)
         self.content_vector_index = ContentVectorIndex(self.seasearch_api, self.seadb_api, storage=None)
 
+    def _build_connection_search_params(self, project_connections, keyword, start, size, time_from, time_to):
+        bulk_search_params = []
+        connection_id_to_config = {}
+        for project_connection in project_connections:
+            connection_type = project_connection.type
+            connection_id = project_connection.id
+            index_name = gen_index_name_by_type(connection_id, connection_type)
+            connection_id_to_config[connection_id] = json.loads(project_connection.config)
+            if connection_type == ConnectionType.SEAFILE.value:
+                bulk_search_params.append(self.seafile_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
+            elif connection_type == ConnectionType.SITE.value:
+                bulk_search_params.append(self.site_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
+            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+                bulk_search_params.append(self.github_issues_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
+            elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+                bulk_search_params.append(self.discourse_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
+            elif connection_type == ConnectionType.EMAIL.value:
+                bulk_search_params.append(self.email_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
+        return connection_id_to_config, bulk_search_params
+
     def delete_index_by_project(self, project_uuid):
         project_connections = self.seaqa_db.get_connections_by_project_uuid(project_uuid)
         for project_connection in project_connections:
@@ -79,30 +99,13 @@ class IndexManager:
         bulk_search_params = []
 
         connection_id_list = connection_ids.split(',') if connection_ids else None
-        project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
+        if connection_id_list:
+            project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
+            connection_id_to_config, connection_params = self._build_connection_search_params(
+                project_connections, keyword, start, size, time_from, time_to
+            )
+            bulk_search_params.extend(connection_params)
 
-        connection_id_to_config = {}
-        for project_connection in project_connections:
-            connection_type = project_connection.type
-            connection_id = project_connection.id
-            index_name = gen_index_name_by_type(connection_id, connection_type)
-            connection_id_to_config[connection_id] = json.loads(project_connection.config)
-
-            if connection_type == ConnectionType.SEAFILE.value:
-                seafile_search_param = self.seafile_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
-                bulk_search_params.append(seafile_search_param)
-            elif connection_type == ConnectionType.SITE.value:
-                site_search_param = self.site_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
-                bulk_search_params.append(site_search_param)
-            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                issues_search_param = self.github_issues_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
-                bulk_search_params.append(issues_search_param)
-            elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                discourse_search_param = self.discourse_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
-                bulk_search_params.append(discourse_search_param)
-            elif connection_type == ConnectionType.EMAIL.value:
-                email_search_param = self.email_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
-                bulk_search_params.append(email_search_param)
         if "knowledge_base" in extra_sources:
             kb_index_name = f"knowledge_base_{project_uuid}"
             knowledge_base_search_param = self.knowledge_base_index.get_search_param(kb_index_name, keyword, start, size, time_from, time_to)
@@ -232,9 +235,6 @@ class IndexManager:
                 r = {
                     'question': source.get('question'),
                     'answer': source.get('answer'),
-                    'project_id': source.get('base_id'),
-                    'table_name': source.get('table_name'),
-                    'pk': source.get('pk'),
                     'modified_time': source.get('modified_time'),
                     'score': score,
                     '_id': _id,
