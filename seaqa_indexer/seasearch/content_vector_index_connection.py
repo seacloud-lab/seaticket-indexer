@@ -6,6 +6,7 @@ from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVectorIndex
 from seaqa_indexer.seasearch.utils import gen_content_vector_index_name
 from seaqa_indexer.seadb_models.models import WebCrawlTable
+from seaqa_indexer.ai_processor.utils import get_org_id_by_project_uuid
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
     project_uuid = connection.project_uuid
     last_content_vector_indexed_at = connection.content_vector_indexed_at
     
+    org_id = get_org_id_by_project_uuid(seaqa_db, project_uuid)
     try:
         # Only support SITE type for now
         if connection_type != ConnectionType.SITE.value:
@@ -62,6 +64,7 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
             table_name,
             content_index_name, 
             connection_id, 
+            org_id,
             project_uuid, 
             content_vector_status, 
             seaqa_db, 
