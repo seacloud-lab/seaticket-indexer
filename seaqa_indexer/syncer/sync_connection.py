@@ -21,7 +21,7 @@ from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.sync_logger import SyncLogger
-from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows
+from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
 from seaqa_indexer.utils.imap_mail import ImapMail
 from seaqa_indexer.crawler.storage import get_storage
 
@@ -358,44 +358,52 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
     _status_last_update_count = 0
 
     since = time_to_utc_time(str(since))
-    email_list = imap.search_emails_by_send_date(since, 'SINCE')
+    today = datetime.datetime.now(datetime.timezone.utc).date()
 
-    new_email_list = []
-    for email in email_list:
-        if not email:
-            continue
-        message_id = email.get('message_id')
-        modified_time = email.get('email_date')
-        existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
-        if existed_email:
-            existed_date = time_to_utc_time(str(existed_email.get('modified_time')))
-            email_thread_id = existed_email.get('thread_id')
-            if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
-                logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
+    before_date = since.date()
+
+    while before_date <= today:
+        since_date = before_date
+        before_date += datetime.timedelta(days=EMAIL_SYNC_INTERVAL_DAYS)
+
+        email_list = imap.search_emails(since_date, before_date)
+        new_email_list = []
+        for email in email_list:
+            if not email:
                 continue
-        email_info = {
-            'message_id': email.get('message_id'),
-            'reply_to_message_id': email.get('reply_to_message_id'),
-            'email_date': email.get('email_date'),
-            'subject': email.get('subject'),
-            'is_sender': email.get('is_sender'),
-        }
-        new_email_list.append(email_info)
+            if not is_first_sync:
+                message_id = email.get('message_id')
+                modified_time = email.get('email_date')
+                existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
+                if existed_email:
+                    existed_date = time_to_utc_time(str(existed_email.get('modified_time')))
+                    email_thread_id = existed_email.get('thread_id')
+                    if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
+                        logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
+                        continue
+            email_info = {
+                'message_id': email.get('message_id'),
+                'reply_to_message_id': email.get('reply_to_message_id'),
+                'email_date': email.get('email_date'),
+                'subject': email.get('subject'),
+                'is_sender': email.get('is_sender'),
+            }
+            new_email_list.append(email_info)
 
-        upload_email_attachment(connection_id, project_uuid, storage, email)
+            upload_email_attachment(connection_id, project_uuid, storage, email)
 
-        email_seadb_api.save_or_update_email_to_db(connection_id, email)
-        should, new_time, new_count = need_update_connection_last_sync_count(
-            sync_count, _status_last_update_time, _status_last_update_count
-        )
-        if should:
-            connection_status['last_sync_count'] = sync_count
-            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-            _status_last_update_time = new_time
-            _status_last_update_count = new_count
-        sync_count += 1
-    if new_email_list:
-        insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
+            email_seadb_api.save_or_update_email_to_db(connection_id, email)
+            should, new_time, new_count = need_update_connection_last_sync_count(
+                sync_count, _status_last_update_time, _status_last_update_count
+            )
+            if should:
+                connection_status['last_sync_count'] = sync_count
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                _status_last_update_time = new_time
+                _status_last_update_count = new_count
+            sync_count += 1
+        if new_email_list:
+            insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list)
 
     total_count = email_seadb_api.get_email_total_count(connection_id)
     return sync_count, total_count

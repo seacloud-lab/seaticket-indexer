@@ -3,6 +3,8 @@ import datetime
 
 from seaqa_indexer.utils import time_to_utc_time
 
+EMAIL_SYNC_INTERVAL_DAYS = 10
+
 
 def upload_email_attachment(connection_id, project_uuid, storage, email):
     file_list = email.pop('attachment', [])
@@ -33,20 +35,19 @@ def upload_email_attachment(connection_id, project_uuid, storage, email):
     email['html_content'] = html_content
 
 
-def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_list, is_first_sync):
+def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_list):
     email_list = sorted(email_list, key=lambda x: time_to_utc_time(x['email_date']))
     email_rows = []
-    if not is_first_sync:
-        page_size = 100
-        offset = 0
-        while True:
-            last_month_day = since - datetime.timedelta(days=30)
-            last_month_day = last_month_day.isoformat()
-            emails = email_seadb_api.get_thread_emails_by_page(connection_id, last_month_day, page_size, offset)
-            if not emails:
-                break
-            email_rows.extend(emails)
-            offset += page_size
+    page_size = 100
+    offset = 0
+    while True:
+        last_month_day = since - datetime.timedelta(days=30)
+        last_month_day = last_month_day.isoformat()
+        emails = email_seadb_api.get_thread_emails_by_page(connection_id, last_month_day, page_size, offset)
+        if not emails:
+            break
+        email_rows.extend(emails)
+        offset += page_size
 
     message2thread = {email['message_id']: email['thread_id'] for email in email_rows}
     email_list = [email for email in email_list if not message2thread.get(email['message_id'])]
