@@ -4,9 +4,8 @@ from imapclient import IMAPClient
 from imapclient.imapclient import SENT
 from email.parser import Parser
 from email.header import decode_header
-from datetime import timedelta
+from datetime import datetime
 from email.utils import parseaddr, parsedate_to_datetime
-from seaqa_indexer.utils import time_to_utc_time
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +134,7 @@ class ImapMail(object):
 
         return header_info
 
-    def gen_email_dict(self, mail_body, mode, is_sender, since=None):
+    def gen_email_dict(self, mail_body, is_sender):
         email_dict = {}
         try:
             mail_body = mail_body.decode()
@@ -144,15 +143,6 @@ class ImapMail(object):
         msg = Parser().parsestr(mail_body)
 
         header_info = self.get_email_header(msg)
-        send_time = header_info.get('Date')
-        since = time_to_utc_time(str(since))
-        send_time = time_to_utc_time(str(send_time))
-
-        if mode == 'ON' and send_time.date() != since:
-            return email_dict
-        if mode == 'SINCE' and send_time < since:
-            return email_dict
-
         message_id = header_info.get('Message-ID')
         if not message_id:
             logger.error('message-id not found, email body: %s', mail_body)
@@ -178,12 +168,20 @@ class ImapMail(object):
 
         return email_dict
 
-    def search_emails_by_send_date(self, send_date, mode='ON'):
-        td = timedelta(days=1)
-        before_send_date = send_date - td
-        after_send_date = send_date + td
+    def format_imap_date(self, date_str):
+        """
+        convert datetime to DD-Mon-YYYY
+        """
+
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        return date_obj.strftime("%d-%b-%Y")
+
+    def search_emails(self, start_date, end_date):
         sent_box = self.server.find_special_folder(SENT)
         inbox = 'INBOX'
+
+        start_date = self.format_imap_date(str(start_date))
+        end_date = self.format_imap_date(str(end_date))
 
         for email_folder in [inbox, sent_box]:
             logger.debug('start to get user: %s emails from box: %s', self.user, email_folder)
@@ -192,25 +190,19 @@ class ImapMail(object):
             except Exception as e:
                 logger.warning('user: %s select email folder: %s error: %s', self.user, email_folder, e)
                 continue
-            results = []
-            if mode == 'ON':
-                today_results = self.server.search(['ON', send_date])
-                before_results = self.server.search(['ON', before_send_date])
-                after_results = self.server.search(['ON', after_send_date])
-                results = before_results + today_results + after_results
-            elif mode == 'SINCE':
-                results = self.server.search(['SINCE', before_send_date])
+            search_criteria = f'(SINCE "{start_date}" BEFORE "{end_date}")'
+            email_ids = self.server.search(search_criteria)
 
             offset = 100
-            for i in range(0, len(results), offset):
-                emails = self.server.fetch(results[i: i + offset], ['BODY[]'])
+            for i in range(0, len(email_ids), offset):
+                emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]'])
                 is_sender = False
                 if email_folder == sent_box:
                     is_sender = True
 
                 for uid, message_data in emails.items():
                     mail_body = message_data[b'BODY[]']
-                    email_dict = self.gen_email_dict(mail_body, mode, is_sender, send_date)
+                    email_dict = self.gen_email_dict(mail_body, is_sender)
                     yield email_dict
 
     def close(self):
