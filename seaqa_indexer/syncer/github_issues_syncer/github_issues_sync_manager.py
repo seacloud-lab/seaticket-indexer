@@ -35,7 +35,7 @@ class GithubIssuesSyncManager:
             issue_data = update_data.get('issue')
             comment_count = issue_data.get('comments')
             comment_data = update_data.get('comment')
-            modified_time = comment_data.get('modified_time')
+            modified_time = comment_data.get('updated_at')
 
             if action == 'deleted':
                 comment_id = comment_data['id']
