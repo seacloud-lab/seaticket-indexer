@@ -179,6 +179,7 @@ class KnowledgeBaseIndex(object):
         page_size = 1000
         bulk_params = []
         deleted_ids = set()
+        deleted_pk_set = set()
         indexed_count = 0
 
         def flush(force=False):
@@ -191,6 +192,7 @@ class KnowledgeBaseIndex(object):
             since_dt = datetime.datetime(1970, 1, 1, tzinfo=datetime.UTC)
 
         tables = self._get_indexable_tables(base_id)
+        table_name = self._get_kb_table_name()
         for t in tables:
             offset = 0
             while True:
@@ -224,6 +226,7 @@ class KnowledgeBaseIndex(object):
                     doc_id = str(pk)
                     if deleted:
                         deleted_ids.add(doc_id)
+                        deleted_pk_set.add(pk)
                         continue
                     index_info = {'index': {'_index': index_name, '_id': doc_id}}
                     doc_info = {
@@ -239,4 +242,5 @@ class KnowledgeBaseIndex(object):
         flush(force=True)
         if deleted_ids:
             self.delete_indexes_by_ids(index_name, deleted_ids)
+            seadb_api.delete_rows(base_id, table_name, list(deleted_pk_set))
         return indexed_count
