@@ -8,23 +8,12 @@ from seaqa_indexer.config import JWT_PRIVATE_KEY, SEAQA_AI_INNER_SERVER_URL
 from seaqa_indexer.utils.constants import LLM_INPUT_CHARACTERS_LIMIT
 
 
-def get_org_id_by_project_uuid(seaqa_db, project_uuid):
-    project = seaqa_db.get_project_by_uuid(project_uuid)
-    if not project:
-        return -1
-    workspace_id = project.workspace_id
-    workspace = seaqa_db.get_workspace_by_id(workspace_id)
-    if not workspace:
-        return -1
-    return workspace.org_id
-
-def generate_summary(content, connection_type, project_uuid, username='seaqa-indexer', org_id=-1, include_vector=True):
+def generate_summary(content, connection_type, project_uuid, username='seaqa-indexer', include_vector=True):
     params = {
         'content': content[:LLM_INPUT_CHARACTERS_LIMIT],
         'username': username,
         'connection_type': connection_type,
         'project_uuid': project_uuid,
-        'org_id': org_id,
         'include_vector': include_vector,
     }
     payload = {'exp': int(time.time()) + 300, }
@@ -40,11 +29,10 @@ def generate_summary(content, connection_type, project_uuid, username='seaqa-ind
     return summary, vector
 
 
-def generate_embedding(query_text, project_uuid, org_id=-1, username='seaqa-indexer'):
+def generate_embedding(query_text, project_uuid, username='seaqa-indexer'):
     params = {
         'content': query_text,
         'username': username,
-        'org_id': org_id,
         'project_uuid': project_uuid,
     }
     payload = {'exp': int(time.time()) + 300}
@@ -60,12 +48,11 @@ def generate_embedding(query_text, project_uuid, org_id=-1, username='seaqa-inde
     embedding = resp_json.get('embedding', [])
     return embedding
 
-def generate_chunks_embedding(content, project_uuid, username='seaqa-indexer', org_id=-1):
+def generate_chunks_embedding(content, project_uuid, username='seaqa-indexer'):
     params = {
         'content': content,
         'username': username,
         'project_uuid': project_uuid,
-        'org_id': org_id,
     }
     payload = {'exp': int(time.time()) + 300}
     token = jwt.encode(payload, JWT_PRIVATE_KEY, algorithm='HS256')

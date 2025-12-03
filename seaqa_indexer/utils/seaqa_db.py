@@ -9,19 +9,6 @@ logger = logging.getLogger('__name__')
 class SeaqaDB(object):
     def __init__(self, db_session_class):
         self.db_session_class = db_session_class
-    
-    def get_project_by_uuid(self, project_uuid):
-        project_uuid = uuid_str_to_32_chars(project_uuid)
-        with self.db_session_class() as session:
-            sql = """SELECT id, creator, workspace_id, name FROM projects WHERE uuid=:project_uuid AND deleted=false"""
-            project = session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
-            return project
-    
-    def get_workspace_by_id(self, workspace_id):
-        with self.db_session_class() as session:
-            sql = """SELECT id, org_id, owner FROM workspaces WHERE id=:workspace_id AND deleted=false"""
-            workspace = session.execute(text(sql), {'workspace_id': workspace_id}).fetchone()
-            return workspace
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
