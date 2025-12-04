@@ -9,11 +9,13 @@ from seaqa_indexer.seadb_models.models import (
     WebCrawlTable,
     DiscourseTopicsTable,
     GithubIssuesTable,
-    SeafileTable
+    SeafileTable,
+    ThreadTable
 )
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
+from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.utils.constants import AIStatus
 
 logger = logging.getLogger(__name__)
@@ -41,14 +43,10 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
         }
     else:
         ai_status = json.loads(ai_status)
-    last_ai_processing_status = ai_status.get('last_ai_processing_status', AIStatus.PENDING)
-    if last_ai_processing_status == AIStatus.PROCESSING:
-        logger.warning('connection: %s is processing ai', connection_id)
-        return
-    
+
     ai_status['last_ai_processing_status'] = AIStatus.PROCESSING
     seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
-    
+
     try:
         if connection_type == ConnectionType.SITE.value:
             ai_processing_count = process_site_ai(seadb_api, storage, connection_id, project_uuid)
@@ -58,6 +56,8 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
             ai_processing_count = process_github_issue_ai(seadb_api, connection_id, project_uuid)
         elif connection_type == ConnectionType.SEAFILE.value:
             ai_processing_count = process_seafile_ai(seadb_api, connection_id, project_uuid)
+        elif connection_type == ConnectionType.EMAIL.value:
+            ai_processing_count = process_email_ai(seadb_api, connection_id, project_uuid)
         else:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
@@ -208,6 +208,42 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
             if content:
                 full_content = f"Title: {title}\n\nContent: {content}\n"
                 summary, vector = generate_summary(full_content, ConnectionType.SEAFILE.value, project_uuid)
+            updates.append({
+                "pk": pk,
+                "row": {
+                    "ai_summary": summary,
+                    "ai_summary_vector": vector,
+                    "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                }
+            })
+            ai_processing_count += 1
+            if len(updates) >= BATCH_SIZE:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
+    return ai_processing_count
+
+
+def process_email_ai(seadb_api, connection_id, project_uuid):
+    page_size = 100
+    updates = []
+    table_name = ThreadTable.gen_table_name(connection_id)
+    email_seadb_api = EmailSeaDBAPI(project_uuid)
+
+    ai_processing_count = 0
+    while True:
+        rows = email_seadb_api.get_need_ai_emails_by_page(connection_id, page_size)
+        if not rows:
+            break
+        for row in rows:
+            pk = row.get('_pk')
+            title = row.get('title', '')
+            result = email_seadb_api.get_first_email(connection_id, pk)
+            content = result.get('content', '')
+
+            full_content = f"Title: {title}\n\nBody: {content}\n"
+            summary, vector = generate_summary(full_content, ConnectionType.EMAIL.value, project_uuid)
             updates.append({
                 "pk": pk,
                 "row": {
