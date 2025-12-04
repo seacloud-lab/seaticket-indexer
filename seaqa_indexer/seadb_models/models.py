@@ -264,6 +264,8 @@ class ThreadTable(BaseModel):
     title = MappedColumn('title', PropertyTypes.TEXT)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
     unread = MappedColumn('unread', PropertyTypes.BOOL)
+    sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
     ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
     ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)

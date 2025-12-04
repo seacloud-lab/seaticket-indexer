@@ -43,12 +43,12 @@ class SummaryVectorIndex(object):
         self.seasearch_api = seasearch_api
         self.seadb_api = seadb_api or SeaDBAPI()
         self.shard_num = shard_num
-        
+
 
     def create_index_if_missing(self, index_name):
         if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
             self.seasearch_api.create_index(
-                index_name, 
+                index_name,
                 {"shard_num": self.shard_num, "mappings": self.mapping}
             )
 
@@ -59,7 +59,7 @@ class SummaryVectorIndex(object):
         """Query index document IDs by pk field"""
         if not pks:
             return []
-        
+
         pks_str_list = [str(pk) for pk in pks]
         doc_ids = []
         try:
@@ -80,15 +80,15 @@ class SummaryVectorIndex(object):
                 hits = result.get('hits', {}).get('hits', [])
                 if not hits:
                     break
-                
+
                 for hit in hits:
                     if hit.get('_id'):
                         doc_ids.append(hit.get('_id'))
-                
+
                 if len(hits) < page_size:
                     break
                 offset += page_size
-            
+
             logger.debug('Found %d index documents for %d pks', len(doc_ids), len(pks))
             return doc_ids
         except Exception as e:
@@ -99,12 +99,12 @@ class SummaryVectorIndex(object):
         """Delete index documents by pk field"""
         if not pks:
             return
-        
+
         doc_ids = self._query_index_ids_by_pks(index_name, pks)
         if not doc_ids:
             logger.debug('No index documents found to delete')
             return
-        
+
         delete_params = []
         for _id in doc_ids:
             delete_params.append({'delete': {'_id': _id, '_index': index_name}})
@@ -113,7 +113,7 @@ class SummaryVectorIndex(object):
                 delete_params = []
         if delete_params:
             self.seasearch_api.bulk(index_name, delete_params)
-        
+
         logger.info('Deleted %d index documents', len(doc_ids))
 
     def update(self, table_name, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_ai_indexed_at):
@@ -137,9 +137,9 @@ class SummaryVectorIndex(object):
 
         if not last_ai_indexed_at:
             last_ai_indexed_at = datetime.datetime(1970, 1, 1)
-        
+
         last_ai_indexed_at = last_ai_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
-        
+
         while True:
             sql = f"""
                 SELECT _pk, ai_summary, ai_summary_vector, deleted, modified_time 
@@ -160,7 +160,7 @@ class SummaryVectorIndex(object):
                 ai_summary_vector = row.get('ai_summary_vector')
                 deleted = row.get('deleted')
                 modified_time = row.get('modified_time')
-                
+
                 if deleted:
                     deleted_seadb_pk_set.add(pk)
                     continue
@@ -182,24 +182,24 @@ class SummaryVectorIndex(object):
                 bulk_params.append(index_info)
                 bulk_params.append(doc_info)
                 pending_pks.add(pk)
-                
+
                 index_count += 1
                 if need_update_connection_status(index_count):
                     connection_status['last_ai_indexed_count'] = index_count
                     seaqa_db.update_ai_index_status(connection_id, json.dumps(connection_status))
-                
+
                 _flush_bulk_if_needed()
-            
+
             offset += page_size
 
         _flush_bulk_if_needed(force=True)
-        
+
         # Delete deleted index records by querying with pk
         if deleted_seadb_pk_set:
             self.delete_indexes_by_pks(index_name, deleted_seadb_pk_set)
             # Delete deleted seadb data
             self.seadb_api.delete_rows(project_uuid, table_name, list(deleted_seadb_pk_set))
-        
+
         return index_count
 
     def semantic_search(self, index_names, query_vector, top_k=10, time_from=None, time_to=None):
@@ -218,7 +218,7 @@ class SummaryVectorIndex(object):
                 range_filter["gte"] = time_from
             if time_to is not None:
                 range_filter["lte"] = time_to
-            
+
             data["filter"] = {
                 "range": {
                     "modified_time": range_filter
@@ -232,7 +232,7 @@ class SummaryVectorIndex(object):
 
         hits = search_results.get('hits', {}).get('hits', [])
         hits.sort(key=lambda x: x.get('_score', 0), reverse=True)
-        
+
         topk_search_results = []
         for i, hit in enumerate(hits):
             if i >= top_k:
