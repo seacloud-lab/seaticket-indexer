@@ -140,3 +140,13 @@ class SeaqaDB(object):
         with self.db_session_class() as session:
             sql = "SELECT knowledge_base_indexed_at FROM projects WHERE uuid=:project_uuid AND deleted=false"
             return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
+
+    def get_recently_updated_connections(self, days=14):
+        with self.db_session_class() as session:
+            sql = """SELECT pc.id, pc.type, pc.project_uuid, pc.ai_indexed_at, pc.content_vector_indexed_at
+                     FROM project_connection pc
+                     INNER JOIN projects p ON p.uuid = pc.project_uuid
+                     WHERE p.deleted = false 
+                     AND pc.deleted = false
+                     AND pc.last_sync_time >= DATE_SUB(NOW(), INTERVAL :days DAY)"""
+            return session.execute(text(sql), {'days': days}).fetchall()

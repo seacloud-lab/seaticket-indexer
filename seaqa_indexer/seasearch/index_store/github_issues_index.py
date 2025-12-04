@@ -223,8 +223,6 @@ class GitHubIssuesIndex(object):
         page_size = 1000
         offset = 0
         need_cleared_issues_index_set = set()
-        need_cleared_issues_pk_set = set()
-        need_cleared_issues_id_set = set()
         bulk_params = []
 
         while True:
@@ -239,8 +237,6 @@ class GitHubIssuesIndex(object):
                 key = str(pk)
                 if issue.get('deleted'):
                     need_cleared_issues_index_set.add(key)
-                    need_cleared_issues_pk_set.add(issue_id)
-                    need_cleared_issues_id_set.add(pk)
                 else:
                     content = issue.get('content') or ''
                     comments_offset = 0
@@ -284,6 +280,5 @@ class GitHubIssuesIndex(object):
 
         if need_cleared_issues_index_set:
             self.delete_indexes_by_ids(index_name, need_cleared_issues_index_set)
-            github_seadb_api.delete_issues_from_db(connection_id, list(need_cleared_issues_pk_set), list(need_cleared_issues_id_set))
 
         return index_count

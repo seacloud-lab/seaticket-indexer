@@ -217,7 +217,6 @@ class SiteIndex(object):
     def update(self, index_name, connection_id, project_uuid, connection_status, seaqa_db, since):
         new_index_ids_set = set()
         deleted_index_id_set = set()
-        deleted_seadb_pk_set = set()
 
         index_count = 0
         page_size = 1000
@@ -249,7 +248,6 @@ class SiteIndex(object):
                 key = str(pk)
                 if deleted:
                     deleted_index_id_set.add(key)
-                    deleted_seadb_pk_set.add(pk)
                     continue
                 else:
                     new_index_ids_set.add(key)
@@ -282,9 +280,8 @@ class SiteIndex(object):
             offset += page_size
 
         _flush_bulk_if_needed(force=True)
-        # delete deleted index record
-        self.delete_indexes_by_ids(index_name, deleted_index_id_set)
+
         if deleted_index_id_set:
-            # delete deleted seadb data
-            self.seadb_api.delete_rows(project_uuid, table_name, list(deleted_seadb_pk_set))
+            self.delete_indexes_by_ids(index_name, deleted_index_id_set)
+
         return index_count

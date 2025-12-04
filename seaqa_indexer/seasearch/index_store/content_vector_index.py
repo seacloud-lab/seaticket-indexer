@@ -102,7 +102,6 @@ class ContentVectorIndex(object):
 
     def update(self, table_name, index_name, connection_id, project_uuid, 
                content_vector_status, seaqa_db, last_content_vector_indexed_at):
-        deleted_pk_pairs = []
         
         index_count = 0
         page_size = 100  # Smaller page size since we process chunks
@@ -140,7 +139,6 @@ class ContentVectorIndex(object):
                 modified_time = row.get('modified_time')
                 
                 if deleted:
-                    deleted_pk_pairs.append(pk)
                     continue
 
                 filename = url_to_filename(url)
@@ -182,10 +180,6 @@ class ContentVectorIndex(object):
             offset += page_size
 
         _flush_bulk_if_needed(force=True)
-        # Delete chunks for deleted documents
-        for pk in deleted_pk_pairs:
-            self.delete_indexes_by_pk(index_name, pk)
-        
         return index_count
 
     def semantic_search(self, index_names, query_vector, top_k=10, connection_id=None, time_from=None, time_to=None):

@@ -203,8 +203,6 @@ class SeafileIndex(object):
         page_size = 1000
         offset = 0
         deleted_index_id_set = set()
-        deleted_seadb_pk_set = set()
-
         bulk_params = []
 
         while True:
@@ -221,7 +219,6 @@ class SeafileIndex(object):
                 key = str(pk)
                 if deleted:
                     deleted_index_id_set.add(key)
-                    deleted_seadb_pk_set.add(pk)
                 else:
                     doc = {
                         'connection_id': connection_id,
@@ -248,6 +245,5 @@ class SeafileIndex(object):
 
         if deleted_index_id_set:
             self.delete_indexes_by_ids(index_name, deleted_index_id_set)
-            seafile_seadb_api.delete_files_from_db(connection_id, list(deleted_seadb_pk_set))
 
         return index_count

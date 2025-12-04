@@ -18,8 +18,10 @@ class GitHubSeaDBAPI:
         self.seadb_api.query_rows(self.base_id, sql)
 
     def update_issue_record(self, connection_id, issue_id, modified_time, comments_count=None, deleted=False):
+
         row = {
             GithubIssuesTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+            GithubIssuesTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
 
         if comments_count is not None:

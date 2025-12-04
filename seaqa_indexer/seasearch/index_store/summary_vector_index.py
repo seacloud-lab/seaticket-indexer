@@ -117,11 +117,10 @@ class SummaryVectorIndex(object):
         logger.info('Deleted %d index documents', len(doc_ids))
 
     def update(self, table_name, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_ai_indexed_at):
-        deleted_seadb_pk_set = set()
-
         index_count = 0
         page_size = 1000
         offset = 0
+        deleted_index_id_set = set()
         bulk_params = []
         pending_pks = set()
 
@@ -162,7 +161,7 @@ class SummaryVectorIndex(object):
                 modified_time = row.get('modified_time')
 
                 if deleted:
-                    deleted_seadb_pk_set.add(pk)
+                    deleted_index_id_set.add(pk)
                     continue
 
                 # Skip if no AI summary or vector
@@ -194,11 +193,8 @@ class SummaryVectorIndex(object):
 
         _flush_bulk_if_needed(force=True)
 
-        # Delete deleted index records by querying with pk
-        if deleted_seadb_pk_set:
-            self.delete_indexes_by_pks(index_name, deleted_seadb_pk_set)
-            # Delete deleted seadb data
-            self.seadb_api.delete_rows(project_uuid, table_name, list(deleted_seadb_pk_set))
+        if deleted_index_id_set:
+            self.delete_indexes_by_pks(index_name, deleted_index_id_set)
 
         return index_count
 
