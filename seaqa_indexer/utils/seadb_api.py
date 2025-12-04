@@ -210,3 +210,15 @@ class SeaDBAPI:
 
         response = requests.delete(url, json=data, headers=headers, timeout=self.timeout)
         return parse_response(response)
+
+    def update_table(self, base_id, table_id, table_name, new_table_name):
+        base_id = uuid_str_to_36_chars(base_id)
+        headers = self.gen_headers(base_id)
+        url = f'{self.server_url}/api/v1/{base_id}/tables'
+        data = {
+            'table_id': table_id,
+            'table_name': table_name,
+            'new_table_name': new_table_name,
+        }
+        response = requests.put(url, json=data, headers=headers, timeout=self.timeout)
+        return parse_response(response)

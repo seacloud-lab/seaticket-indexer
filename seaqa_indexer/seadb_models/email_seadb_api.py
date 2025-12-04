@@ -61,9 +61,11 @@ class EmailSeaDBAPI:
 
     def save_thread_to_db(self, connection_id, thread):
         insert_row = {
-            'title': thread['subject'],
-            'modified_time': time_to_utc_time(thread['last_updated_at']).isoformat(),
-            'unread': thread.get('unread')
+            ThreadTable.title.name: thread['subject'],
+            ThreadTable.modified_time.name: time_to_utc_time(thread['last_updated_at']).isoformat(),
+            ThreadTable.unread.name: thread.get('unread'),
+            ThreadTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            ThreadTable.deleted.name: False
         }
 
         table_name = ThreadTable.gen_table_name(connection_id)
@@ -76,6 +78,7 @@ class EmailSeaDBAPI:
             update_row['modified_time'] = time_to_utc_time(thread['last_updated_at']).isoformat()
         if thread.get('unread') is not None:
             update_row['unread'] = thread.get('unread')
+        update_row['sync_time'] = datetime.datetime.now(datetime.UTC).isoformat()
 
         table_name = ThreadTable.gen_table_name(connection_id)
         _pk = thread['thread_id']
@@ -125,4 +128,27 @@ class EmailSeaDBAPI:
         res = self.seadb_api.query_rows(self.base_id, sql)
         result = res.get('results', [])
         return result[0] if result else None
+
+    def get_need_ai_emails_by_page(self, connection_id, page_size):
+        thread_table_name = ThreadTable.gen_table_name(connection_id)
+        sql = f"""
+            SELECT * FROM `{thread_table_name}`
+            WHERE ai_processed_time IS NULL
+            OR ai_processed_time < modified_time
+            LIMIT {page_size}
+        """
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        emails = res.get('results', [])
+        return emails
+
+    def get_first_email(self, connection_id, thread_id):
+        table_name = EmailTable.gen_table_name(connection_id)
+        if not thread_id:
+            return {}
+
+        sql = f"SELECT content FROM `{table_name}` WHERE thread_id = {thread_id} ORDER BY modified_time ASC LIMIT 1"
+        result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if result:
+            return result[0]
+        return {}
 
