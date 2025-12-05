@@ -100,7 +100,7 @@ class ContentVectorIndex(object):
         
         logger.debug('Deleted %d chunk index documents for pk=%s', len(doc_ids), pk)
 
-    def update(self, table_name, index_name, connection_id, project_uuid, 
+    def update(self, table_name, index_name, connection_id, org_id, project_uuid, 
                content_vector_status, seaqa_db, last_content_vector_indexed_at):
         deleted_pk_pairs = []
         
@@ -152,7 +152,7 @@ class ContentVectorIndex(object):
                     continue
 
                 # Chunk the content
-                chunks, embeddings = generate_chunks_embedding(content, project_uuid)
+                chunks, embeddings = generate_chunks_embedding(content, project_uuid, org_id=org_id)
                 # Delete old chunks for this document before adding new ones
                 self.delete_indexes_by_pk(index_name, pk)
 
