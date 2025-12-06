@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50
 
-def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
+def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_id):
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
@@ -66,6 +66,10 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, connection_id):
         ai_status['last_ai_processing_count'] = ai_processing_count
         last_ai_processing_time = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status), last_ai_processing_time)
+        summary_index_msg = {
+            'connection_id': connection_id,
+        }
+        mq.lpush('summary_index_task', json.dumps(summary_index_msg))
     except Exception as e:
         ai_status['last_ai_processing_status'] = AIStatus.FAILED
         last_ai_processing_time = datetime.datetime.now(datetime.UTC)

@@ -228,7 +228,7 @@ class IndexManager:
         return result_docs
 
 
-    def semantic_search(self, project_uuid, connection_ids, query_text, time_from, time_to, top_k=10):
+    def semantic_search(self, project_uuid, connection_ids, query_text, username, time_from, time_to, top_k=10):
         connection_id_list = connection_ids.split(',') if connection_ids else None
         project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
 
@@ -237,7 +237,7 @@ class IndexManager:
 
         all_results = []
         per_connection_limit = max(top_k, 20)
-        query_vector = generate_embedding(query_text, project_uuid)
+        query_vector = generate_embedding(query_text, project_uuid, username=username)
         if not query_vector:
             logger.warning('Failed to generate query vector for: %s', query_text)
             return []
