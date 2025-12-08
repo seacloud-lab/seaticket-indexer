@@ -3,6 +3,8 @@ import logging
 
 from seaqa_indexer.utils import need_update_connection_status, time_to_utc_time
 from seaqa_indexer.config import LANG
+from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT
+from seaqa_indexer.seasearch.utils import EmailMessage
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +16,6 @@ class EmailIndex(object):
         'properties': {
             'connection_id': {
                 'type': 'keyword',
-            },
-            'email_from': {
-                'type': 'keyword',
-            },
-            'email_to': {
-                'type': 'keyword'
-            },
-            'message_id': {
-                'type': 'keyword'
             },
             'title': {
                 'type': 'text',
@@ -130,7 +123,7 @@ class EmailIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'email_from', 'message_id', 'email_to', 'title', 'content', 'modified_time'],
+            '_source': ['connection_id', 'title', 'content', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -166,9 +159,6 @@ class EmailIndex(object):
             _id = hit.get('_id')
             r = {
                 'title': source['title'],
-                'email_from': source['email_from'],
-                'email_to': source['email_to'],
-                'message_id': source['message_id'],
                 'connection_id': source['connection_id'],
                 'content': source['content'],
                 'modified_time': source['modified_time'],
@@ -212,27 +202,38 @@ class EmailIndex(object):
         bulk_params = []
 
         while True:
-            emails = email_seadb_api.get_emails_by_page(connection_id, since, page_size, offset)
+            threads = email_seadb_api.get_threads_by_page(connection_id, since, page_size, offset)
             offset += page_size
-            if not emails:
+            if not threads:
                 break
 
-            for email in emails:
-                deleted = email.get('deleted')
-                pk = email.get('_pk')
+            for thread in threads:
+                deleted = thread.get('deleted')
+                pk = thread.get('_pk')
                 key = str(pk)
                 if deleted:
                     deleted_index_id_set.add(key)
                     deleted_seadb_pk_set.add(pk)
                 else:
+                    content = ''
+                    email_offset = 0
+                    email_page_size = 100
+                    while True:
+                        thread_emails = email_seadb_api.get_thread_emails_by_page(connection_id, pk, email_page_size, email_offset)
+                        if not thread_emails:
+                            break
+                        for email in thread_emails:
+                            email_content = email.get('content')
+                            content += EmailMessage().parse_reply(email.get('content')) if email_content else ''
+
+                        if len(content) > INDEX_CONTENT_LIMIT:
+                            break
+                        email_offset += email_page_size
                     doc = {
                         'connection_id': connection_id,
-                        'title': email.get('title'),
-                        'email_from': email.get('email_from'),
-                        'email_to': email.get('email_to'),
-                        'message_id': email.get('message_id'),
-                        'content': email.get('content'),
-                        'modified_time': email.get('modified_time'),
+                        'title': thread.get('title'),
+                        'content': content,
+                        'modified_time': thread.get('modified_time'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)
@@ -251,6 +252,6 @@ class EmailIndex(object):
 
         if deleted_index_id_set:
             self.delete_indexes_by_ids(index_name, deleted_index_id_set)
-            email_seadb_api.delete_emails_from_db(connection_id, list(deleted_seadb_pk_set))
+            email_seadb_api.delete_threads_from_db(connection_id, list(deleted_seadb_pk_set))
 
         return index_count

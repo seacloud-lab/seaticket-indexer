@@ -43,7 +43,7 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
     while True:
         last_month_day = since - datetime.timedelta(days=30)
         last_month_day = last_month_day.isoformat()
-        emails = email_seadb_api.get_thread_emails_by_page(connection_id, last_month_day, page_size, offset)
+        emails = email_seadb_api.get_threaded_emails_by_page(connection_id, last_month_day, page_size, offset)
         if not emails:
             break
         email_rows.extend(emails)

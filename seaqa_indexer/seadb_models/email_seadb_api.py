@@ -96,14 +96,14 @@ class EmailSeaDBAPI:
         result = self.seadb_api.query_rows(self.base_id, sql)
         return result['results'][0].get('count', 0)
 
-    def get_emails_by_page(self, connection_id, since, page_size, offset):
-        table_name = EmailTable.gen_table_name(connection_id)
+    def get_threads_by_page(self, connection_id, since, page_size, offset):
+        table_name = ThreadTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results
 
-    def get_thread_emails_by_page(self, connection_id, since, page_size, offset):
+    def get_threaded_emails_by_page(self, connection_id, since, page_size, offset):
         table_name = EmailTable.gen_table_name(connection_id)
         sql = f"SELECT message_id, thread_id FROM `{table_name}` WHERE sync_time >= '{since}' and thread_id is not null LIMIT {page_size} OFFSET {offset}"
         res = self.seadb_api.query_rows(self.base_id, sql)
@@ -118,9 +118,14 @@ class EmailSeaDBAPI:
         results = res.get('results', [])
         return results
 
-    def delete_emails_from_db(self, connection_id, deleted_seadb_pk_list):
-        table_name = EmailTable.gen_table_name(connection_id)
+    def delete_threads_from_db(self, connection_id, deleted_seadb_pk_list):
+        table_name = ThreadTable.gen_table_name(connection_id)
         self.seadb_api.delete_rows(self.base_id, table_name, deleted_seadb_pk_list)
+
+        email_table_name = EmailTable.gen_table_name(connection_id)
+        for thread_id in deleted_seadb_pk_list:
+            delete_sql = f"DELETE FROM `{email_table_name}` WHERE thread_id = {thread_id}"
+            self.seadb_api.query_rows(self.base_id, delete_sql)
 
     def get_email_by_message_id(self, connection_id, message_id):
         table_name = EmailTable.gen_table_name(connection_id)
@@ -128,6 +133,12 @@ class EmailSeaDBAPI:
         res = self.seadb_api.query_rows(self.base_id, sql)
         result = res.get('results', [])
         return result[0] if result else None
+
+    def get_thread_emails_by_page(self, connection_id, thread_id, page_size, offset):
+        email_table_name = EmailTable.gen_table_name(connection_id)
+        sql_comments = f"SELECT * FROM `{email_table_name}` WHERE thread_id = {thread_id} LIMIT {page_size} OFFSET {offset}"
+        comments = self.seadb_api.query_rows(self.base_id, sql_comments).get('results', [])
+        return comments
 
     def get_need_ai_emails_by_page(self, connection_id, page_size):
         thread_table_name = ThreadTable.gen_table_name(connection_id)
