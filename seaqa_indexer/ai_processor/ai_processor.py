@@ -71,10 +71,10 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
         }
         mq.lpush('summary_index_task', json.dumps(summary_index_msg))
     except Exception as e:
+        logger.exception('Connection %s process AI generate summaries and vectors failed, error: %s', connection_id, e)
         ai_status['last_ai_processing_status'] = AIStatus.FAILED
-        last_ai_processing_time = datetime.datetime.now(datetime.UTC)
-        seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status), last_ai_processing_time)
-        raise e
+        seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
+
 
 def process_site_ai(seadb_api, storage, connection_id, project_uuid):
     page_size = 100
