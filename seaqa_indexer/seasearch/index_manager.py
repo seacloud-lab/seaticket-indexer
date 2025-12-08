@@ -168,9 +168,6 @@ class IndexManager:
             elif index_name.startswith(ConnectionType.EMAIL.value):
                 r = {
                     'title': source['title'],
-                    'email_from': source['email_from'],
-                    'email_to': source['email_to'],
-                    'message_id': source['message_id'],
                     'connection_id': source['connection_id'],
                     'content': source['content'],
                     'score': score,
