@@ -26,7 +26,7 @@ def craw_web(connection_id, db_session_class, mq):
         sync_logger.log(f"Completed crawl connection: {connection_id}")
         sync_logger.stop_capture()
         mq.lpush('ai_process_task', json.dumps(msg_content))
-        mq.lpush('index_task', json.dumps(msg_content))
+        mq.lpush('index_task', json.dumps(msg_content | {'type': 'connection'}))
         mq.lpush('content_vector_index_task', json.dumps(msg_content))
 
     logger.info(f"Start crawl connection: {connection_id}")

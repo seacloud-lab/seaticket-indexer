@@ -45,12 +45,11 @@ class KnowledgeBaseIndexTaskPublisherTimer(Thread):
                 projects = self.seaqa_db.get_all_active_projects()
                 for p in projects:
                     project_uuid = getattr(p, 'uuid', None)
-                    since_dt = getattr(p, 'knowledge_base_indexed_at', None)
                     if not project_uuid:
                         continue
                     msg_content = {
-                        'kb_project_uuid': project_uuid,
-                        'kb_since_dt': since_dt.isoformat() if isinstance(since_dt, datetime.datetime) else since_dt,
+                        'project_uuid': project_uuid,
+                        'type': 'knowledge_base',
                     }
                     self.mq.lpush('index_task', json.dumps(msg_content))
             except Exception as e:

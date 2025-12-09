@@ -19,7 +19,7 @@ from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
-from seaqa_indexer.seasearch.utils import gen_kb_index_name
+from seaqa_indexer.seasearch.utils import gen_kb_index_name, get_kb_last_indexed_at
 
 
 logger = logging.getLogger(__name__)
@@ -79,23 +79,23 @@ class IndexTaskWorker(object):
                         if not data:
                             logger.warning('index_task: invalid.', res)
                         else:
-                            kb_project_uuid = data.get('kb_project_uuid')
-                            kb_since_dt = data.get('kb_since_dt')
-                            if kb_project_uuid:
-                                lock_key = self._get_index_lock_key('kb_' + str(kb_project_uuid))
+                            type = data.get('type')
+                            if type == 'knowledge_base':
+                                project_uuid = data.get('project_uuid')
+                                lock_key = self._get_index_lock_key('kb_' + str(project_uuid))
                                 if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                                    logger.info('%s start index knowledge base: %s' % (self.tname, kb_project_uuid))
+                                    logger.info('%s start index knowledge base: %s' % (self.tname, project_uuid))
                                     self.locked_keys.add(lock_key)
-                                    self.update_kb_index(kb_project_uuid, kb_since_dt)
+                                    self.update_kb_index(project_uuid)
                                     try:
                                         self.locked_keys.remove(lock_key)
                                     except KeyError:
                                         logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                                     self.mq.delete(lock_key)
-                                    logger.info("%s Finish index knowledge base: %s, delete redis lock %s" % (self.tname, kb_project_uuid, lock_key))
+                                    logger.info("%s Finish index knowledge base: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
                                 else:
-                                    self.add_kb_to_undo_task(kb_project_uuid, kb_since_dt)
-                            else:
+                                    self.add_kb_to_undo_task(project_uuid)
+                            elif type == 'connection':
                                 connection_id = data.get('connection_id')
                                 self.work_task_handler(connection_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
@@ -134,7 +134,8 @@ class IndexTaskWorker(object):
         except Exception as e:
             logger.exception('update connection: %s index failed, error: %s', connection_id, e)
 
-    def update_kb_index(self, project_uuid, since_dt):
+
+    def update_kb_index(self, project_uuid):
         try:
             seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
             kb_index = KnowledgeBaseIndex(seasearch_api, shard_num=1)
@@ -142,15 +143,7 @@ class IndexTaskWorker(object):
             seaqa_db = SeaqaDB(self.db_session_class)
             index_name = gen_kb_index_name(project_uuid)
             kb_index.create_index_if_missing(index_name)
-            since = None
-            if since_dt:
-                try:
-                    if isinstance(since_dt, str):
-                        since = datetime.datetime.fromisoformat(since_dt)
-                    elif isinstance(since_dt, datetime.datetime):
-                        since = since_dt
-                except Exception:
-                    since = None
+            since = get_kb_last_indexed_at(project_uuid, self.db_session_class)
             indexed_count = kb_index.update(index_name, project_uuid, seadb_api, since)
             now = datetime.datetime.now(datetime.UTC)
             seaqa_db.update_knowledge_base_indexed_at(project_uuid, now)
@@ -165,16 +158,17 @@ class IndexTaskWorker(object):
 
         msg_content = {
             'connection_id': connection_id,
+            'type': 'connection',
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
         logger.info('%s push back task connection_id: %s, to the queue' %
                      (threading.current_thread().name, connection_id))
 
-    def add_kb_to_undo_task(self, project_uuid, since_dt):
+    def add_kb_to_undo_task(self, project_uuid):
         time.sleep(0.5)
         msg_content = {
-            'kb_project_uuid': project_uuid,
-            'kb_since_dt': since_dt,
+            'project_uuid': project_uuid,
+            'type': 'knowledge_base',
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
         logger.info('%s push back kb task project_uuid: %s, to the queue' %

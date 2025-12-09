@@ -3,6 +3,8 @@ import logging
 import datetime
 import re
 
+from sqlalchemy.sql import text
+
 from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX
 from seaqa_indexer.ai_processor.utils import generate_embedding
 
@@ -29,6 +31,22 @@ def get_content_by_download_link(download_url):
 
     return file_content
 
+def get_kb_last_indexed_at(project_uuid, db_session_class):
+    since = None
+    with db_session_class() as session:
+        row = session.execute(
+            text("SELECT knowledge_base_indexed_at FROM projects WHERE uuid=:project_uuid AND deleted=false"),
+            {'project_uuid': project_uuid}).fetchone()
+        if row:
+            since_val = getattr(row, 'knowledge_base_indexed_at', None)
+            if isinstance(since_val, datetime.datetime):
+                since = since_val
+            elif isinstance(since_val, str):
+                try:
+                    since = datetime.datetime.fromisoformat(since_val)
+                except Exception:
+                    since = None
+    return since
 
 def fix_summary_by_connection(connection_id, table_name, project_uuid, seadb_api):
     logger.info('Start fixing AI summary embeddings for connection %s', connection_id)
