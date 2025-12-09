@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 50
 
 def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_id):
+    logger.info('start generate summaries and vectors, connection: %s', connection_id)
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
@@ -74,6 +75,7 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
         logger.exception('Connection %s process AI generate summaries and vectors failed, error: %s', connection_id, e)
         ai_status['last_ai_processing_status'] = AIStatus.FAILED
         seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
+    logger.info('Finish generate summaries and vectors, connection: %s', connection_id)
 
 
 def process_site_ai(seadb_api, storage, connection_id, project_uuid):
