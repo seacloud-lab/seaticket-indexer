@@ -4,11 +4,11 @@ import datetime
 from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES
+from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES, ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
-from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable, EmailTable, ThreadTable
+from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable, \
+    ThreadTable
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex

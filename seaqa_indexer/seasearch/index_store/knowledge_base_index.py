@@ -48,7 +48,6 @@ class KnowledgeBaseIndex(object):
 
     def __init__(self, seasearch_api, shard_num=1):
         self.seasearch_api = seasearch_api
-        self.seadb_api = SeaDBAPI()
         self.shard_num = shard_num
         self.lang = LANG
 
@@ -162,18 +161,6 @@ class KnowledgeBaseIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def _get_kb_table_name(self):
-        return KnowledgeBaseTable.gen_table_name()
-
-    def _get_indexable_tables(self, base_id):
-        tname = self._get_kb_table_name()
-        return [{
-            'table_name': tname,
-            'question_col': 'question',
-            'answer_col': 'answer',
-            'deleted_col': 'deleted',
-            'time_col': 'modified_time'
-        }]
 
     def update(self, index_name, base_id, seadb_api, since_dt=None):
         page_size = 1000
@@ -191,54 +178,43 @@ class KnowledgeBaseIndex(object):
         if not since_dt:
             since_dt = datetime.datetime(1970, 1, 1, tzinfo=datetime.UTC)
 
-        tables = self._get_indexable_tables(base_id)
-        table_name = self._get_kb_table_name()
-        for t in tables:
-            offset = 0
-            while True:
-                select_cols = ['_pk', t['question_col'], t['answer_col']]
-                if t['deleted_col']:
-                    select_cols.append(t['deleted_col'])
-                if t['time_col']:
-                    select_cols.append(t['time_col'])
-                cols_sql = ', '.join([f"`{c}`" for c in select_cols])
+        table_name = KnowledgeBaseTable.gen_table_name()
+        offset = 0
+        while True:
+            cols_sql = "`_pk`, `question`, `answer`, `deleted`, `modified_time`"
+            sql = f"""
+                SELECT {cols_sql}
+                FROM `{table_name}`
+                WHERE `modified_time` > '{since_dt.strftime('%Y-%m-%d %H:%M:%S.%f')}'
+                ORDER BY `modified_time` ASC
+                LIMIT {page_size} OFFSET {offset}
+            """
+            result = seadb_api.query_rows(base_id, sql)
+            rows = result.get('results', [])
+            if not rows:
+                break
 
-                where_clauses = []
-                if t['time_col']:
-                    where_clauses.append(f"`{t['time_col']}` > '{since_dt.strftime('%Y-%m-%d %H:%M:%S.%f')}'")
-                sql = f"""
-                    SELECT {cols_sql}
-                    FROM `{t['table_name']}`
-                    {"WHERE " + " AND ".join(where_clauses) if where_clauses else ""}
-                    ORDER BY `{t['time_col']}` ASC
-                    LIMIT {page_size} OFFSET {offset}
-                """
-                result = seadb_api.query_rows(base_id, sql)
-                rows = result.get('results', [])
-                if not rows:
-                    break
-
-                for row in rows:
-                    pk = row.get('_pk')
-                    question = row.get(t['question_col'])
-                    answer = row.get(t['answer_col'])
-                    deleted = t['deleted_col'] and row.get(t['deleted_col'])
-                    doc_id = str(pk)
-                    if deleted:
-                        deleted_ids.add(doc_id)
-                        deleted_pk_set.add(pk)
-                        continue
-                    index_info = {'index': {'_index': index_name, '_id': doc_id}}
-                    doc_info = {
-                        'question': question,
-                        'answer': answer,
-                        'modified_time': row.get(t['time_col'])
-                    }
-                    bulk_params.append(index_info)
-                    bulk_params.append(doc_info)
-                    indexed_count += 1
-                    flush()
-                offset += page_size
+            for row in rows:
+                pk = row.get('_pk')
+                question = row.get('question')
+                answer = row.get('answer')
+                deleted = row.get('deleted')
+                doc_id = str(pk)
+                if deleted:
+                    deleted_ids.add(doc_id)
+                    deleted_pk_set.add(pk)
+                    continue
+                index_info = {'index': {'_index': index_name, '_id': doc_id}}
+                doc_info = {
+                    'question': question,
+                    'answer': answer,
+                    'modified_time': row.get('modified_time')
+                }
+                bulk_params.append(index_info)
+                bulk_params.append(doc_info)
+                indexed_count += 1
+                flush()
+            offset += page_size
         flush(force=True)
         if deleted_ids:
             self.delete_indexes_by_ids(index_name, deleted_ids)

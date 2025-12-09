@@ -282,6 +282,7 @@ class KnowledgeBaseTable(BaseModel):
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
     last_modifier = MappedColumn('last_modifier', PropertyTypes.TEXT)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
 
     @classmethod
     def gen_table_name(cls):

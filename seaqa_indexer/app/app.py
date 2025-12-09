@@ -13,7 +13,7 @@ from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
 from seaqa_indexer.workers.ai_process_worker_starter import AIProcessWorkerStarter
 from seaqa_indexer.workers.content_vector_index_worker_starter import ContentVectorIndexWorkerStarter
-from seaqa_indexer.seasearch.index_task.knowledge_base_index_updater import KnowledgeBaseIndexUpdater
+from seaqa_indexer.seasearch.index_task.knowledge_base_index_updater import KnowledgeBaseIndexTaskPublisher
 
 
 class SeaqaIndexerApp(object):
@@ -30,7 +30,7 @@ class SeaqaIndexerApp(object):
         self.connection_sync_starter = ConnectionSyncWorkerStarter()
         self.ai_process_worker_starter = AIProcessWorkerStarter()
         self.content_vector_index_worker_starter = ContentVectorIndexWorkerStarter()
-        self.kb_index_updater = KnowledgeBaseIndexUpdater()
+        self.kb_index_task_publisher = KnowledgeBaseIndexTaskPublisher()
 
         self.http_server = HttpServer(self)
         self.project_connection_cleaner_starter = ProjectConnectionCleanerStarter()
@@ -44,7 +44,7 @@ class SeaqaIndexerApp(object):
         self.connection_sync_starter.start()
         self.ai_process_worker_starter.start()
         self.content_vector_index_worker_starter.start()
-        self.kb_index_updater.start()
+        self.kb_index_task_publisher.start()
 
         self.project_connection_cleaner_starter.start()
         self.sync_task_publisher.start()

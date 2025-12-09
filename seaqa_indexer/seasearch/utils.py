@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 def gen_index_name_by_type(connection_id, connection_type):
     return CONNECTION_TYPE_TO_INDEX_PREFIX.get(connection_type) + str(connection_id)
 
+def gen_kb_index_name(base_id):
+    return f"knowledge_base_{base_id}"
+
 def gen_summary_index_name(connection_id, connection_type):
     return f"{connection_type}_summary_vector_{connection_id}"
 
