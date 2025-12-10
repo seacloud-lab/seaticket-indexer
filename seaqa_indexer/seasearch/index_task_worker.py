@@ -6,12 +6,10 @@ import threading
 import signal
 from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
 
-
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.index_connection import update_connection_index
+from seaqa_indexer.seasearch.index_connection import update_connection_index, update_knowledge_base_index
 from seaqa_indexer.db import init_db_session_class
-
 from seaqa_indexer.mq import get_mq
 
 
@@ -72,8 +70,13 @@ class IndexTaskWorker(object):
                         if not data:
                             logger.warning('index_task: invalid.', res)
                         else:
-                            connection_id = data.get('connection_id')
-                            self.work_task_handler(connection_id)
+                            type = data.get('type')
+                            if type == 'knowledge_base':
+                                project_uuid = data.get('project_uuid')
+                                self.kb_task_handler(project_uuid)
+                            elif type == 'connection':
+                                connection_id = data.get('connection_id')
+                                self.connection_task_handler(connection_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -82,12 +85,11 @@ class IndexTaskWorker(object):
             # prevent case that redis break at program running.
             time.sleep(0.3)
 
-    def work_task_handler(self, connection_id):
+    def connection_task_handler(self, connection_id):
         # Python cannot kill threads, so stop it generate more locked key.
         if not self.should_stop.is_set():
             # set key-value if does not exist which will expire 30 minutes later
-            if self.mq.set(self._get_index_lock_key(connection_id), time.time(),
-                      ex=self.LOCK_TIMEOUT, nx=True):
+            if self.mq.set(self._get_index_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
                 # get lock
                 logger.info('%s start index project connection: %s' % (self.tname, connection_id))
                 lock_key = self._get_index_lock_key(connection_id)
@@ -104,6 +106,22 @@ class IndexTaskWorker(object):
                 # the repo is updated by other thread, push back to the queue
                 self.add_to_undo_task(connection_id)
 
+    def kb_task_handler(self, project_uuid):
+        lock_key = self._get_index_lock_key('kb_' + str(project_uuid))
+        if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
+            logger.info('%s start index knowledge base: %s' % (self.tname, project_uuid))
+            self.locked_keys.add(lock_key)
+            update_knowledge_base_index(project_uuid, self.db_session_class)
+            try:
+                self.locked_keys.remove(lock_key)
+            except KeyError:
+                logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+            self.mq.delete(lock_key)
+            logger.info(
+                "%s Finish index knowledge base: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
+        else:
+            self.add_kb_to_undo_task(project_uuid)
+
     def update_index(self, connection_id):
         try:
             update_connection_index(connection_id, self.db_session_class)
@@ -118,10 +136,20 @@ class IndexTaskWorker(object):
 
         msg_content = {
             'connection_id': connection_id,
+            'type': 'connection',
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
-        logger.info('%s push back task connection_id: %s, to the queue' %
-                     (threading.current_thread().name, connection_id))
+        logger.info('%s push back task connection_id: %s, to the queue' % (threading.current_thread().name, connection_id))
+
+
+    def add_kb_to_undo_task(self, project_uuid):
+        time.sleep(0.5)
+        msg_content = {
+            'project_uuid': project_uuid,
+            'type': 'knowledge_base',
+        }
+        self.mq.lpush('index_task', json.dumps(msg_content))
+        logger.info('%s push back kb task project_uuid: %s, to the queue' % (threading.current_thread().name, project_uuid))
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)

@@ -59,7 +59,7 @@ class SeaqaDB(object):
             cmd += " WHERE id = :connection_id"
             session.execute(text(cmd), params)
             session.commit()
-    
+
     def update_ai_status_and_time(self, connection_id, ai_status, last_ai_processing_time=None):
         with self.db_session_class() as session:
             cmd = """UPDATE project_connection SET ai_status=:ai_status"""
@@ -123,3 +123,20 @@ class SeaqaDB(object):
                      AND type IN ({need_sync_types_combine_str})"""
 
             return session.execute(text(sql)).fetchall()
+
+    def get_all_active_projects(self):
+        with self.db_session_class() as session:
+            sql = """SELECT uuid, knowledge_base_indexed_at FROM projects WHERE deleted=false"""
+            return session.execute(text(sql)).fetchall()
+
+    def update_knowledge_base_indexed_at(self, project_uuid, indexed_at):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            cmd = """UPDATE projects SET knowledge_base_indexed_at=:indexed_at WHERE uuid=:project_uuid"""
+            session.execute(text(cmd), {'project_uuid': project_uuid, 'indexed_at': indexed_at})
+            session.commit()
+
+    def get_project_info_by_project_uuid(self, project_uuid):
+        with self.db_session_class() as session:
+            sql = "SELECT knowledge_base_indexed_at FROM projects WHERE uuid=:project_uuid AND deleted=false"
+            return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()

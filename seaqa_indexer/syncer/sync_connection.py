@@ -205,7 +205,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     msg_content = {
         'connection_id': connection_id
     }
-    mq.lpush('index_task', json.dumps(msg_content))
+    mq.lpush('index_task', json.dumps(msg_content | {'type': 'connection'}))
     mq.lpush('ai_process_task', json.dumps(msg_content))
 
 

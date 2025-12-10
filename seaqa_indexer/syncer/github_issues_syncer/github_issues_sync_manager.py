@@ -59,5 +59,6 @@ class GithubIssuesSyncManager:
     def add_issues_index_task(self, connection_id):
         msg_content = {
             'connection_id': connection_id,
+            'type': 'connection'
         }
         self.mq.lpush('index_task', json.dumps(msg_content))

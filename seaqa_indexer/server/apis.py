@@ -8,6 +8,8 @@ from seaqa_indexer import config
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException, \
     ForumInActiveException
 from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 
 application = Flask(__name__)
@@ -152,6 +154,7 @@ def search():
     time_to = data.get('time_to')
     search_type = data.get('search_type', 'normal_search')
     username = data.get('username', '')
+    extra_sources = data.get('extra_sources')
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
@@ -166,7 +169,25 @@ def search():
     if search_type == 'semantic_search':
         results = application.app.index_manager.semantic_search(project_uuid, connection_ids, query, username, time_from, time_to, count)
     else:
-        results = application.app.index_manager.search(project_uuid, connection_ids, time_from, time_to, query, start=0, size=count)
+        results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
+        # Skip deleted kb
+        kb_ids = []
+        for r in results or []:
+            if r.get('type') == 'knowledge_base':
+                _id = int(r.get('_id'))
+        if kb_ids:
+            seadb_api = SeaDBAPI(username)
+            table_name = KnowledgeBaseTable.gen_table_name()
+            ids_str = ','.join([str(i) for i in kb_ids])
+            sql = f"SELECT `_pk`, `deleted` FROM `{table_name}` WHERE `_pk` IN ({ids_str})"
+            try:
+                res = seadb_api.query_rows(project_uuid, sql, convert_keys=False)
+                rows = res.get('results', [])
+                deleted_ids = {row.get('_pk') for row in rows if row.get('deleted') is True}
+                if deleted_ids:
+                    results = [r for r in results if not (r.get('type') == 'knowledge_base' and int(r.get('_id'))  in deleted_ids)]
+            except Exception:
+                pass
 
     return {'results': results}, 200
 

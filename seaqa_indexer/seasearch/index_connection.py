@@ -11,13 +11,15 @@ from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
+from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_index_name_by_type
+from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_kb_index_name
 from seaqa_indexer.utils import time_to_utc_time, decrypt_config
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
+from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,7 @@ def update_connection_index(connection_id, db_session_class):
     seaqa_db = SeaqaDB(db_session_class)
     connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not connection:
-        logger.warning('Project connection %s does not exist')
+        logger.warning('Project connection %s does not exist', connection_id)
         return
 
     connection_is_active = connection.is_active
@@ -200,3 +202,31 @@ def update_email_index(project_connection, seasearch_api, seaqa_db):
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
     seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
+
+
+def update_knowledge_base_index(project_uuid, db_session_class):
+    try:
+        logger.info('Start to index knowledge base project_uuid %s', project_uuid)
+        seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
+        kb_index = KnowledgeBaseIndex(seasearch_api)
+        seaqa_db = SeaqaDB(db_session_class)
+        kb_seadb_api = KnowledgeBaseSeaDBAPI(project_uuid)
+
+        index_name = gen_kb_index_name(project_uuid)
+        kb_index.create_index_if_missing(index_name)
+        project = seaqa_db.get_project_info_by_project_uuid(project_uuid)
+        if not project:
+            logger.warning('Project %s does not exist', project_uuid)
+            return
+        old_indexed_at = project.knowledge_base_indexed_at
+        since = old_indexed_at
+        if not since:
+            since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+        since = time_to_utc_time(str(since)).isoformat()
+
+        indexed_count = kb_index.update(index_name, kb_seadb_api, since)
+        indexed_at = datetime.datetime.now(datetime.UTC)
+        seaqa_db.update_knowledge_base_indexed_at(project_uuid, indexed_at)
+        logger.info('Finish to index knowledge base project_uuid %s', project_uuid)
+    except Exception as e:
+        logger.exception('update knowledge base: %s index failed, error: %s', project_uuid, e)
