@@ -209,7 +209,7 @@ def process_seafile_ai(seadb_api, connection_id, project_uuid):
             pk = row.get('_pk')
             title = row.get('title')
             content = row.get('content')
-            summary = ''
+            summary = 'empty doc'
             vector = []
             if content:
                 full_content = f"Title: {title}\n\nContent: {content}\n"
