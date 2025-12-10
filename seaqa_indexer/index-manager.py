@@ -189,7 +189,7 @@ class IndexManager:
         return ai_processing_count
 
     def _repair_discourse_ai(self, connection_id, project_uuid):
-        page_size = 10
+        page_size = 100
         updates = []
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
         discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
