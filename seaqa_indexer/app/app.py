@@ -13,7 +13,7 @@ from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
 from seaqa_indexer.workers.ai_process_worker_starter import AIProcessWorkerStarter
 from seaqa_indexer.workers.content_vector_index_worker_starter import ContentVectorIndexWorkerStarter
-from seaqa_indexer.seasearch.index_task.knowledge_base_index_updater import KnowledgeBaseIndexTaskPublisher
+from seaqa_indexer.tasks.knowledge_base_index_publisher import KnowledgeBaseIndexTaskPublisher
 
 
 class SeaqaIndexerApp(object):

@@ -3,8 +3,6 @@ import logging
 import datetime
 
 from seaqa_indexer.config import LANG
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
 
 logger = logging.getLogger(__name__)
 
@@ -161,40 +159,20 @@ class KnowledgeBaseIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-
-    def update(self, index_name, base_id, seadb_api, since_dt=None):
+    def update(self, index_name, kb_seadb_api, since):
         page_size = 1000
         bulk_params = []
         deleted_ids = set()
         deleted_pk_set = set()
         indexed_count = 0
 
-        def flush(force=False):
-            nonlocal bulk_params
-            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
-                self.seasearch_api.bulk(index_name, bulk_params)
-                bulk_params = []
-
-        if not since_dt:
-            since_dt = datetime.datetime(1970, 1, 1, tzinfo=datetime.UTC)
-
-        table_name = KnowledgeBaseTable.gen_table_name()
         offset = 0
         while True:
-            cols_sql = "`_pk`, `question`, `answer`, `deleted`, `modified_time`"
-            sql = f"""
-                SELECT {cols_sql}
-                FROM `{table_name}`
-                WHERE `modified_time` > '{since_dt.strftime('%Y-%m-%d %H:%M:%S.%f')}'
-                ORDER BY `modified_time` ASC
-                LIMIT {page_size} OFFSET {offset}
-            """
-            result = seadb_api.query_rows(base_id, sql)
-            rows = result.get('results', [])
-            if not rows:
+            knowledge_bases = kb_seadb_api.get_knowledge_bases_by_page(since, page_size, offset)
+            offset += page_size
+            if not knowledge_bases:
                 break
-
-            for row in rows:
+            for row in knowledge_bases:
                 pk = row.get('_pk')
                 question = row.get('question')
                 answer = row.get('answer')
@@ -213,10 +191,14 @@ class KnowledgeBaseIndex(object):
                 bulk_params.append(index_info)
                 bulk_params.append(doc_info)
                 indexed_count += 1
-                flush()
+                if len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT:
+                    self.seasearch_api.bulk(index_name, bulk_params)
+                    bulk_params = []
+
             offset += page_size
-        flush(force=True)
+        if bulk_params:
+            self.seasearch_api.bulk(index_name, bulk_params)
         if deleted_ids:
             self.delete_indexes_by_ids(index_name, deleted_ids)
-            seadb_api.delete_rows(base_id, table_name, list(deleted_pk_set))
+            kb_seadb_api.delete_knowledge_bases_from_db(list(deleted_pk_set))
         return indexed_count

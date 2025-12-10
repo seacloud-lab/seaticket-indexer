@@ -1,16 +1,10 @@
-import os
 import logging
-import datetime
 import json
 from threading import Thread, Event
 
-from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
+from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.seasearch.utils import gen_kb_index_name
 from seaqa_indexer.mq import get_mq
 
 
@@ -19,20 +13,27 @@ logger = logging.getLogger(__name__)
 
 class KnowledgeBaseIndexTaskPublisher(object):
     def __init__(self):
-        self._interval = int(os.environ.get('KB_INDEX_INTERVAL', '1800'))
-        self.db_session_class = init_db_session_class()
-        self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
-        self.seaqa_db = SeaqaDB(self.db_session_class)
+        self._enabled = True
+        self._interval = 30 * 60
 
     def start(self):
-        KnowledgeBaseIndexTaskPublisherTimer(self.mq, self.seaqa_db, self._interval).start()
+        if not self.is_enabled():
+            logging.warning('Can not start knowledge base index publisher: it is not enabled!')
+            return
+
+        KnowledgeBaseIndexTaskPublisherTimer(self._interval).start()
+        logging.info('knowledge base index publisher is started')
+
+    def is_enabled(self):
+        return self._enabled
 
 
 class KnowledgeBaseIndexTaskPublisherTimer(Thread):
-    def __init__(self, mq, seaqa_db, interval):
+    def __init__(self, interval):
         super(KnowledgeBaseIndexTaskPublisherTimer, self).__init__()
-        self.mq = mq
-        self.seaqa_db = seaqa_db
+        self.db_session_class = init_db_session_class()
+        self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
+        self.seaqa_db = SeaqaDB(self.db_session_class)
         self.finished = Event()
         self._interval = interval
 
