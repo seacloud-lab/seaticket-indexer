@@ -54,13 +54,13 @@ class IndexManager:
 
     def repair_ai_summary(self, project_uuid, connection_id=None):
         logger.info('Starting AI summary repair process...')
-
+        project_uuid = uuid_str_to_32_chars(project_uuid)
         if connection_id:
             connection = self.seaqa_db.get_project_connection_by_id(connection_id)
             if not connection:
                 logger.error(f'Error: Connection {connection_id} not found')
                 return
-            if connection.project_uuid != uuid_str_to_32_chars(project_uuid):
+            if connection.project_uuid != project_uuid:
                 logger.error(f'Error: Connection {connection_id} does not belong to project {project_uuid}')
                 return
             connections = [connection]
