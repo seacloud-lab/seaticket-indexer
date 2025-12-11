@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 import os
+import json
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -15,7 +16,6 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, LOG_LEVEL
 from seaqa_indexer.utils import uuid_str_to_32_chars
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.ai_processor.ai_processor import generate_summaries_and_vectors
 from seaqa_indexer.seadb_models.models import (
     WebCrawlTable,
     DiscourseTopicsTable,
@@ -80,7 +80,7 @@ class IndexManager:
 
         logger.info('Repair process completed!')
         logger.info(f'Total connections processed: {processed_count}')
-        logger.info(f'Total records repaired: {repaired_count}')
+        logger.info(f'Total records queued for repair: {repaired_count}')
 
     def _clear_ai_processed_time(self, connection_id, connection_type, project_uuid):
 
@@ -140,16 +140,13 @@ class IndexManager:
             repaired_count = self._clear_ai_processed_time(connection_id, connection_type, project_uuid)
 
             if repaired_count > 0:
-                logger.info(f'Triggering AI summary generation for connection {connection_id}')
-                generate_summaries_and_vectors(
-                    self.seadb_api,
-                    self.storage,
-                    self.seaqa_db,
-                    self.mq,
-                    connection_id
-                )
+                logger.info(f'Submitting AI process task for connection {connection_id}')
+                msg_content = {
+                    'connection_id': connection_id,
+                }
+                self.mq.lpush('ai_process_task', json.dumps(msg_content))
 
-            logger.info(f'Repaired {repaired_count} records for connection {connection_id}')
+            logger.info(f'{repaired_count} records will be repaired for connection {connection_id}')
             return repaired_count
 
         except Exception as e:
