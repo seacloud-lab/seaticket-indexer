@@ -11,9 +11,8 @@ sys.path.insert(0, parent_dir)
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, LOG_LEVEL
+from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.utils import uuid_str_to_32_chars
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.seadb_models.models import (
@@ -34,7 +33,6 @@ class IndexManager:
         self.db_session_class = init_db_session_class()
         self.seaqa_db = SeaqaDB(self.db_session_class)
         self.seadb_api = SeaDBAPI()
-        self.storage = get_storage()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
 
     def repair_ai_summary(self, project_uuid, connection_id=None):
