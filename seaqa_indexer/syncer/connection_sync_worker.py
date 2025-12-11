@@ -21,7 +21,8 @@ NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.GITHUB_ISSUE.value,
     ConnectionType.DISCOURSE_FORUM.value,
     ConnectionType.SEAFILE.value,
-    ConnectionType.EMAIL.value
+    ConnectionType.EMAIL.value,
+    ConnectionType.SITE.value,
 ]
 
 
@@ -68,8 +69,16 @@ class ConnectionSyncTaskWorker(object):
             connections = self.seaqa_db.get_connections_to_recover(NEED_RECOVER_SYNC_TYPES)
             for connection in connections:
                 connection_id = connection.id
+                connection_type = connection.type
 
                 logger.info(f"Add recovering sync task for connection {connection_id}")
+                if connection_type == ConnectionType.SITE.value:
+                    msg_content = {
+                        'site_id': connection_id,
+                    }
+                    self.mq.lpush('web_crawl_task', json.dumps(msg_content))
+                    continue
+
                 self.add_to_undo_task(connection_id)
 
         except Exception as e:
@@ -139,8 +148,7 @@ class ConnectionSyncTaskWorker(object):
             'connection_id': connection_id,
         }
         self.mq.lpush('sync_task', json.dumps(msg_content))
-        logger.debug('%s push back task connection_id: %s, to the queue' %
-                     (threading.current_thread().name, connection_id))
+        logger.debug('%s push back task connection_id: %s, to the queue' % (threading.current_thread().name, connection_id))
 
     def clear(self):
         if not self.mq:

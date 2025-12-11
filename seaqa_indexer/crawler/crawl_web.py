@@ -48,11 +48,6 @@ def craw_web(connection_id, db_session_class, mq):
         return
 
     connection_status = json.loads(project_connection.status)
-    last_sync_status = connection_status.get('last_sync_status')
-    if last_sync_status == CrawlStatus.CRAWLING:
-        logger.warning('connection: %s is crawling', connection_id)
-        return
-
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
     connection_config = json.loads(project_connection.config)
