@@ -8,10 +8,11 @@ from seaqa_indexer.utils.constants import ConnectionType
 
 logger = logging.getLogger(__name__)
 
-def craw_web(connection_id, db_session_class, mq):
 
+def craw_web(connection_id, db_session_class, mq, delete_lock, lock_key):
     def failed_crawl_site(error_msg, params):
-        site_id, site_url, connection_status, sync_logger = params
+        delete_lock(lock_key)
+        site_id, site_url, connection_status = params
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(site_id, json.dumps(connection_status))
         logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
@@ -19,6 +20,7 @@ def craw_web(connection_id, db_session_class, mq):
         sync_logger.stop_capture()
 
     def success_call_back(msg, params):
+        delete_lock(lock_key)
         site_id = params[0]
         msg_content = {
             'connection_id': site_id,
@@ -35,6 +37,7 @@ def craw_web(connection_id, db_session_class, mq):
     seaqa_db = SeaqaDB(db_session_class)
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
+        delete_lock(lock_key)
         logger.warning('connection: %s not found', connection_id)
         sync_logger.log(f'connection {connection_id} not found')
         sync_logger.stop_capture()
@@ -42,16 +45,13 @@ def craw_web(connection_id, db_session_class, mq):
 
     connection_is_active = project_connection.is_active
     if not connection_is_active:
+        delete_lock(lock_key)
         logger.warning('connection: %s is inactive', connection_id)
         sync_logger.log(f'connection {connection_id} is inactive')
         sync_logger.stop_capture()
         return
 
     connection_status = json.loads(project_connection.status)
-    last_sync_status = connection_status.get('last_sync_status')
-    if last_sync_status == CrawlStatus.CRAWLING:
-        logger.warning('connection: %s is crawling', connection_id)
-        return
 
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
@@ -71,6 +71,7 @@ def craw_web(connection_id, db_session_class, mq):
     try:
         web_crawl.crawl(connection_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back, failed_crawl_site)
     except Exception as e:
+        delete_lock(lock_key)
         logger.exception('failed to crawl site: %s, error: %s', connection_id, e)
         sync_logger.log(f'Internal Server Error')
         connection_status['last_sync_status'] = CrawlStatus.FAILED

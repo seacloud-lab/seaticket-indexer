@@ -32,6 +32,10 @@ class WebCrawlTaskWorker(object):
         self.should_stop = threading.Event()
         self.worker_num = 3
 
+        self.LOCK_TIMEOUT = 1800  # 30 minutes
+        self.REFRESH_INTERVAL = 600  # 10 minutes
+        self.locked_keys = set()
+
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         reactor.suggestThreadPoolSize(10)
         self.set_signal()
@@ -40,6 +44,9 @@ class WebCrawlTaskWorker(object):
     @property
     def tname(self):
         return threading.current_thread().name
+
+    def _get_lock_key(self, connection_id):
+        return 'web_crawl_' + str(connection_id)
 
     def clear_worker(self):
         for th in self.worker_list:
@@ -54,6 +61,7 @@ class WebCrawlTaskWorker(object):
             t.start()
 
         threading.Thread(target=reactor.run, name='reactor_thread', daemon=True, kwargs={'installSignalHandlers': False}).start()
+        threading.Thread(target=self.refresh_lock, name='refresh_thread', daemon=True).start()
 
     def web_crawl_handler(self):
         logger.info('%s starting web crawl work' % self.tname)
@@ -72,7 +80,7 @@ class WebCrawlTaskWorker(object):
                             logger.warning('web_crawl_task: invalid.', res)
                         else:
                             connection_id = data.get('site_id')
-                            self.crawl_site(connection_id)
+                            self.work_task_handler(connection_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -81,20 +89,71 @@ class WebCrawlTaskWorker(object):
             # prevent case that redis break at program running.
             time.sleep(0.3)
 
-    def crawl_site(self, connection_id):
+    def work_task_handler(self, connection_id):
+        # Python cannot kill threads, so stop it generate more locked key.
+        if not self.should_stop.is_set():
+            # set key-value if does not exist which will expire 30 minutes later
+            if self.mq.set(self._get_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
+                # get lock
+                logger.info('%s start sync connection: %s' % (self.tname, connection_id))
+                lock_key = self._get_lock_key(connection_id)
+                self.locked_keys.add(lock_key)
+                self.crawl_site(connection_id, lock_key)
+
+    def crawl_site(self, connection_id, lock_key):
         try:
-            craw_web(connection_id, self.db_session_class, self.mq)
+            craw_web(connection_id, self.db_session_class, self.mq, self.delete_lock, lock_key)
         except Exception as e:
+            self.delete_lock(lock_key)
             logger.exception('crawl site: %s failed, error: %s', connection_id, e)
 
-    def signal_term_handler(self, signal, frame):
+    def delete_lock(self, lock_key):
+        try:
+            self.locked_keys.remove(lock_key)
+        except KeyError:
+            logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+        self.mq.delete(lock_key)
+        logger.info("%s Finish craw connection, delete redis lock %s" % (self.tname, lock_key))
+
+    def clear(self):
+        if not self.mq:
+            return
+        self.should_stop.set()
+        # if a thread just lock key, wait to add the lock to the list.
+        time.sleep(1)
+        # del redis locked key
+        for key in self.locked_keys:
+            self.mq.delete(key)
+            logger.info("redis lock key %s has been deleted", key)
+        # sys.exit
+        logger.info("Exit connection web_crawl worker process.")
         os._exit(0)
+
+    def signal_term_handler(self, signal, frame):
+        self.clear()
 
     def set_signal(self):
         # TODO: look like python will add signal to queue when cpu exec c extension code,
         # and will call signal callback method after cpu exec python code
         # ref: https://docs.python.org/2/library/signal.html
         signal.signal(signal.SIGTERM, self.signal_term_handler)
+
+    def refresh_lock(self):
+        logger.info('%s Starting refresh locks', self.tname)
+        while not self.should_stop.is_set():
+            try:
+                # workaround for the RuntimeError: Set changed size during iteration
+                copy = self.locked_keys.copy()
+
+                for lock in copy:
+                    ttl = self.mq.ttl(lock)
+                    new_ttl = ttl + self.REFRESH_INTERVAL
+                    self.mq.expire(lock, new_ttl)
+                    logger.debug('%s Refresh lock [%s] timeout from %s to %s' % (self.tname, lock, ttl, new_ttl))
+                time.sleep(self.REFRESH_INTERVAL)
+            except Exception as e:
+                logger.exception(e)
+                time.sleep(1)
 
 
 def start():
