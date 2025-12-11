@@ -112,10 +112,10 @@ class KnowledgeBaseIndex(object):
             '_source': ['question', 'answer', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
-            'pre_tags': ['<mark>'],
-            'post_tags': ['</mark>'],
-            'fields': {'answer': {}, 'question': {}},
-        }
+                'pre_tags': ['<mark>'],
+                'post_tags': ['</mark>'],
+                'fields': {'answer': {}, 'question': {}},
+            }
         }
         return {'index': index_name, 'query': data}
 
