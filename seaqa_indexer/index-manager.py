@@ -1,7 +1,5 @@
 import argparse
 import logging
-import datetime
-import json
 import sys
 import os
 
@@ -13,13 +11,11 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
-from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, LOG_LEVEL, LOG_FILE
-from seaqa_indexer.app.log import LogConfigurator
+from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, LOG_LEVEL
 from seaqa_indexer.utils import uuid_str_to_32_chars
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.ai_processor.utils import generate_summary
+from seaqa_indexer.ai_processor.ai_processor import generate_summaries_and_vectors
 from seaqa_indexer.seadb_models.models import (
     WebCrawlTable,
     DiscourseTopicsTable,
@@ -27,8 +23,6 @@ from seaqa_indexer.seadb_models.models import (
     SeafileTable,
     ThreadTable
 )
-from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
-from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 
 logger = logging.getLogger(__name__)
 
@@ -42,15 +36,6 @@ class IndexManager:
         self.seadb_api = SeaDBAPI()
         self.storage = get_storage()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
-
-    def submit_summary_index_task(self, connection_id):
-        if not self.mq:
-            logger.warning('Redis MQ is not available')
-            return False
-
-        msg = {'connection_id': connection_id}
-        self.mq.lpush('summary_index_task', json.dumps(msg))
-        return True
 
     def repair_ai_summary(self, project_uuid, connection_id=None):
         logger.info('Starting AI summary repair process...')
@@ -82,9 +67,6 @@ class IndexManager:
 
         processed_count = 0
         repaired_count = 0
-        error_count = 0
-        index_success_count = 0
-        index_error_count = 0
 
         for connection in connections:
             processed_count += 1
@@ -93,26 +75,60 @@ class IndexManager:
             try:
                 repaired = self.repair_connection_records(connection, project_uuid)
                 repaired_count += repaired
-
-                if repaired > 0:
-                    try:
-                        self.submit_summary_index_task(connection.id)
-                        index_success_count += 1
-                        logger.info(f'Submitted index task for connection {connection.id}')
-                    except Exception as e:
-                        index_error_count += 1
-                        logger.exception(f'Failed to submit index task for connection {connection_id}: {str(e)}')
-
             except Exception as e:
-                error_count += 1
                 logger.exception(f'Error: {str(e)}')
 
         logger.info('Repair process completed!')
         logger.info(f'Total connections processed: {processed_count}')
         logger.info(f'Total records repaired: {repaired_count}')
-        logger.info(f'Errors encountered: {error_count}')
-        logger.info(f'Index tasks submitted: {index_success_count}')
-        logger.info(f'Index task errors: {index_error_count}')
+
+    def _clear_ai_processed_time(self, connection_id, connection_type, project_uuid):
+
+        if connection_type == ConnectionType.SITE.value:
+            table_name = WebCrawlTable.gen_table_name(connection_id)
+        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+            table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+            table_name = GithubIssuesTable.gen_table_name(connection_id)
+        elif connection_type == ConnectionType.SEAFILE.value:
+            table_name = SeafileTable.gen_table_name(connection_id)
+        elif connection_type == ConnectionType.EMAIL.value:
+            table_name = ThreadTable.gen_table_name(connection_id)
+        else:
+            logger.warning(f'Unsupported connection type: {connection_type}')
+            return 0
+
+        sql = f"""
+            SELECT _pk FROM `{table_name}`
+            WHERE (ai_summary IS NULL OR ai_summary = '' OR ai_summary_vector IS NULL)
+        """
+        result = self.seadb_api.query_rows(project_uuid, sql)
+        rows = result.get('results', [])
+
+        if not rows:
+            logger.info(f'No records need repair for connection {connection_id}')
+            return 0
+
+        updates = []
+        for row in rows:
+            pk = row.get('_pk')
+            updates.append({
+                "pk": pk,
+                "row": {
+                    "ai_processed_time": None
+                }
+            })
+
+            if len(updates) >= BATCH_SIZE:
+                self.seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
+
+        if updates:
+            self.seadb_api.update_rows(project_uuid, table_name, updates)
+
+        cleared_count = len(updates)
+        logger.info(f'Cleared ai_processed_time for {cleared_count} records in connection {connection_id}')
+        return cleared_count
 
     def repair_connection_records(self, connection, project_uuid):
         connection_id = connection.id
@@ -121,20 +137,17 @@ class IndexManager:
         logger.info(f'Starting repair for connection {connection_id} (type: {connection_type})')
 
         try:
-            # Use specialized repair functions based on connection type
-            if connection_type == ConnectionType.SITE.value:
-                repaired_count = self._repair_site_ai(connection_id, project_uuid)
-            elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                repaired_count = self._repair_discourse_ai(connection_id, project_uuid)
-            elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                repaired_count = self._repair_github_issue_ai(connection_id, project_uuid)
-            elif connection_type == ConnectionType.SEAFILE.value:
-                repaired_count = self._repair_seafile_ai(connection_id, project_uuid)
-            elif connection_type == ConnectionType.EMAIL.value:
-                repaired_count = self._repair_email_ai(connection_id, project_uuid)
-            else:
-                logger.warning(f'Skipping: Unsupported connection type {connection_type}')
-                return 0
+            repaired_count = self._clear_ai_processed_time(connection_id, connection_type, project_uuid)
+
+            if repaired_count > 0:
+                logger.info(f'Triggering AI summary generation for connection {connection_id}')
+                generate_summaries_and_vectors(
+                    self.seadb_api,
+                    self.storage,
+                    self.seaqa_db,
+                    self.mq,
+                    connection_id
+                )
 
             logger.info(f'Repaired {repaired_count} records for connection {connection_id}')
             return repaired_count
@@ -143,232 +156,14 @@ class IndexManager:
             logger.exception(f'Failed to repair connection {connection_id}: {str(e)}')
             raise
 
-    def _repair_site_ai(self, connection_id, project_uuid):
-        page_size = 100
-        updates = []
-        ai_processing_count = 0
-        table_name = WebCrawlTable.gen_table_name(connection_id)
-
-        while True:
-            sql = f"""
-                SELECT _pk, url FROM `{table_name}`
-                WHERE (ai_summary IS NULL OR ai_summary = '' OR ai_summary_vector IS NULL)
-                ORDER BY _pk
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            for row in rows:
-                pk = row.get('_pk')
-                url = row.get('url')
-                filename = url_to_filename(url)
-                file_json = self.storage.read_json(connection_id, project_uuid, filename)
-                content = file_json.get('content', '')
-                logger.info(f'Generating AI summary for record {pk}...')
-                summary, vector = generate_summary(content, ConnectionType.SITE.value, project_uuid)
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                ai_processing_count += 1
-                if len(updates) >= BATCH_SIZE:
-                    self.seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
-
-            if updates:
-                self.seadb_api.update_rows(project_uuid, table_name, updates)
-                updates = []
-
-        return ai_processing_count
-
-    def _repair_discourse_ai(self, connection_id, project_uuid):
-        page_size = 100
-        updates = []
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
-        ai_processing_count = 0
-
-        while True:
-            sql = f"""
-                SELECT _pk, topic_id, title FROM `{table_name}`
-                WHERE (ai_summary IS NULL OR ai_summary = '' OR ai_summary_vector IS NULL)
-                ORDER BY topic_id
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            for row in rows:
-                pk = row.get('_pk')
-                topic_id = row.get('topic_id')
-                title = row.get('title', '')
-                result = discourse_seadb_api.get_topic_first_reply(connection_id, topic_id)
-                first_content = result.get('content', '')
-                full_content = f"Title: {title}\n\nBody: {first_content}\n"
-                logger.info(f'Generating AI summary for record {pk}...')
-                summary, vector = generate_summary(full_content, ConnectionType.DISCOURSE_FORUM.value, project_uuid)
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                ai_processing_count += 1
-                if len(updates) >= BATCH_SIZE:
-                    self.seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
-
-            if updates:
-                self.seadb_api.update_rows(project_uuid, table_name, updates)
-
-        return ai_processing_count
-
-    def _repair_github_issue_ai(self, connection_id, project_uuid):
-        page_size = 100
-        updates = []
-        table_name = GithubIssuesTable.gen_table_name(connection_id)
-        ai_processing_count = 0
-
-        while True:
-            sql = f"""
-                SELECT * FROM `{table_name}`
-                WHERE (ai_summary IS NULL OR ai_summary = '' OR ai_summary_vector IS NULL)
-                ORDER BY issue_id
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            for row in rows:
-                pk = row.get('_pk')
-                title = row.get('title', '')
-                content = row.get('content', '')
-                full_content = f"Title: {title}\n\nBody: {content}\n"
-                logger.info(f'Generating AI summary for record {pk}...')
-                summary, vector = generate_summary(full_content, ConnectionType.GITHUB_ISSUE.value, project_uuid)
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                ai_processing_count += 1
-                if len(updates) >= BATCH_SIZE:
-                    self.seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
-
-            if updates:
-                self.seadb_api.update_rows(project_uuid, table_name, updates)
-
-        return ai_processing_count
-
-    def _repair_seafile_ai(self, connection_id, project_uuid):
-        page_size = 100
-        updates = []
-        table_name = SeafileTable.gen_table_name(connection_id)
-        ai_processing_count = 0
-
-        while True:
-            sql = f"""
-                SELECT * FROM `{table_name}`
-                WHERE (ai_summary IS NULL OR ai_summary = '')
-                ORDER BY path, title
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-            for row in rows:
-                pk = row.get('_pk')
-                title = row.get('title')
-                content = row.get('content')
-                summary = 'empty doc'
-                vector = []
-                if content:
-                    full_content = f"Title: {title}\n\nContent: {content}\n"
-                    logger.info(f'Generating AI summary for record {pk}...')
-                    summary, vector = generate_summary(full_content, ConnectionType.SEAFILE.value, project_uuid)
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                ai_processing_count += 1
-                if len(updates) >= BATCH_SIZE:
-                    self.seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
-
-            if updates:
-                self.seadb_api.update_rows(project_uuid, table_name, updates)
-
-        return ai_processing_count
-
-    def _repair_email_ai(self, connection_id, project_uuid):
-        page_size = 100
-        updates = []
-        table_name = ThreadTable.gen_table_name(connection_id)
-        email_seadb_api = EmailSeaDBAPI(project_uuid)
-        ai_processing_count = 0
-
-        while True:
-            sql = f"""
-                SELECT * FROM `{table_name}`
-                WHERE (ai_summary IS NULL OR ai_summary = '' OR ai_summary_vector IS NULL)
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            for row in rows:
-                pk = row.get('_pk')
-                title = row.get('title', '')
-                result = email_seadb_api.get_first_email(connection_id, pk)
-                content = result.get('content', '')
-                full_content = f"Title: {title}\n\nBody: {content}\n"
-                logger.info(f'Generating AI summary for record {pk}...')
-                summary, vector = generate_summary(full_content, ConnectionType.EMAIL.value, project_uuid)
-                updates.append({
-                    "pk": pk,
-                    "row": {
-                        "ai_summary": summary,
-                        "ai_summary_vector": vector,
-                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                })
-                ai_processing_count += 1
-                if len(updates) >= BATCH_SIZE:
-                    self.seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
-
-            if updates:
-                self.seadb_api.update_rows(project_uuid, table_name, updates)
-
-        return ai_processing_count
-
 
 def main():
-    LogConfigurator(LOG_LEVEL)
+    logging.basicConfig(
+        format='[seaqa_indexer] [%(asctime)s] [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        level='INFO',
+        stream=sys.stdout
+    )
 
     parser = argparse.ArgumentParser(
         description='Index Manager - Manage AI summary and vector indexing',
