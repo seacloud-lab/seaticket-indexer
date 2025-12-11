@@ -107,7 +107,7 @@ class IndexManager:
             )
             bulk_search_params.extend(connection_params)
 
-        if "knowledge_base" in extra_sources:
+        if extra_sources and "knowledge_base" in extra_sources:
             kb_index_name = f"knowledge_base_{project_uuid}"
             knowledge_base_search_param = self.knowledge_base_index.get_search_param(kb_index_name, keyword, start, size, time_from, time_to)
             bulk_search_params.append(knowledge_base_search_param)

@@ -154,7 +154,7 @@ def search():
     time_to = data.get('time_to')
     search_type = data.get('search_type', 'normal_search')
     username = data.get('username', '')
-    extra_sources = data.get('extra_sources')
+    extra_sources = data.get('extra_sources', [])
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
