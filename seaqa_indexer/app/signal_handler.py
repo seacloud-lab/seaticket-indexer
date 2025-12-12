@@ -50,6 +50,12 @@ def kill_content_vector_index_task_worker():
     ]
     run(cmd)
 
+def kill_deleted_records_cleaner():
+    cmd = [
+        'pkill', '-f', 'seaqa_indexer.tasks.deleted_records_cleaner'
+    ]
+    run(cmd)
+
 
 def signal_term_handler(signal, frame):
     kill_web_crawler_task_worker()
@@ -59,6 +65,7 @@ def signal_term_handler(signal, frame):
     kill_ai_processor()
     kill_summary_index_task_worker()
     kill_content_vector_index_task_worker()
+    kill_deleted_records_cleaner()
     os._exit(0)
 
 

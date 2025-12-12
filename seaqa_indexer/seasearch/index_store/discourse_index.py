@@ -206,9 +206,7 @@ class DiscourseIndex(object):
         index_count = 0
         page_size = 1000
         offset = 0
-        need_cleared_topic_id_set = set()
         need_cleared_topic_index_id_set = set()
-        need_cleared_topics_pk_set = set()
         bulk_params = []
         while True:
             topics = discourse_seadb_api.get_topics_by_page(connection_id, since, page_size, offset)
@@ -220,9 +218,7 @@ class DiscourseIndex(object):
                 pk = topic.get('_pk')
                 key = str(pk)
                 if topic.get('deleted'):
-                    need_cleared_topic_id_set.add(topic_id)
                     need_cleared_topic_index_id_set.add(key)
-                    need_cleared_topics_pk_set.add(pk)
                 else:
                     replies_offset = 0
                     replies_page_size = 1000
@@ -260,9 +256,6 @@ class DiscourseIndex(object):
                         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         if bulk_params:
             self.seasearch_api.bulk(index_name, bulk_params)
-
         if need_cleared_topic_index_id_set:
             self.delete_indexes_by_ids(index_name, need_cleared_topic_index_id_set)
-            discourse_seadb_api.delete_topics_from_db(connection_id, list(need_cleared_topics_pk_set), list(need_cleared_topic_id_set))
-
         return index_count
