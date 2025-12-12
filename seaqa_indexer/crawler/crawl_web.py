@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def craw_web(connection_id, db_session_class, mq):
 
     def failed_crawl_site(error_msg, params):
-        site_id, site_url, connection_status, sync_logger = params
+        site_id, site_url, connection_status = params
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(site_id, json.dumps(connection_status))
         logger.warning('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
