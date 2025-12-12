@@ -141,7 +141,7 @@ class SeaqaDB(object):
             sql = "SELECT knowledge_base_indexed_at FROM projects WHERE uuid=:project_uuid AND deleted=false"
             return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
 
-    def get_recently_updated_connections(self, days=14):
+    def get_recently_updated_connections(self, days=7):
         with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.type, pc.project_uuid, pc.ai_indexed_at, pc.content_vector_indexed_at
                      FROM project_connection pc
