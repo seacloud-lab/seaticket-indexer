@@ -231,8 +231,8 @@ class IndexManager:
                 result_docs.append(r)
             elif index_name.startswith("knowledge_base_"):
                 r = {
-                    'question': source.get('question'),
-                    'answer': source.get('answer'),
+                    'title': source.get('title'),
+                    'content': source.get('content'),
                     'modified_time': source.get('modified_time'),
                     'score': score,
                     '_id': _id,

@@ -13,12 +13,12 @@ SEASEARCH_BULK_OPETATE_LIMIT = 100
 class KnowledgeBaseIndex(object):
     mapping = {
         'properties': {
-            'question': {
+            'title': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
                 'fields': {'keyword': {'type': 'keyword'}}
             },
-            'answer': {
+            'content': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
@@ -51,8 +51,8 @@ class KnowledgeBaseIndex(object):
 
     def create_index_if_missing(self, index_name):
         if self.lang != 'chinese':
-            self.mapping['properties']['answer']['analyzer'] = 'standard'
-            self.mapping['properties']['question']['analyzer'] = 'standard'
+            self.mapping['properties']['content']['analyzer'] = 'standard'
+            self.mapping['properties']['title']['analyzer'] = 'standard'
             self.index_settings['analysis'].pop('char_filter', None)
             self.index_settings['analysis']['analyzer'].pop('gse_standard_analyzer', None)
         if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
@@ -66,10 +66,10 @@ class KnowledgeBaseIndex(object):
     def check_index(self, index_name):
         return self.seasearch_api.check_index_mapping(index_name).get('is_exist')
 
-    def _make_query_searches(self, keyword, search_question_only=False):
+    def _make_query_searches(self, keyword, search_title_only=False):
         match_query_kwargs = {'minimum_should_match': '-35%'}
-        question_boost_kwargs = {'boost': 0.7}
-        answer_boost_kwargs = {'boost': 0.3}
+        title_boost_kwargs = {'boost': 0.7}
+        content_boost_kwargs = {'boost': 0.3}
 
         def _make_match_query(field, key_word, **kw):
             q = {'query': key_word}
@@ -77,9 +77,9 @@ class KnowledgeBaseIndex(object):
             return {'match': {field: q}}
 
         searches = []
-        searches.append(_make_match_query('question', keyword, **match_query_kwargs, **question_boost_kwargs))
-        if not search_question_only:
-            searches.append(_make_match_query('answer', keyword, **match_query_kwargs, **answer_boost_kwargs))
+        searches.append(_make_match_query('title', keyword, **match_query_kwargs, **title_boost_kwargs))
+        if not search_title_only:
+            searches.append(_make_match_query('content', keyword, **match_query_kwargs, **content_boost_kwargs))
         return searches
 
     def _ensure_filter_exists(self, query_map):
@@ -87,9 +87,9 @@ class KnowledgeBaseIndex(object):
             query_map['bool']['filter'] = []
         return query_map
 
-    def get_search_param(self, index_name, keyword, start, size, time_from=None, time_to=None, search_question_only=False):
+    def get_search_param(self, index_name, keyword, start, size, time_from=None, time_to=None, search_title_only=False):
         query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
-        searches = self._make_query_searches(keyword, search_question_only)
+        searches = self._make_query_searches(keyword, search_title_only)
         query_map['bool']['should'] = searches
 
         if time_from or time_to:
@@ -109,18 +109,18 @@ class KnowledgeBaseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['question', 'answer', 'modified_time'],
+            '_source': ['title', 'content', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
                 'post_tags': ['</mark>'],
-                'fields': {'answer': {}, 'question': {}},
+                'fields': {'content': {}, 'title': {}},
             }
         }
         return {'index': index_name, 'query': data}
 
-    def search(self, index_name, keyword, start=0, size=10, time_from=None, time_to=None, search_question_only=False):
-        bulk_search_params = [self.get_search_param(index_name, keyword, start, size, time_from, time_to, search_question_only)]
+    def search(self, index_name, keyword, start=0, size=10, time_from=None, time_to=None, search_title_only=False):
+        bulk_search_params = [self.get_search_param(index_name, keyword, start, size, time_from, time_to, search_title_only)]
         query_body = json.dumps({'index_queries': bulk_search_params})
         results = self.seasearch_api.unified_search(query_body)
         docs = []
@@ -132,8 +132,8 @@ class KnowledgeBaseIndex(object):
             score = hit.get('_score')
             _id = hit.get('_id')
             r = {
-                'question': source['question'],
-                'answer': source['answer'],
+                'title': source['title'],
+                'content': source['content'],
                 'modified_time': source.get('modified_time'),
                 'score': score,
                 '_id': _id,
@@ -174,8 +174,8 @@ class KnowledgeBaseIndex(object):
                 break
             for row in knowledge_bases:
                 pk = row.get('_pk')
-                question = row.get('question')
-                answer = row.get('answer')
+                title = row.get('title')
+                content = row.get('content')
                 deleted = row.get('deleted')
                 doc_id = str(pk)
                 if deleted:
@@ -184,8 +184,8 @@ class KnowledgeBaseIndex(object):
                     continue
                 index_info = {'index': {'_index': index_name, '_id': doc_id}}
                 doc_info = {
-                    'question': question,
-                    'answer': answer,
+                    'title': title,
+                    'content': content,
                     'modified_time': row.get('modified_time')
                 }
                 bulk_params.append(index_info)
