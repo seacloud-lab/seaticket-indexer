@@ -148,7 +148,10 @@ class IndexManager:
                 server_url = list(repo_cache_info.keys())[0]
                 repo_name = list(repo_cache_info.values())[0]
 
-                url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + source['path'].strip('/') + '/' + source['title']
+                url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/'
+                if source['path'].strip('/'):
+                    url += source['path'].strip('/') + '/'
+                url += source['title']
                 r = {
                     'title': source['title'],
                     'path': source['path'],
