@@ -44,7 +44,7 @@ def fix_summary_by_connection(connection_id, table_name, project_uuid, seadb_api
                 WHERE ai_summary IS NOT NULL 
                 AND ai_summary != ''
                 AND ai_summary_vector IS NULL
-                AND deleted = false
+                AND (deleted = false OR deleted IS NULL)
                 LIMIT {page_size}
             """
 
