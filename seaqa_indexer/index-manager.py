@@ -96,35 +96,36 @@ class IndexManager:
             logger.warning(f'Unsupported connection type: {connection_type}')
             return 0
 
-        sql = f"""
-            SELECT _pk FROM `{table_name}`
-            WHERE (ai_summary IS NULL OR ai_summary = '' OR ai_summary_vector IS NULL)
-        """
-        result = self.seadb_api.query_rows(project_uuid, sql)
-        rows = result.get('results', [])
+        page_size = 100
+        offset = 0
+        cleared_count = 0
+        while True:
+            sql = f"""
+                SELECT _pk FROM `{table_name}`
+                WHERE (ai_summary IS NULL OR ai_summary = '' OR ai_summary_vector IS NULL) 
+                AND (deleted = false OR deleted IS NULL) LIMIT {page_size} OFFSET {offset}
+            """
+            result = self.seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+            offset += page_size
 
-        if not rows:
-            logger.info(f'No records need repair for connection {connection_id}')
-            return 0
+            if not rows:
+                logger.info(f'No records need repair for connection {connection_id}')
+                break
 
-        updates = []
-        for row in rows:
-            pk = row.get('_pk')
-            updates.append({
-                "pk": pk,
-                "row": {
-                    "ai_processed_time": None
-                }
-            })
+            cleared_count += len(rows)
+            updates = []
+            for row in rows:
+                pk = row.get('_pk')
+                updates.append({
+                    "pk": pk,
+                    "row": {
+                        "ai_processed_time": None
+                    }
+                })
 
-            if len(updates) >= BATCH_SIZE:
-                self.seadb_api.update_rows(project_uuid, table_name, updates)
-                updates = []
-
-        if updates:
             self.seadb_api.update_rows(project_uuid, table_name, updates)
 
-        cleared_count = len(updates)
         logger.info(f'Cleared ai_processed_time for {cleared_count} records in connection {connection_id}')
         return cleared_count
 
