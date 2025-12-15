@@ -18,7 +18,12 @@ __all__ = [
     'SyncTaskPublisher',
 ]
 
-SYNC_CONNECTION_TYPES = [ConnectionType.SEAFILE.value, ConnectionType.DISCOURSE_FORUM.value, ConnectionType.GITHUB_ISSUE.value]
+SYNC_CONNECTION_TYPES = [
+    ConnectionType.SEAFILE.value,
+    ConnectionType.DISCOURSE_FORUM.value,
+    ConnectionType.GITHUB_ISSUE.value,
+    ConnectionType.EMAIL.value,
+]
 
 
 class SyncTaskPublisher(object):
