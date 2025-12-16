@@ -198,7 +198,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         new_config = encrypt_config(config)
     seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time, config=new_config)
 
-    logger.info('Finish sync connection: %s', connection_id)
+    logger.info('Finish sync connection: %s, last sync count %s', connection_id, sync_count)
     sync_logger.log(f'Finish sync connection: {connection_id}')
     sync_logger.stop_capture()
 
