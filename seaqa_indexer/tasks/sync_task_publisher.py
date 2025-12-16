@@ -68,6 +68,7 @@ class SyncTaskPublisherTimer(Thread):
                     pc.last_sync_time IS NULL
                     OR TIMESTAMPDIFF(SECOND, pc.last_sync_time, UTC_TIMESTAMP()) > :sync_interval
                   )
+              AND JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_sync_status')) != 'crawling'
             LIMIT :start, :limit
             """
             project_connections = session.execute(
