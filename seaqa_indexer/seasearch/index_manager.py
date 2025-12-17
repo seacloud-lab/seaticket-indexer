@@ -248,7 +248,7 @@ class IndexManager:
 
         return result_docs
 
-    def semantic_search(self, project_uuid, connection_ids, query_text, username, time_from, time_to, top_k=10):
+    def semantic_search(self, project_uuid, connection_ids, query_text, username, time_from, time_to, top_k=10, options={}):
         if not connection_ids:
             return []
         connection_id_list = connection_ids.split(',')
@@ -271,13 +271,23 @@ class IndexManager:
             connection_type = project_connection.type
             connection_id = project_connection.id
 
-            summary_index_name = gen_summary_index_name(connection_id, connection_type)
-            summary_index_names.append(summary_index_name)
+            if connection_type not in SUPPORT_VECTOR_RETRIEVAL_TYPES:
 
-            if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
-                content_index_name = gen_content_vector_index_name(connection_id, connection_type)
-                if self.content_vector_index.check_index(content_index_name):
-                    content_index_names.append(content_index_name)
+                summary_index_name = gen_summary_index_name(connection_id, connection_type)
+                summary_index_names.append(summary_index_name)
+
+            else:
+                VECTOR_RETRIEVAL_CONNECTION_TYPES_STRATEGY = options.get('VECTOR_RETRIEVAL_CONNECTION_TYPES_STRATEGY', 'both')
+
+                if VECTOR_RETRIEVAL_CONNECTION_TYPES_STRATEGY in ('both', 'summary_only'):
+                    summary_index_name = gen_summary_index_name(connection_id, connection_type)
+                    summary_index_names.append(summary_index_name)
+                
+                if VECTOR_RETRIEVAL_CONNECTION_TYPES_STRATEGY in ('both', 'content_only'):
+            
+                    content_index_name = gen_content_vector_index_name(connection_id, connection_type)
+                    if self.content_vector_index.check_index(content_index_name):
+                        content_index_names.append(content_index_name)
 
         # Batch search summary indexes
         if summary_index_names:
@@ -393,6 +403,7 @@ class IndexManager:
                 'score': score,
                 'type': connection_type,
                 'content': ai_summary,
+                'ai_summary': ai_summary
             }
 
             if connection_type == ConnectionType.SITE.value:
