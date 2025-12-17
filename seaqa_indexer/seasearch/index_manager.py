@@ -99,8 +99,8 @@ class IndexManager:
         result_docs = []
         bulk_search_params = []
 
-        connection_id_list = connection_ids.split(',') if connection_ids else None
-        if connection_id_list:
+        if connection_ids:
+            connection_id_list = connection_ids.split(',')
             project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
             connection_id_to_config, connection_params = self._build_connection_search_params(
                 project_connections, keyword, start, size, time_from, time_to
@@ -248,9 +248,10 @@ class IndexManager:
 
         return result_docs
 
-
     def semantic_search(self, project_uuid, connection_ids, query_text, username, time_from, time_to, top_k=10):
-        connection_id_list = connection_ids.split(',') if connection_ids else None
+        if not connection_ids:
+            return []
+        connection_id_list = connection_ids.split(',')
         project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
 
         if not project_connections:
