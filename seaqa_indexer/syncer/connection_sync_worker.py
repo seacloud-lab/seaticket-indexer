@@ -100,7 +100,7 @@ class ConnectionSyncTaskWorker(object):
                             logger.warning('sync_task: invalid.', element)
                         else:
                             connection_id = data.get('connection_id')
-                            self.conn_task_handler(connection_id)
+                            self.work_task_handler(connection_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -109,7 +109,7 @@ class ConnectionSyncTaskWorker(object):
             # prevent case that redis break at program running.
             time.sleep(0.3)
 
-    def conn_task_handler(self, connection_id):
+    def work_task_handler(self, connection_id):
         # Python cannot kill threads, so stop it generate more locked key.
         if not self.should_stop.is_set():
             # set key-value if does not exist which will expire 30 minutes later
