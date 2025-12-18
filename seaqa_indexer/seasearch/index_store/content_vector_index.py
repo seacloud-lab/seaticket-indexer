@@ -10,7 +10,7 @@ from seaqa_indexer.ai_processor.utils import generate_chunks_embedding
 
 logger = logging.getLogger(__name__)
 
-SEASEARCH_BULK_OPETATE_LIMIT = 100
+SEASEARCH_BULK_OPERATE_LIMIT = 100
 
 
 class ContentVectorIndex(object):
@@ -92,7 +92,7 @@ class ContentVectorIndex(object):
         delete_params = []
         for _id in doc_ids:
             delete_params.append({'delete': {'_id': _id, '_index': index_name}})
-            if len(delete_params) >= SEASEARCH_BULK_OPETATE_LIMIT:
+            if len(delete_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
                 self.seasearch_api.bulk(index_name, delete_params)
                 delete_params = []
         if delete_params:
@@ -110,7 +110,7 @@ class ContentVectorIndex(object):
 
         def _flush_bulk_if_needed(force=False):
             nonlocal bulk_params
-            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
+            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPERATE_LIMIT):
                 self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 

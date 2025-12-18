@@ -8,7 +8,7 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
 
-SEASEARCH_BULK_OPETATE_LIMIT = 100
+SEASEARCH_BULK_OPERATE_LIMIT = 100
 
 
 class SummaryVectorIndex(object):
@@ -108,7 +108,7 @@ class SummaryVectorIndex(object):
         delete_params = []
         for _id in doc_ids:
             delete_params.append({'delete': {'_id': _id, '_index': index_name}})
-            if len(delete_params) >= SEASEARCH_BULK_OPETATE_LIMIT:
+            if len(delete_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
                 self.seasearch_api.bulk(index_name, delete_params)
                 delete_params = []
         if delete_params:
@@ -126,7 +126,7 @@ class SummaryVectorIndex(object):
 
         def _flush_bulk_if_needed(force=False):
             nonlocal bulk_params, pending_pks
-            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
+            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPERATE_LIMIT):
                 # Delete old documents first, then insert new ones
                 if pending_pks:
                     self.delete_indexes_by_pks(index_name, pending_pks)
@@ -208,7 +208,7 @@ class SummaryVectorIndex(object):
 
         def _flush_bulk_if_needed(force=False):
             nonlocal bulk_params, pending_pks
-            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
+            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPERATE_LIMIT):
                 if pending_pks:
                     self.delete_indexes_by_pks(index_name, pending_pks)
                     pending_pks = set()
