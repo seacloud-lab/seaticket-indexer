@@ -21,7 +21,7 @@ def update_knowledge_base_summary_index(knowledge_base_id, project_uuid, seaqa_d
 
     table_name = KnowledgeBaseTable.gen_table_name()
     summary_vector_index = SummaryVectorIndex(seasearch_api, seadb_api)
-    kb_summary_index_name = gen_kb_summary_index_name()
+    kb_summary_index_name = gen_kb_summary_index_name(project_uuid)
 
     summary_vector_index.create_index_if_missing(kb_summary_index_name)
 
