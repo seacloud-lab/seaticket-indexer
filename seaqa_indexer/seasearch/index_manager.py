@@ -393,6 +393,7 @@ class IndexManager:
                 'score': score,
                 'type': connection_type,
                 'content': ai_summary,
+                'ai_summary': ai_summary
             }
 
             if connection_type == ConnectionType.SITE.value:
