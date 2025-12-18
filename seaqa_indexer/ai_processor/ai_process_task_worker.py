@@ -75,9 +75,8 @@ class AIProcessTaskWorker(object):
                         else:
                             task_type = data.get('type')
                             if task_type == 'knowledge_base':
-                                knowledge_base_id = data.get('knowledge_base_id')
                                 project_uuid = data.get('project_uuid')
-                                self.kb_task_handler(knowledge_base_id, project_uuid)
+                                self.kb_task_handler(project_uuid)
                             else:
                                 connection_id = data.get('connection_id')
                                 self.work_task_handler(connection_id)
@@ -122,45 +121,41 @@ class AIProcessTaskWorker(object):
         logger.info('%s push back AI process task connection_id: %s, to the queue' %
                      (threading.current_thread().name, connection_id))
 
-    def kb_task_handler(self, knowledge_base_id, project_uuid):
+    def kb_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
-            lock_key = self._get_ai_process_lock_key('kb_' + str(knowledge_base_id))
+            lock_key = self._get_ai_process_lock_key('kb_' + str(project_uuid))
             if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                logger.info('%s start AI process knowledge base: %s' % (self.tname, knowledge_base_id))
+                logger.info('%s start AI process knowledge base of project: %s' % (self.tname, project_uuid))
                 self.locked_keys.add(lock_key)
-                self.process_kb_ai_summary(knowledge_base_id, project_uuid)
+                self.process_kb_ai_summary(project_uuid)
                 try:
                     self.locked_keys.remove(lock_key)
                 except KeyError:
                     logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                 self.mq.delete(lock_key)
                 logger.info(
-                    "%s Finish AI process knowledge base: %s, delete redis lock %s" % (self.tname, knowledge_base_id, lock_key))
+                    "%s Finish AI process knowledge base of project: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
             else:
-                self.add_kb_to_undo_task(knowledge_base_id, project_uuid)
+                self.add_kb_to_undo_task(project_uuid)
 
-    def process_kb_ai_summary(self, knowledge_base_id, project_uuid):
+    def process_kb_ai_summary(self, project_uuid):
         try:
-            process_knowledge_base_ai(self.seadb_api, knowledge_base_id, project_uuid)
+            process_knowledge_base_ai(self.seadb_api, project_uuid)
             msg_content = {
                 'project_uuid': project_uuid,
-                'knowledge_base_id': knowledge_base_id,
                 'type': 'knowledge_base',
             }
             self.mq.lpush('summary_index_task', json.dumps(msg_content))
         except Exception as e:
-            logger.exception('AI process knowledge base: %s failed, error: %s', knowledge_base_id, e)
+            logger.exception('AI process knowledge base of project: %s failed, error: %s', project_uuid, e)
 
-    def add_kb_to_undo_task(self, knowledge_base_id, project_uuid):
+    def add_kb_to_undo_task(self, project_uuid):
         time.sleep(0.5)
         msg_content = {
-            'knowledge_base_id': knowledge_base_id,
             'project_uuid': project_uuid,
             'type': 'knowledge_base',
         }
         self.mq.lpush('ai_process_task', json.dumps(msg_content))
-        logger.info('%s push back AI process kb task knowledge_base_id: %s, to the queue' %
-                     (threading.current_thread().name, knowledge_base_id))
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)

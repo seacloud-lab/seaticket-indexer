@@ -49,8 +49,8 @@ class SummaryIndexTaskWorker(object):
     def _get_conn_summary_index_lock_key(self, connection_id):
         return 'summary_index_' + str(connection_id)
 
-    def _get_kb_summary_index_lock_key(self, knowledge_base_id):
-        return 'summary_index_kb_' + str(knowledge_base_id)
+    def _get_kb_summary_index_lock_key(self, project_uuid):
+        return 'summary_index_kb_' + str(project_uuid)
 
     def clear_worker(self):
         for th in self.worker_list:
@@ -88,8 +88,7 @@ class SummaryIndexTaskWorker(object):
                             task_type = data.get('type', 'connection')
                             if task_type == 'knowledge_base':
                                 project_uuid = data.get('project_uuid')
-                                knowledge_base_id = data.get('knowledge_base_id')
-                                self.kb_task_handler(knowledge_base_id, project_uuid)
+                                self.kb_task_handler(project_uuid)
                             else:
                                 connection_id = data.get('connection_id')
                                 self.work_task_handler(connection_id)
@@ -117,22 +116,22 @@ class SummaryIndexTaskWorker(object):
             else:
                 self.add_to_undo_task(connection_id)
 
-    def kb_task_handler(self, knowledge_base_id, project_uuid):
+    def kb_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
-            lock_key = self._get_kb_summary_index_lock_key(knowledge_base_id)
+            lock_key = self._get_kb_summary_index_lock_key(project_uuid)
             if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                logger.info('%s start summary index knowledge base: %s' % (self.tname, knowledge_base_id))
+                logger.info('%s start summary index knowledge base of project: %s' % (self.tname, project_uuid))
                 self.locked_keys.add(lock_key)
-                self.update_kb_index(knowledge_base_id, project_uuid)
+                self.update_kb_index(project_uuid)
                 try:
                     self.locked_keys.remove(lock_key)
                 except KeyError:
                     logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                 self.mq.delete(lock_key)
-                logger.info("%s Finish summary index knowledge base: %s, delete redis lock %s" %
-                            (self.tname, knowledge_base_id, lock_key))
+                logger.info("%s Finish summary index knowledge base of project: %s, delete redis lock %s" %
+                            (self.tname, project_uuid, lock_key))
             else:
-                self.add_kb_to_undo_task(knowledge_base_id, project_uuid)
+                self.add_kb_to_undo_task(project_uuid)
 
     def update_ai_index(self, connection_id):
         try:
@@ -140,11 +139,11 @@ class SummaryIndexTaskWorker(object):
         except Exception as e:
             logger.exception('Summary index connection: %s failed, error: %s', connection_id, e)
 
-    def update_kb_index(self, knowledge_base_id, project_uuid):
+    def update_kb_index(self, project_uuid):
         try:
-            update_knowledge_base_summary_index(knowledge_base_id, project_uuid, self.seaqa_db, self.seadb_api, self.seasearch_api)
+            update_knowledge_base_summary_index( project_uuid, self.seaqa_db, self.seadb_api, self.seasearch_api)
         except Exception as e:
-            logger.exception('Summary index knowledge base: %s failed, error: %s', knowledge_base_id, e)
+            logger.exception('Summary index knowledge base of project: %s failed, error: %s', project_uuid, e)
 
     def add_to_undo_task(self, connection_id):
         """Push task back to the end of the queue."""
@@ -157,11 +156,10 @@ class SummaryIndexTaskWorker(object):
         logger.info('%s push back summary index task connection_id: %s, to the queue' %
                      (threading.current_thread().name, connection_id))
 
-    def add_kb_to_undo_task(self, knowledge_base_id, project_uuid):
+    def add_kb_to_undo_task(self, project_uuid):
         time.sleep(0.5)
 
         msg_content = {
-            'knowledge_base_id': knowledge_base_id,
             'project_uuid': project_uuid,
             'type': 'knowledge_base',
         }

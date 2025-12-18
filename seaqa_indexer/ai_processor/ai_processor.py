@@ -17,6 +17,7 @@ from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
+from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
 from seaqa_indexer.utils.constants import AIStatus
 
 logger = logging.getLogger(__name__)
@@ -268,35 +269,38 @@ def process_email_ai(seadb_api, connection_id, project_uuid):
     return ai_processing_count
 
 
-def process_knowledge_base_ai(seadb_api, knowledge_base_id, project_uuid):
-    """Process AI summary for a single knowledge base entry"""
-    logger.info('Start AI process knowledge base: %s, project: %s', knowledge_base_id, project_uuid)
-
+def process_knowledge_base_ai(seadb_api, project_uuid):
+    page_size = 100
+    updates = []
     table_name = KnowledgeBaseTable.gen_table_name()
-    sql = f"SELECT `_pk`, `title`, `content` FROM `{table_name}` WHERE `_pk` = {knowledge_base_id} AND (`deleted` IS NULL OR `deleted` != true)"
+    knowledge_base_seadb_api = KnowledgeBaseSeaDBAPI(project_uuid)
 
-    result = seadb_api.query_rows(project_uuid, sql)
-    rows = result.get('results', [])
+    logger.info('Start AI process knowledge base of project: %s', project_uuid)
+    ai_processing_count = 0
+    while True:
+        rows = knowledge_base_seadb_api.get_need_ai_knowledge_bases_by_page(page_size)
+        if not rows:
+            break
+        for row in rows:
+            pk = row.get('_pk')
+            title = row.get('title', '')
+            content = row.get('content', '')
+            full_content = f"Title: {title}\n\nContent: {content}\n"
+            summary, vector = generate_summary(full_content, 'knowledge_base', project_uuid)
+            updates.append({
+                "pk": pk,
+                "row": {
+                    "ai_summary": summary,
+                    "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                }
+            })
+            ai_processing_count += 1
+            if len(updates) >= BATCH_SIZE:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
 
-    if not rows:
-        logger.warning('Knowledge base %s not found or deleted', knowledge_base_id)
-        return
+    logger.info('Finish AI process knowledge base of project: %s', project_uuid)
 
-    row = rows[0]
-    pk = row.get('_pk')
-    title = row.get('title', '')
-    content = row.get('content', '')
-
-    full_content = f"Title: {title}\n\nContent: {content}\n"
-    summary, vector = generate_summary(full_content, 'knowledge_base', project_uuid)
-
-
-    updates = [{
-        "pk": pk,
-        "row": {
-            "ai_summary": summary,
-            "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-        }
-    }]
-    seadb_api.update_rows(project_uuid, table_name, updates)
-    logger.info('Finish AI process knowledge base: %s', knowledge_base_id)
+    return ai_processing_count

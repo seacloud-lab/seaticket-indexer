@@ -9,8 +9,8 @@ from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
 logger = logging.getLogger(__name__)
 
 
-def update_knowledge_base_summary_index(knowledge_base_id, project_uuid, seaqa_db, seadb_api, seasearch_api):
-    logger.info('Start to index knowledge base %s summary vectors for project %s', knowledge_base_id, project_uuid)
+def update_knowledge_base_summary_index(project_uuid, seaqa_db, seadb_api, seasearch_api):
+    logger.info('Start to index knowledge base summary vectors for project %s', project_uuid)
 
     kb = seaqa_db.get_kb_info_by_project_uuid(project_uuid)
     if not kb:
@@ -38,4 +38,4 @@ def update_knowledge_base_summary_index(knowledge_base_id, project_uuid, seaqa_d
         logger.info('Finish knowledge base summary vector indexing for project %s, indexed %d documents at %s',
                     project_uuid, indexed_count, ai_indexed_at)
     except Exception as e:
-        logger.exception('Knowledge base %s summary vector indexing failed: %s', knowledge_base_id, e)
+        logger.exception('Knowledge base summary vector of project %s indexing failed: %s', project_uuid, e)
