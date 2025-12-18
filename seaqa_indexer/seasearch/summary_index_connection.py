@@ -5,7 +5,7 @@ import datetime
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
 
-from seaqa_indexer.seasearch.utils import gen_summary_index_name, fix_summary_by_connection
+from seaqa_indexer.seasearch.utils import gen_conn_summary_index_name, fix_summary_by_connection
 from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable, ThreadTable
 
 
@@ -66,10 +66,10 @@ def update_connection_summary_index(connection_id, seaqa_db, seadb_api, seasearc
             logger.info('Fixed %d missing embeddings for connection %s before indexing', fixed_count, connection_id)
 
         summary_vector_index = SummaryVectorIndex(seasearch_api, seadb_api)
-        ai_index_name = gen_summary_index_name(connection_id, connection_type)
+        ai_index_name = gen_conn_summary_index_name(connection_id, connection_type)
         summary_vector_index.create_index_if_missing(ai_index_name)
 
-        index_count = summary_vector_index.update(
+        index_count = summary_vector_index.update_conn(
             table_name,
             ai_index_name,
             connection_id,

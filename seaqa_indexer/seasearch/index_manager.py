@@ -20,8 +20,7 @@ from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVect
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_summary_index_name, gen_content_vector_index_name,\
-    gen_kb_index_name
+from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, gen_kb_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -272,7 +271,7 @@ class IndexManager:
             connection_type = project_connection.type
             connection_id = project_connection.id
 
-            summary_index_name = gen_summary_index_name(connection_id, connection_type)
+            summary_index_name = gen_conn_summary_index_name(connection_id, connection_type)
             summary_index_names.append(summary_index_name)
 
             if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
@@ -472,7 +471,7 @@ class IndexManager:
             connection_type = project_connection.type
             connection_id = project_connection.id
 
-            index_name = gen_summary_index_name(connection_id, connection_type)
+            index_name = gen_conn_summary_index_name(connection_id, connection_type)
 
             index_exists = self.summary_vector_index.check_index(index_name)
             if not index_exists:

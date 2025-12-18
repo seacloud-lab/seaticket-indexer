@@ -85,7 +85,7 @@ class ContentVectorIndexTaskWorker(object):
                             logger.warning('content_vector_index_task: invalid.', res)
                         else:
                             connection_id = data.get('connection_id')
-                            self.work_task_handler(connection_id)
+                            self.conn_task_handler(connection_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -93,7 +93,7 @@ class ContentVectorIndexTaskWorker(object):
             logger.error(e, exc_info=True)
             time.sleep(0.3)
 
-    def work_task_handler(self, connection_id):
+    def conn_task_handler(self, connection_id):
         if not self.should_stop.is_set():
             if self.mq.set(self._get_content_vector_index_lock_key(connection_id), time.time(),
                       ex=self.LOCK_TIMEOUT, nx=True):

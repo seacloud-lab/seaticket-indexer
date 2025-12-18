@@ -116,7 +116,7 @@ class SummaryVectorIndex(object):
 
         logger.info('Deleted %d index documents', len(doc_ids))
 
-    def update(self, table_name, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_ai_indexed_at):
+    def update_conn(self, table_name, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_ai_indexed_at):
         index_count = 0
         page_size = 1000
         offset = 0
@@ -186,6 +186,83 @@ class SummaryVectorIndex(object):
                 if need_update_connection_status(index_count):
                     connection_status['last_ai_indexed_count'] = index_count
                     seaqa_db.update_ai_index_status(connection_id, json.dumps(connection_status))
+
+                _flush_bulk_if_needed()
+
+            offset += page_size
+
+        _flush_bulk_if_needed(force=True)
+
+        if deleted_index_id_set:
+            self.delete_indexes_by_pks(index_name, deleted_index_id_set)
+
+        return index_count
+
+    def update_kb(self, table_name, index_name, project_uuid, last_ai_indexed_at=None):
+        index_count = 0
+        page_size = 1000
+        offset = 0
+        deleted_index_id_set = set()
+        bulk_params = []
+        pending_pks = set()
+
+        def _flush_bulk_if_needed(force=False):
+            nonlocal bulk_params, pending_pks
+            if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT):
+                if pending_pks:
+                    self.delete_indexes_by_pks(index_name, pending_pks)
+                    pending_pks = set()
+                self.seasearch_api.bulk(index_name, bulk_params)
+                bulk_params = []
+
+        if not last_ai_indexed_at:
+            last_ai_indexed_at = datetime.datetime(1970, 1, 1)
+
+        last_ai_indexed_at = last_ai_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
+
+        while True:
+            sql = f"""
+                SELECT _pk, ai_summary, ai_summary_vector, deleted, modified_time, ai_processed_time
+                FROM `{table_name}`
+                WHERE ai_processed_time IS NOT NULL
+                AND ai_processed_time > '{last_ai_indexed_at}'
+                ORDER BY ai_processed_time
+                LIMIT {page_size} OFFSET {offset}
+            """
+            result = self.seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+            if not rows:
+                break
+
+            for row in rows:
+                pk = row.get('_pk')
+                ai_summary = row.get('ai_summary')
+                ai_summary_vector = row.get('ai_summary_vector')
+                deleted = row.get('deleted')
+                modified_time = row.get('modified_time')
+
+                if deleted:
+                    deleted_index_id_set.add(pk)
+                    continue
+
+                if not ai_summary:
+                    logger.debug('Skip KB document without AI summary, pk=%s', pk)
+                    continue
+
+                index_info = {"index": {"_index": index_name}}
+                doc_info = {
+                    "ai_summary": ai_summary,
+                    "vec": ai_summary_vector,
+                    "project_id": project_uuid,
+                    "connection_id": None,
+                    "pk": pk,
+                    "modified_time": modified_time
+                }
+                bulk_params.append(index_info)
+                bulk_params.append(doc_info)
+                pending_pks.add(pk)
+
+                index_count += 1
 
                 _flush_bulk_if_needed()
 

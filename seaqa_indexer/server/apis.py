@@ -68,6 +68,20 @@ def add_connection_sync_task():
     return jsonify({'success': True}), 200
 
 
+@application.route('/add-knowledge-base-ai-process-and-index-task', methods=['POST'])
+@auth_required
+def add_knowledge_base_ai_process_and_index_task():
+    knowledge_base_id = request.args.get('knowledge_base_id')
+    project_uuid = request.args.get('project_uuid')
+    if not project_uuid:
+        return jsonify({'success': False, 'error_msg': 'Missing project_uuid parameter'}), 400
+    if not knowledge_base_id:
+        return jsonify({'success': False, 'error_msg': 'Missing knowledge_base_id parameter'}), 400
+
+    application.app.knowledge_base_manager.add_knowledge_base_ai_process_and_index_task(knowledge_base_id, project_uuid)
+    return jsonify({'success': True}), 200
+
+
 @application.route('/manual-sync-connection', methods=['POST'])
 @auth_required
 def manual_sync_connection():

@@ -15,6 +15,7 @@ from seaqa_indexer.workers.ai_process_worker_starter import AIProcessWorkerStart
 from seaqa_indexer.workers.content_vector_index_worker_starter import ContentVectorIndexWorkerStarter
 from seaqa_indexer.tasks.deleted_records_cleaner_starter import DeletedRecordsCleanerStarter
 from seaqa_indexer.seasearch.knowledge_base_index_master import KnowledgeBaseIndexMaster
+from seaqa_indexer.knowledge_base.knowledge_base_manager import KnowledgeBaseManager
 
 
 class SeaqaIndexerApp(object):
@@ -24,6 +25,7 @@ class SeaqaIndexerApp(object):
         self.github_issues_sync_manager = GithubIssuesSyncManager()
         self.discourse_sync_manager = DiscourseSyncManager()
         self.seafile_sync_manager = SeafileSyncManager()
+        self.knowledge_base_manager = KnowledgeBaseManager()
 
         self.web_crawl_worker_starter = WebCrawlWorkerStarter()
         self.index_worker_starter = IndexWorkerStarter()

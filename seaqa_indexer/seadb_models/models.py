@@ -278,6 +278,9 @@ class ThreadTable(BaseModel):
 class KnowledgeBaseTable(BaseModel):
     title = MappedColumn('title', PropertyTypes.TEXT)
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
+    ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
+    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)    
     creator = MappedColumn('creator', PropertyTypes.TEXT)
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
     last_modifier = MappedColumn('last_modifier', PropertyTypes.TEXT)

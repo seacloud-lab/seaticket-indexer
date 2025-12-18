@@ -10,7 +10,8 @@ from seaqa_indexer.seadb_models.models import (
     DiscourseTopicsTable,
     GithubIssuesTable,
     SeafileTable,
-    ThreadTable
+    ThreadTable,
+    KnowledgeBaseTable
 )
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
@@ -265,3 +266,37 @@ def process_email_ai(seadb_api, connection_id, project_uuid):
         if updates:
             seadb_api.update_rows(project_uuid, table_name, updates)
     return ai_processing_count
+
+
+def process_knowledge_base_ai(seadb_api, knowledge_base_id, project_uuid):
+    """Process AI summary for a single knowledge base entry"""
+    logger.info('Start AI process knowledge base: %s, project: %s', knowledge_base_id, project_uuid)
+
+    table_name = KnowledgeBaseTable.gen_table_name()
+    sql = f"SELECT `_pk`, `title`, `content` FROM `{table_name}` WHERE `_pk` = {knowledge_base_id} AND (`deleted` IS NULL OR `deleted` != true)"
+
+    result = seadb_api.query_rows(project_uuid, sql)
+    rows = result.get('results', [])
+
+    if not rows:
+        logger.warning('Knowledge base %s not found or deleted', knowledge_base_id)
+        return
+
+    row = rows[0]
+    pk = row.get('_pk')
+    title = row.get('title', '')
+    content = row.get('content', '')
+
+    full_content = f"Title: {title}\n\nContent: {content}\n"
+    summary, vector = generate_summary(full_content, 'knowledge_base', project_uuid)
+
+
+    updates = [{
+        "pk": pk,
+        "row": {
+            "ai_summary": summary,
+            "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+        }
+    }]
+    seadb_api.update_rows(project_uuid, table_name, updates)
+    logger.info('Finish AI process knowledge base: %s', knowledge_base_id)

@@ -10,6 +10,7 @@ from seaqa_indexer import config
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.seasearch.summary_index_connection import update_connection_summary_index
+from seaqa_indexer.seasearch.summary_index_knowledge_base import update_knowledge_base_summary_index
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
@@ -45,8 +46,11 @@ class SummaryIndexTaskWorker(object):
     def tname(self):
         return threading.current_thread().name
 
-    def _get_summary_index_lock_key(self, connection_id):
+    def _get_conn_summary_index_lock_key(self, connection_id):
         return 'summary_index_' + str(connection_id)
+
+    def _get_kb_summary_index_lock_key(self, knowledge_base_id):
+        return 'summary_index_kb_' + str(knowledge_base_id)
 
     def clear_worker(self):
         for th in self.worker_list:
@@ -81,8 +85,14 @@ class SummaryIndexTaskWorker(object):
                         if not data:
                             logger.warning('summary_index_task: invalid.', res)
                         else:
-                            connection_id = data.get('connection_id')
-                            self.work_task_handler(connection_id)
+                            task_type = data.get('type', 'connection')
+                            if task_type == 'knowledge_base':
+                                project_uuid = data.get('project_uuid')
+                                knowledge_base_id = data.get('knowledge_base_id')
+                                self.kb_task_handler(knowledge_base_id, project_uuid)
+                            else:
+                                connection_id = data.get('connection_id')
+                                self.conn_task_handler(connection_id)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -90,12 +100,11 @@ class SummaryIndexTaskWorker(object):
             logger.error(e, exc_info=True)
             time.sleep(0.3)
 
-    def work_task_handler(self, connection_id):
+    def conn_task_handler(self, connection_id):
         if not self.should_stop.is_set():
-            if self.mq.set(self._get_summary_index_lock_key(connection_id), time.time(),
-                      ex=self.LOCK_TIMEOUT, nx=True):
+            lock_key = self._get_conn_summary_index_lock_key(connection_id)
+            if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
                 logger.info('%s start summary index project connection: %s' % (self.tname, connection_id))
-                lock_key = self._get_summary_index_lock_key(connection_id)
                 self.locked_keys.add(lock_key)
                 self.update_ai_index(connection_id)
                 try:
@@ -108,11 +117,34 @@ class SummaryIndexTaskWorker(object):
             else:
                 self.add_to_undo_task(connection_id)
 
+    def kb_task_handler(self, knowledge_base_id, project_uuid):
+        if not self.should_stop.is_set():
+            lock_key = self._get_kb_summary_index_lock_key(knowledge_base_id)
+            if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
+                logger.info('%s start summary index knowledge base: %s' % (self.tname, knowledge_base_id))
+                self.locked_keys.add(lock_key)
+                self.update_kb_index(knowledge_base_id, project_uuid)
+                try:
+                    self.locked_keys.remove(lock_key)
+                except KeyError:
+                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+                self.mq.delete(lock_key)
+                logger.info("%s Finish summary index knowledge base: %s, delete redis lock %s" %
+                            (self.tname, knowledge_base_id, lock_key))
+            else:
+                self.add_kb_to_undo_task(knowledge_base_id, project_uuid)
+
     def update_ai_index(self, connection_id):
         try:
             update_connection_summary_index(connection_id, self.seaqa_db, self.seadb_api, self.seasearch_api)
         except Exception as e:
             logger.exception('Summary index connection: %s failed, error: %s', connection_id, e)
+
+    def update_kb_index(self, knowledge_base_id, project_uuid):
+        try:
+            update_knowledge_base_summary_index(knowledge_base_id, project_uuid, self.seaqa_db, self.seadb_api, self.seasearch_api)
+        except Exception as e:
+            logger.exception('Summary index knowledge base: %s failed, error: %s', knowledge_base_id, e)
 
     def add_to_undo_task(self, connection_id):
         """Push task back to the end of the queue."""
@@ -124,6 +156,18 @@ class SummaryIndexTaskWorker(object):
         self.mq.lpush('summary_index_task', json.dumps(msg_content))
         logger.info('%s push back summary index task connection_id: %s, to the queue' %
                      (threading.current_thread().name, connection_id))
+
+    def add_kb_to_undo_task(self, knowledge_base_id, project_uuid):
+        time.sleep(0.5)
+
+        msg_content = {
+            'knowledge_base_id': knowledge_base_id,
+            'project_uuid': project_uuid,
+            'type': 'knowledge_base',
+        }
+        self.mq.lpush('summary_index_task', json.dumps(msg_content))
+        logger.info('%s push back summary index kb task project_uuid: %s, to the queue' %
+                     (threading.current_thread().name, project_uuid))
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)
