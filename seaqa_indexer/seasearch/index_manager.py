@@ -20,7 +20,8 @@ from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVect
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_summary_index_name, gen_content_vector_index_name
+from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_summary_index_name, gen_content_vector_index_name,\
+    gen_kb_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -108,7 +109,7 @@ class IndexManager:
             bulk_search_params.extend(connection_params)
 
         if extra_sources and "knowledge_base" in extra_sources:
-            kb_index_name = f"knowledge_base_{project_uuid}"
+            kb_index_name = gen_kb_index_name(project_uuid)
             knowledge_base_search_param = self.knowledge_base_index.get_search_param(kb_index_name, keyword, start, size, time_from, time_to)
             bulk_search_params.append(knowledge_base_search_param)
 
