@@ -107,6 +107,3 @@ S3_HOST = configs.get('S3_HOST')
 S3_WEB_CRAWL_BUCKET = configs.get('S3_WEB_CRAWL_BUCKET')
 S3_KEY_ID = configs.get('S3_KEY_ID')
 S3_SECRET_KEY = configs.get('S3_SECRET_KEY')
-
-# AI Summary Task 
-KB_AI_SUMMARY_TASK_INTERVAL = configs.get('AI_SUMMARY_TASK_INTERVAL', 15 * 60)
