@@ -15,7 +15,6 @@ from seaqa_indexer.workers.ai_process_worker_starter import AIProcessWorkerStart
 from seaqa_indexer.workers.content_vector_index_worker_starter import ContentVectorIndexWorkerStarter
 from seaqa_indexer.tasks.deleted_records_cleaner_starter import DeletedRecordsCleanerStarter
 from seaqa_indexer.seasearch.knowledge_base_index_master import KnowledgeBaseIndexMaster
-from seaqa_indexer.tasks.knowledge_base_ai_summary_publisher import KBSummaryTaskPublish
 
 
 class SeaqaIndexerApp(object):
@@ -39,7 +38,6 @@ class SeaqaIndexerApp(object):
         self.sync_task_publisher = SyncTaskPublisher()
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
         self.deleted_records_cleaner_starter = DeletedRecordsCleanerStarter()
-        self.kb_ai_summary_task_publisher = KBSummaryTaskPublish()
 
     def serve_forever(self):
         self.web_crawl_worker_starter.start()
@@ -55,4 +53,3 @@ class SeaqaIndexerApp(object):
         self.sync_task_publisher.start()
         self.web_crawl_task_publisher.start()
         self.http_server.start()
-        self.kb_ai_summary_task_publisher.start()
