@@ -63,6 +63,7 @@ class KnowledgeBaseIndexMaster(Thread):
                             'type': 'knowledge_base',
                         })
                         self.mq.lpush('index_task', msg_data)
+                        self.mq.lpush('ai_process_task', msg_data)
                         logger.info('%s has been add to task queue' % msg_data)
 
             if len(self.pending_tasks) and (now_time - last_check_pending_tasks_time) > 30:
@@ -77,6 +78,7 @@ class KnowledgeBaseIndexMaster(Thread):
                             'type': 'knowledge_base',
                         })
                         self.mq.lpush('index_task', msg_data)
+                        self.mq.lpush('ai_process_task', msg_data)
                         logger.info('pending task %s has been add to task queue' % msg_data)
 
             if message is None:
