@@ -121,12 +121,14 @@ class DiscourseSync:
         else:
             self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id)
             logger.debug(f"Created new reply {post_number} in topic {topic_id}")
+        self.discourse_seadb_api.update_topic_sync_time(connection_id, topic_id)
 
     def handle_reply_delete(self, connection_id, topic_id, data):
         reply_data = data.get('post', {})
         post_number = reply_data.get('post_number')
         if post_number:
-            self.discourse_seadb_api.delete_reply(connection_id, topic_id, post_number)
+            self.discourse_seadb_api.delete_reply_from_db(connection_id, topic_id, post_number)
+            self.discourse_seadb_api.update_topic_sync_time(connection_id, topic_id)
             logger.info(f"Deleted reply {post_number} in topic {topic_id}")
 
     def handle_topic_deleted(self, topic_id, connection_id):
@@ -158,6 +160,7 @@ class DiscourseSync:
             self.topics_table.category_id.name: category_id,
             self.topics_table.modified_time.name: modified_time,
             self.topics_table.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            self.topics_table.deleted.name: False,
         }
         if resolved is not None:
             topic_data[self.topics_table.resolved.name] = resolved
@@ -174,7 +177,7 @@ class DiscourseSync:
             self.replies_table.author.name: author,
             self.replies_table.modified_time.name: modified_time,
             self.replies_table.topic_id.name: topic_id,
-            self.replies_table.post_number.name: post_number
+            self.replies_table.post_number.name: post_number,
         }
         if accepted_answer is not None:
             reply_data[self.replies_table.accepted_answer.name] = accepted_answer
