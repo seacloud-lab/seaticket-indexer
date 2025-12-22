@@ -8,8 +8,7 @@ from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, Ti
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.index_connection import update_connection_index
-from seaqa_indexer.seasearch.index_knowledge_base import update_knowledge_base_index
+from seaqa_indexer.seasearch.index_connection import update_connection_index, update_knowledge_base_index
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 
