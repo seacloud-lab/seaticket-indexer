@@ -149,7 +149,7 @@ class SeaqaDB(object):
             sql = "SELECT knowledge_base_indexed_at FROM projects WHERE uuid=:project_uuid AND deleted=false"
             return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
 
-    def get_kb_info_by_project_uuid(self, project_uuid):
+    def get_kb_ai_info_by_project_uuid(self, project_uuid):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
             sql = """SELECT uuid, knowledge_base_ai_indexed_at FROM projects WHERE uuid=:project_uuid AND (deleted=false OR deleted IS NULL)"""

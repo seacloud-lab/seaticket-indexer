@@ -12,18 +12,18 @@ logger = logging.getLogger(__name__)
 def update_knowledge_base_summary_index(project_uuid, seaqa_db, seadb_api, seasearch_api):
     logger.info('Start to index knowledge base summary vectors for project %s', project_uuid)
 
-    kb = seaqa_db.get_kb_info_by_project_uuid(project_uuid)
+    kb = seaqa_db.get_kb_ai_info_by_project_uuid(project_uuid)
     if not kb:
         logger.warning('Project %s does not exist', project_uuid)
         return
 
     last_kb_ai_indexed_at = kb.knowledge_base_ai_indexed_at
 
+    table_name = KnowledgeBaseTable.gen_table_name()
     fixed_count = fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api)
     if fixed_count > 0:
         logger.info('Fixed %d missing embeddings for knowledge base of project: %s before indexing', fixed_count, project_uuid)
 
-    table_name = KnowledgeBaseTable.gen_table_name()
     summary_vector_index = SummaryVectorIndex(seasearch_api, seadb_api)
     kb_summary_index_name = gen_kb_summary_index_name(project_uuid)
 

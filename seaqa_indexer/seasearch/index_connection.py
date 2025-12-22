@@ -211,12 +211,12 @@ def update_knowledge_base_index(project_uuid, db_session_class):
         seaqa_db = SeaqaDB(db_session_class)
         kb_seadb_api = KnowledgeBaseSeaDBAPI(project_uuid)
 
-        index_name = gen_kb_index_name(project_uuid)
-        kb_index.create_index_if_missing(index_name)
         project = seaqa_db.get_project_info_by_project_uuid(project_uuid)
         if not project:
             logger.warning('Project %s does not exist', project_uuid)
             return
+        index_name = gen_kb_index_name(project_uuid)
+        kb_index.create_index_if_missing(index_name)
         old_indexed_at = project.knowledge_base_indexed_at
         since = old_indexed_at
         if not since:
@@ -229,3 +229,4 @@ def update_knowledge_base_index(project_uuid, db_session_class):
         logger.info('Finish to index knowledge base project_uuid %s', project_uuid)
     except Exception as e:
         logger.exception('update knowledge base: %s index failed, error: %s', project_uuid, e)
+        
