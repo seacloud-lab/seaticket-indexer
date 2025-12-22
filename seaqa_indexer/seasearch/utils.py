@@ -19,8 +19,8 @@ def gen_kb_index_name(project_uuid):
 def gen_conn_summary_index_name(connection_id, connection_type):
     return f"{connection_type}_summary_vector_{connection_id}"
 
-def gen_kb_summary_index_name(base_id):
-    return f"knowledge_base_summary_vector_{base_id}"
+def gen_kb_summary_index_name(project_uuid):
+    return f"knowledge_base_summary_vector_{uuid_str_to_32_chars(project_uuid)}"
 
 def gen_content_vector_index_name(connection_id, connection_type):
     return f"{connection_type}_content_vector_{connection_id}"
