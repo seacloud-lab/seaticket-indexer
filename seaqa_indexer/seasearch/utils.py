@@ -91,7 +91,63 @@ def fix_summary_by_connection(connection_id, table_name, project_uuid, seadb_api
         logger.exception('Failed to fix embeddings for connection %s: %s', connection_id, e)
         return 0
 
+def fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api):
+    logger.info('Start fixing AI summary embeddings for knowledge base of project %s', project_uuid)
 
+    try:
+        page_size = 100
+        fixed_count = 0
+        updates = []
+
+        while True:
+            sql = f"""
+                SELECT _pk, ai_summary
+                FROM `{table_name}`
+                WHERE ai_summary IS NOT NULL 
+                AND ai_summary != ''
+                AND ai_summary_vector IS NULL
+                AND (deleted = false OR deleted IS NULL)
+                LIMIT {page_size}
+            """
+
+            result = seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+
+            if not rows:
+                break
+                
+            for row in rows:
+                pk = row.get('_pk')
+                ai_summary = row.get('ai_summary')
+
+                embedding = generate_embedding(ai_summary, project_uuid)
+                if not embedding:
+                    logger.warning('Failed to generate embedding for pk=%s', pk)
+                    continue
+                    
+                update_data = {
+                    'pk': pk,
+                    'row': {
+                        'ai_summary_vector': embedding,
+                        'ai_processed_time': datetime.datetime.now(datetime.UTC).isoformat()
+                    }
+                }
+                
+                updates.append(update_data)
+                if len(updates) >= 50:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
+
+                fixed_count += 1
+            if updates:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+
+        logger.info('Finished fixing embeddings for knowledge base of project %s, fixed %d records', project_uuid, fixed_count)
+        return fixed_count
+        
+    except Exception as e:
+        logger.exception('Failed to fix embeddings for knowledge base of project %s: %s', project_uuid, e)
+        return 0
 class EmailMessage(object):
     """ An email message represents a parsed email body.
     """
