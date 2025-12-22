@@ -15,6 +15,7 @@ from seaqa_indexer.workers.ai_process_worker_starter import AIProcessWorkerStart
 from seaqa_indexer.workers.content_vector_index_worker_starter import ContentVectorIndexWorkerStarter
 from seaqa_indexer.tasks.deleted_records_cleaner_starter import DeletedRecordsCleanerStarter
 from seaqa_indexer.seasearch.knowledge_base_index_master import KnowledgeBaseIndexMaster
+from seaqa_indexer.seasearch.ticket_index_master import TicketIndexMaster
 
 
 class SeaqaIndexerApp(object):
@@ -32,6 +33,7 @@ class SeaqaIndexerApp(object):
         self.ai_process_worker_starter = AIProcessWorkerStarter()
         self.content_vector_index_worker_starter = ContentVectorIndexWorkerStarter()
         self.kb_index_master = KnowledgeBaseIndexMaster()
+        self.ticket_index_master = TicketIndexMaster()
 
         self.http_server = HttpServer(self)
         self.project_connection_cleaner_starter = ProjectConnectionCleanerStarter()
@@ -47,6 +49,7 @@ class SeaqaIndexerApp(object):
         self.ai_process_worker_starter.start()
         self.content_vector_index_worker_starter.start()
         self.kb_index_master.start()
+        self.ticket_index_master.start()
 
         self.deleted_records_cleaner_starter.start()
         self.project_connection_cleaner_starter.start()

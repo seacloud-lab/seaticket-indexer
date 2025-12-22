@@ -14,6 +14,7 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.ai_processor.ai_processor import generate_summaries_and_vectors, process_knowledge_base_ai
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.ai_processor.ai_processor import process_ticket_ai
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +78,14 @@ class AIProcessTaskWorker(object):
                             if task_type == 'knowledge_base':
                                 project_uuid = data.get('project_uuid')
                                 self.kb_task_handler(project_uuid)
-                            else:
+                            elif data.get('type') == 'ticket':
+                                project_uuid = data.get('project_uuid')
+                                self.tickets_task_handler(project_uuid)
+                            elif data.get('type') == 'connection':
                                 connection_id = data.get('connection_id')
                                 self.work_task_handler(connection_id)
+                            else:
+                                logger.warning('ai_process_task: invalid.', res)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -104,6 +110,45 @@ class AIProcessTaskWorker(object):
                     "%s Finish AI process connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
             else:
                 self.add_to_undo_task(connection_id)
+
+    def tickets_task_handler(self, project_uuid):
+        if not self.should_stop.is_set():
+            lock_key = self._get_ai_process_lock_key(project_uuid)
+            if self.mq.set(lock_key, time.time(),
+                      ex=self.LOCK_TIMEOUT, nx=True):
+                logger.info('%s start AI process tickets: %s' % (self.tname, project_uuid))
+                self.locked_keys.add(lock_key)
+                self.process_tickets_ai_summary(project_uuid)
+                try:
+                    self.locked_keys.remove(lock_key)
+                except KeyError:
+                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+                self.mq.delete(lock_key)
+                logger.info(
+                    "%s Finish AI process tickets: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
+            else:
+                self.add_to_undo_task(project_uuid)
+
+    def process_tickets_ai_summary(self, project_uuid):
+        try:
+            process_ticket_ai(self.seadb_api, project_uuid)
+
+            msg_content = {
+                'project_uuid': project_uuid,
+                'type': 'ticket',
+            }
+            self.mq.lpush('summary_index_task', json.dumps(msg_content))
+        except Exception as e:
+            logger.exception('AI process tickets of project: %s failed, error: %s', project_uuid, e)
+
+    def add_to_undo_task(self, project_uuid):
+        time.sleep(0.5)
+        msg_content = {
+            'project_uuid': project_uuid,
+            'type': 'ticket',
+        }
+        self.mq.lpush('ai_process_task', json.dumps(msg_content))
+        logger.info('%s push back AI process task project_uuid: %s, to the queue' % (threading.current_thread().name, project_uuid))
 
     def process_ai_summary(self, connection_id):
         try:

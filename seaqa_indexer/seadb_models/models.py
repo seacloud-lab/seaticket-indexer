@@ -37,6 +37,76 @@ class ListTypes:
     }
 
 class SelectTypes:
+    ticket_status = {
+      "options": [
+        {
+          "id": "0001",
+          "name": "open",
+          "color": "#1A7F37",
+          "text_color": "#FFFFFF",
+        },
+        {
+          "id": "0002",
+          "name": "closed",
+          "color": "#8250DF",
+          "text_color": "#FFFFFF",
+        }
+      ]
+    }
+    ticket_substate = {
+      "cascade_column_key": "",
+      "cascade_settings": {
+        "0001": [
+          "0010",
+          "0011",
+          "0012",
+        ],
+        "0002": [
+          "0013",
+          "0014",
+          "0015"
+        ]
+      },
+      "options": [
+        {
+          "id": "0010",
+          "name": "New",
+          "color": "#59CB74",
+          "text_color": "#FFFFFF",
+        },
+        {
+          "id": "0011",
+          "name": "Working on",
+          "color": "#46A1FD",
+          "text_color": "#FFFFFF",
+        },
+        {
+          "id": "0012",
+          "name": "Backlog",
+          "color": "#9C9C9E",
+          "text_color": "#FFFFFF",
+        },
+        {
+          "id": "0013",
+          "name": "Completed",
+          "color": "#8250DF",
+          "text_color": "#FFFFFF",
+        },
+        {
+          "id": "0014",
+          "name": "Not planned",
+          "color": "#59636E",
+          "text_color": "#FFFFFF"
+        },
+        {
+          "id": "0015",
+          "name": "Duplicate",
+          "color": "#59636E",
+          "text_color": "#FFFFFF"
+        },
+      ]
+    }
+    
     state = {
       "options": [
         {
@@ -238,6 +308,38 @@ class SeafileTable(BaseModel):
     def gen_table_name(cls, connection_id):
         return ConnectionType.SEAFILE.value + '_' + str(connection_id)
 
+class TicketsTable(BaseModel):
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    content = MappedColumn('content', PropertyTypes.TEXT)
+    state = MappedColumn('state', PropertyTypes.SINGLE_SELECT, data=SelectTypes.ticket_status)
+    substate = MappedColumn('substate', PropertyTypes.SINGLE_SELECT, data=SelectTypes.ticket_substate)
+    type = MappedColumn('type', PropertyTypes.SINGLE_SELECT)
+    tags = MappedColumn('tags', PropertyTypes.MULTIPLE_SELECT)
+    assignees = MappedColumn('assignees', PropertyTypes.LIST)
+    participants = MappedColumn('participants', PropertyTypes.LIST)
+    priority = MappedColumn('priority', PropertyTypes.INT)
+    creator = MappedColumn('creator', PropertyTypes.TEXT)
+    comment_count = MappedColumn('comment_count', PropertyTypes.INT)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    closed_time = MappedColumn('closed_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+
+    @classmethod
+    def gen_table_name(cls):
+        return 'tickets'
+
+class TicketCommentsTable(BaseModel):
+    ticket_id = MappedColumn('ticket_id', PropertyTypes.INT)
+    content = MappedColumn('content', PropertyTypes.TEXT)
+    creator = MappedColumn('creator', PropertyTypes.TEXT)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+
+    @classmethod
+    def gen_table_name(cls):
+        return 'ticket_comments'
 
 class EmailTable(BaseModel):
     email_from = MappedColumn('email_from', PropertyTypes.TEXT)
