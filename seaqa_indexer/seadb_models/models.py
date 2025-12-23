@@ -141,7 +141,7 @@ class DiscourseTopicsTable(BaseModel):
     views = MappedColumn('views', PropertyTypes.INT)
     category_id = MappedColumn('category_id', PropertyTypes.INT)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
-    has_accepted_answer = MappedColumn('has_accepted_answer', PropertyTypes.BOOL)
+    resolved = MappedColumn('resolved', PropertyTypes.BOOL)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
