@@ -202,7 +202,8 @@ def update_email_index(project_connection, seasearch_api, seaqa_db):
     connection_status['last_indexed_count'] = index_count
     connection_status['last_index_status'] = IndexStatus.COMPLETED
     seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
-    
+
+
 def update_knowledge_base_index(project_uuid, db_session_class):
     try:
         logger.info('Start to index knowledge base project_uuid %s', project_uuid)

@@ -116,7 +116,7 @@ class SummaryVectorIndex(object):
 
         logger.info('Deleted %d index documents', len(doc_ids))
 
-    def update_conn(self, table_name, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_ai_indexed_at):
+    def update(self, table_name, index_name, connection_id, project_uuid, connection_status, seaqa_db, last_ai_indexed_at):
         index_count = 0
         page_size = 1000
         offset = 0

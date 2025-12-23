@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 SEASEARCH_BULK_OPERATE_LIMIT = 100
 
-class SummaryVectorIndexKnowledgeBase(object):
+class KnowledgeBaseSummaryVectorIndex(object):
     mapping = {
         'properties': {
             'project_id': {
@@ -104,7 +104,7 @@ class SummaryVectorIndexKnowledgeBase(object):
             self.seasearch_api.bulk(index_name, delete_params)
         logger.info('Deleted %d index documents', len(doc_ids))
 
-    def update_kb(self, table_name, index_name, project_uuid, last_ai_indexed_at=None):
+    def update(self, table_name, index_name, project_uuid, last_ai_indexed_at=None):
         index_count = 0
         page_size = 1000
         offset = 0
@@ -160,7 +160,6 @@ class SummaryVectorIndexKnowledgeBase(object):
                     "ai_summary": ai_summary,
                     "vec": ai_summary_vector,
                     "project_id": project_uuid,
-                    "connection_id": None,
                     "pk": pk,
                     "modified_time": modified_time
                 }

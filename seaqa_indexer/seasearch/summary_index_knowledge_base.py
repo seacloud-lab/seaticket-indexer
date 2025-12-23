@@ -2,7 +2,7 @@ import logging
 import datetime
 
 from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
-from seaqa_indexer.seasearch.index_store.summary_vector_index_knowledge_base import SummaryVectorIndexKnowledgeBase
+from seaqa_indexer.seasearch.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.seasearch.utils import gen_kb_summary_index_name, fix_summary_by_knowledge_base
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
 
@@ -25,13 +25,13 @@ def update_knowledge_base_summary_index(project_uuid, seaqa_db, seadb_api, sease
     if fixed_count > 0:
         logger.info('Fixed %d missing embeddings for knowledge base of project: %s before indexing', fixed_count, project_uuid)
 
-    summary_vector_index_kb = SummaryVectorIndexKnowledgeBase(seasearch_api, seadb_api)
+    kb_summary_vector_index = KnowledgeBaseSummaryVectorIndex(seasearch_api, seadb_api)
     kb_summary_index_name = gen_kb_summary_index_name(project_uuid)
 
-    summary_vector_index_kb.create_index_if_missing(kb_summary_index_name)
+    kb_summary_vector_index.create_index_if_missing(kb_summary_index_name)
 
     try:
-        indexed_count = summary_vector_index_kb.update_kb(
+        indexed_count = kb_summary_vector_index.update(
             table_name=table_name,
             index_name=kb_summary_index_name,
             project_uuid=project_uuid,

@@ -69,7 +69,7 @@ def update_connection_summary_index(connection_id, seaqa_db, seadb_api, seasearc
         ai_index_name = gen_conn_summary_index_name(connection_id, connection_type)
         summary_vector_index.create_index_if_missing(ai_index_name)
 
-        index_count = summary_vector_index.update_conn(
+        index_count = summary_vector_index.update(
             table_name,
             ai_index_name,
             connection_id,
