@@ -54,7 +54,7 @@ class DiscourseSync:
             # Default topic data structure is dict
             return {}
 
-    def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, modified_time, topic_created_time):
+    def insert_topic(self, topic_id, title, slug, views, category_id, connection_id, modified_time, topic_created_time, has_accepted_answer):
         """Insert a new topic"""
         topic_data = {
             self.topics_table.topic_id.name: topic_id,
@@ -65,7 +65,10 @@ class DiscourseSync:
             self.topics_table.modified_time.name: modified_time,
             self.topics_table.deleted.name: False,
             self.topics_table.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            self.topics_table.created_time.name: topic_created_time,}
+            self.topics_table.created_time.name: topic_created_time,
+        }
+        if has_accepted_answer is not None:
+            topic_data[self.topics_table.has_accepted_answer.name] = has_accepted_answer
         self.discourse_seadb_api.insert_topic(connection_id, topic_data)
 
     def delete_topic_and_replies(self, topic_id, connection_id):
@@ -88,7 +91,7 @@ class DiscourseSync:
         category_id = topic_data.get('category_id')
         if topic_pk := existing_topic.get('_pk'):
             modified_time = time_to_utc_time(topic_data.get('last_posted_at')).isoformat()
-            self.update_topic(title, slug, views, category_id, connection_id, modified_time, topic_pk)
+            self.update_topic(title, slug, views, category_id, connection_id, modified_time, topic_pk, has_accepted_answer=None)
             logger.debug(f"Updated existing topic {topic_id}")
         else:
             # When using webhook, the returned value does not have a modified_time.
@@ -97,7 +100,7 @@ class DiscourseSync:
                 modified_time = time_to_utc_time(topic_data.get('bumped_at')).isoformat()
             else:
                 modified_time = time_to_utc_time(topic_data.get('last_posted_at')).isoformat()
-            self.insert_topic(topic_id, title, slug, views, category_id, connection_id, modified_time, topic_created_time)
+            self.insert_topic(topic_id, title, slug, views, category_id, connection_id, modified_time, topic_created_time, has_accepted_answer=None)
             logger.debug(f"Created new topic {topic_id}")
 
     def handle_reply_update(self, connection_id, topic_id, data):
@@ -113,7 +116,7 @@ class DiscourseSync:
         modified_time = time_to_utc_time(reply_data.get('updated_at')).isoformat()
         if existing_reply:
             reply_pk = existing_reply.get('_pk')
-            self.update_reply(content, author, topic_id, post_number, modified_time, connection_id, reply_pk)
+            self.update_reply(content, author, topic_id, post_number, modified_time, connection_id, reply_pk, accepted_answer=None)
             logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
         else:
             self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id)
@@ -134,18 +137,19 @@ class DiscourseSync:
         except Exception as e:
             logger.error(f"Failed to delete topic {topic_id}: {e}")
 
-    def insert_reply(self, topic_id, post_number, content, author, modified_time, connection_id):
+    def insert_reply(self, topic_id, post_number, content, author, modified_time, connection_id, accepted_answer):
         """Insert a new reply"""
         reply_data = {
             self.replies_table.topic_id.name: topic_id,
             self.replies_table.post_number.name: post_number,
             self.replies_table.content.name: content,
             self.replies_table.author.name: author,
+            self.replies_table.accepted_answer.name: accepted_answer,
             self.replies_table.modified_time.name: modified_time,
         }
         self.discourse_seadb_api.insert_reply(connection_id, reply_data)
 
-    def update_topic(self, title, slug, views, category_id, connection_id, modified_time, primary_key):
+    def update_topic(self, title, slug, views, category_id, connection_id, modified_time, primary_key, has_accepted_answer):
         """Update an existing topic"""
         topic_data = {
             self.topics_table.title.name: title,
@@ -155,13 +159,15 @@ class DiscourseSync:
             self.topics_table.modified_time.name: modified_time,
             self.topics_table.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
+        if has_accepted_answer is not None:
+            topic_data[self.topics_table.has_accepted_answer.name] = has_accepted_answer
         self.discourse_seadb_api.update_topic(connection_id, topic_data, primary_key)
 
     def check_existing_reply(self, topic_id, post_number, connection_id):
         """Check if a reply already exists"""
         return self.discourse_seadb_api.get_reply_by_id(connection_id, topic_id, post_number)
 
-    def update_reply(self, content, author, topic_id, post_number, modified_time, connection_id, reply_pk):
+    def update_reply(self, content, author, topic_id, post_number, modified_time, connection_id, reply_pk, accepted_answer):
         """Update an existing reply"""
         reply_data = {
             self.replies_table.content.name: content,
@@ -170,6 +176,8 @@ class DiscourseSync:
             self.replies_table.topic_id.name: topic_id,
             self.replies_table.post_number.name: post_number
         }
+        if accepted_answer is not None:
+            reply_data[self.replies_table.accepted_answer.name] = accepted_answer
         # Update reply
         self.discourse_seadb_api.update_reply(connection_id, reply_pk, reply_data)
 
@@ -186,6 +194,7 @@ class DiscourseSync:
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
+        has_accepted_answer = topic_data.get('has_accepted_answer', False)
         modified_time = time_to_utc_time(topic_data.get('bumped_at')).isoformat()
 
         # Fetch replies
@@ -193,7 +202,7 @@ class DiscourseSync:
 
         if primary_key:
             # Update existing topic
-            self.update_topic(title, slug, views, category_id, connection_id, modified_time, primary_key)
+            self.update_topic(title, slug, views, category_id, connection_id, modified_time, primary_key, has_accepted_answer)
             # Upate existing reply, but the deleted reply will be retained.
             for reply in topic_replies_data.get('replies', []):
                 post_number = reply.get('post_number')
@@ -203,17 +212,18 @@ class DiscourseSync:
 
                 author = reply.get('username')
                 modified_time = time_to_utc_time(reply.get('modified_time')).isoformat()
+                accepted_answer = reply.get('accepted_answer')
 
                 if existing_reply := self.check_existing_reply(topic_id, post_number, connection_id):
                     reply_pk = existing_reply.get('_pk')
-                    self.update_reply(content, author, topic_id, post_number, modified_time, connection_id, reply_pk)
+                    self.update_reply(content, author, topic_id, post_number, modified_time, connection_id, reply_pk, accepted_answer)
                 else:
-                    self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id)
+                    self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id, accepted_answer)
                 logger.debug(f"Successfully updated topic {topic_id} with replies.")
         else:
             # Create new topic
             topic_created_time = time_to_utc_time(topic_data.get('created_at')).isoformat()
-            self.insert_topic(topic_id, title, slug, views, category_id, connection_id, modified_time, topic_created_time)
+            self.insert_topic(topic_id, title, slug, views, category_id, connection_id, modified_time, topic_created_time, has_accepted_answer)
 
             if not topic_replies_data:
                 logger.info(f"fetch 0 replies for topic {topic_id}")
@@ -233,8 +243,9 @@ class DiscourseSync:
 
             author = reply.get('username')
             modified_time = time_to_utc_time(reply.get('modified_time')).isoformat()
+            accepted_answer = reply.get('accepted_answer')
 
-            self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id)
+            self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id, accepted_answer)
         logger.debug(f"Successfully processed and saved topic {topic_id} with replies")
 
     @retry_with_exponential_backoff()
@@ -274,6 +285,7 @@ class DiscourseSync:
                 'username': post.get('username'),
                 'created_time': post.get('created_at'),
                 'modified_time': post.get('updated_at'),
+                'accepted_answer': post.get('accepted_answer', False),
                 'cooked': post.get('cooked', ''),
                 'raw': post.get('raw', ''),
                 'reply_count': post.get('reply_count', 0),
