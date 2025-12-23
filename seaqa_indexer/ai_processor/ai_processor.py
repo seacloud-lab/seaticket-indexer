@@ -291,6 +291,7 @@ def process_knowledge_base_ai(seadb_api, project_uuid):
                 "pk": pk,
                 "row": {
                     "ai_summary": summary,
+                    "ai_summary_vector": vector,
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
                 }
             })
