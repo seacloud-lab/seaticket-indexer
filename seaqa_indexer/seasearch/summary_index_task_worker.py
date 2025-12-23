@@ -9,8 +9,7 @@ from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, Ti
 from seaqa_indexer import config
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.summary_index_connection import update_connection_summary_index
-from seaqa_indexer.seasearch.summary_index_knowledge_base import update_knowledge_base_summary_index
+from seaqa_indexer.seasearch.summary_index_utils import update_connection_summary_index, update_knowledge_base_summary_index
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
@@ -62,8 +61,8 @@ class SummaryIndexTaskWorker(object):
             return
         for i in range(int(self.worker_num)):
             t = threading.Thread(
-                target=self.summary_index_task_worker, 
-                name='summary_index_task_worker_thread_' + str(i), 
+                target=self.summary_index_task_worker,
+                name='summary_index_task_worker_thread_' + str(i),
                 daemon=True
             )
             t.start()

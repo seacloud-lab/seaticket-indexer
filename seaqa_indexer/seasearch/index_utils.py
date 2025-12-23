@@ -230,4 +230,3 @@ def update_knowledge_base_index(project_uuid, db_session_class):
         logger.info('Finish to index knowledge base project_uuid %s', project_uuid)
     except Exception as e:
         logger.exception('update knowledge base: %s index failed, error: %s', project_uuid, e)
-        

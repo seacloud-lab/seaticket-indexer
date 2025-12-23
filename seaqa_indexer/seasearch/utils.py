@@ -91,6 +91,7 @@ def fix_summary_by_connection(connection_id, table_name, project_uuid, seadb_api
         logger.exception('Failed to fix embeddings for connection %s: %s', connection_id, e)
         return 0
 
+
 def fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api):
     logger.info('Start fixing AI summary embeddings for knowledge base of project %s', project_uuid)
 
@@ -115,7 +116,7 @@ def fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api):
 
             if not rows:
                 break
-                
+
             for row in rows:
                 pk = row.get('_pk')
                 ai_summary = row.get('ai_summary')
@@ -124,7 +125,7 @@ def fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api):
                 if not embedding:
                     logger.warning('Failed to generate embedding for pk=%s', pk)
                     continue
-                    
+
                 update_data = {
                     'pk': pk,
                     'row': {
@@ -132,7 +133,7 @@ def fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api):
                         'ai_processed_time': datetime.datetime.now(datetime.UTC).isoformat()
                     }
                 }
-                
+
                 updates.append(update_data)
                 if len(updates) >= 50:
                     seadb_api.update_rows(project_uuid, table_name, updates)
@@ -144,10 +145,12 @@ def fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api):
 
         logger.info('Finished fixing embeddings for knowledge base of project %s, fixed %d records', project_uuid, fixed_count)
         return fixed_count
-        
+
     except Exception as e:
         logger.exception('Failed to fix embeddings for knowledge base of project %s: %s', project_uuid, e)
         return 0
+
+
 class EmailMessage(object):
     """ An email message represents a parsed email body.
     """
