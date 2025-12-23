@@ -179,3 +179,47 @@ class KnowledgeBaseSummaryVectorIndex(object):
             self.delete_indexes_by_pks(index_name, deleted_index_id_set)
 
         return index_count
+
+    def semantic_search(self, index_name, query_vector, top_k=10, time_from=None, time_to=None):
+        data = {
+            "query_field": "vec",
+            "k": top_k,
+            "return_fields": ["ai_summary", "project_id", "pk", "modified_time"],
+            "vector": query_vector,
+            "_source": False
+        }
+
+        if time_from is not None or time_to is not None:
+            range_filter = {}
+            if time_from is not None:
+                range_filter["gte"] = time_from
+            if time_to is not None:
+                range_filter["lte"] = time_to
+
+            data["filter"] = {
+                "range": {
+                    "modified_time": range_filter
+                }
+            }
+
+        search_results = self.seasearch_api.vector_search(
+            index_names=[index_name],
+            data=data
+        )
+
+        hits = search_results.get('hits', {}).get('hits', [])
+        hits.sort(key=lambda x: x.get('_score', 0), reverse=True)
+
+        topk_search_results = []
+        for i, hit in enumerate(hits):
+            if i >= top_k:
+                break
+            fields = hit.get('fields', {})
+            topk_search_results.append({
+                'ai_summary': fields.get('ai_summary', [''])[0],
+                'project_id': fields.get('project_id', [''])[0],
+                'pk': fields.get('pk', [''])[0],
+                'modified_time': fields.get('modified_time', [None])[0],
+                'score': hit.get('_score', 0)
+            })
+        return topk_search_results
