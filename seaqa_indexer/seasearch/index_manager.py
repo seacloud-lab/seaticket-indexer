@@ -84,8 +84,16 @@ class IndexManager:
 
     def delete_index_by_connection(self, connection_id, connection_type):
         index_name = gen_index_name_by_type(connection_id, connection_type)
+        # summary vector index
+        summary_index_name = gen_summary_index_name(connection_id, connection_type)
+        self.summary_vector_index.delete_index_by_index_name(summary_index_name)
+
         if connection_type == ConnectionType.SITE.value:
+            # keyword index
             self.site_index.delete_index_by_index_name(index_name)
+            # content vector index
+            content_index_name = gen_content_vector_index_name(connection_id, connection_type)
+            self.content_vector_index.delete_index_by_index_name(content_index_name)
         elif connection_type == ConnectionType.SEAFILE.value:
             self.seafile_index.delete_index_by_index_name(index_name)
         elif connection_type == ConnectionType.GITHUB_ISSUE.value:
