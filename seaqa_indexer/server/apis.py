@@ -167,7 +167,7 @@ def search():
     except:
         count = 20
     if search_type == 'semantic_search':
-        results = application.app.index_manager.semantic_search(project_uuid, connection_ids, query, username, time_from, time_to, count)
+        results = application.app.index_manager.semantic_search(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count)
     else:
         results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
         # Skip deleted kb

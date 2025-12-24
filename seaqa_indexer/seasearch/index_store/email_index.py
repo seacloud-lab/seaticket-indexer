@@ -8,7 +8,7 @@ from seaqa_indexer.seasearch.utils import EmailMessage
 
 logger = logging.getLogger(__name__)
 
-SEASEARCH_BULK_OPETATE_LIMIT = 100
+SEASEARCH_BULK_OPERATE_LIMIT = 100
 
 
 class EmailIndex(object):
@@ -183,7 +183,7 @@ class EmailIndex(object):
         delete_params = []
         for _id in ids:
             delete_params.append({'delete': {'_id': _id, '_index': index_name}})
-            if len(delete_params) >= SEASEARCH_BULK_OPETATE_LIMIT:
+            if len(delete_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
                 self.seasearch_api.bulk(index_name, delete_params)
                 delete_params = []
         if delete_params:
@@ -237,7 +237,7 @@ class EmailIndex(object):
                     bulk_params.append(index_info)
                     bulk_params.append(doc)
 
-                    if len(bulk_params) >= SEASEARCH_BULK_OPETATE_LIMIT:
+                    if len(bulk_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
                         self.seasearch_api.bulk(index_name, bulk_params)
                         bulk_params = []
 

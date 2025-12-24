@@ -17,3 +17,15 @@ class KnowledgeBaseSeaDBAPI:
     def delete_knowledge_bases_from_db(self, deleted_seadb_pk_list):
         table_name = KnowledgeBaseTable.gen_table_name()
         self.seadb_api.delete_rows(self.base_id, table_name, deleted_seadb_pk_list)
+
+    def get_need_ai_knowledge_bases_by_page(self, page_size):
+        table_name = KnowledgeBaseTable.gen_table_name()
+        sql = f"""
+            SELECT * FROM `{table_name}`
+            WHERE (ai_processed_time IS NULL OR ai_processed_time < modified_time) 
+            AND (deleted IS NULL OR deleted != true)
+            LIMIT {page_size}
+        """
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        knowledge_bases = res.get('results', [])
+        return knowledge_bases
