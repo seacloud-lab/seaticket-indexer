@@ -62,8 +62,7 @@ class TicketIndexMaster(Thread):
                             self.pending_tasks[project_uuid] = now_time
                             self._add_to_task_queue(project_uuid)
 
-                if len(self.pending_tasks) and (
-                        now_time - last_check_pending_tasks_time) > self.check_pending_tasks_interval:
+                if len(self.pending_tasks) and (now_time - last_check_pending_tasks_time) > self.check_pending_tasks_interval:
                     last_check_pending_tasks_time = time.time()
                     copied_pending_tasks = deepcopy(self.pending_tasks)
                     logger.info('start check pending tasks, task number: %s', len(copied_pending_tasks))
@@ -83,5 +82,7 @@ class TicketIndexMaster(Thread):
             'project_uuid': project_uuid,
             'type': 'ticket',
         })
+
+        self.mq.lpush('index_task', msg_data)
         self.mq.lpush('ai_process_task', msg_data)
         logger.info('%s has been add to task queue' % msg_data)
