@@ -52,6 +52,9 @@ class SummaryIndexTaskWorker(object):
     def _get_kb_summary_index_lock_key(self, project_uuid):
         return 'summary_index_kb_' + str(project_uuid)
 
+    def _get_ticket_summary_index_lock_key(self, project_uuid):
+        return 'summary_index_ticket_' + str(project_uuid)
+
     def clear_worker(self):
         for th in self.worker_list:
             th.join()
@@ -140,7 +143,7 @@ class SummaryIndexTaskWorker(object):
 
     def tickets_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
-            lock_key = self._get_summary_index_lock_key('ticket_' + str(project_uuid))
+            lock_key = self._get_ticket_summary_index_lock_key(project_uuid)
             if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
                 logger.info('%s start summary index tickets: %s' % (self.tname, project_uuid))
                 self.locked_keys.add(lock_key)

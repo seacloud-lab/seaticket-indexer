@@ -8,7 +8,7 @@ from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES, Connec
 from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable, \
-    ThreadTable, KnowledgeBaseTable
+    ThreadTable, KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
 from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
@@ -18,10 +18,12 @@ from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
 from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVectorIndex
 from seaqa_indexer.seasearch.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
+from seaqa_indexer.seasearch.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, gen_kb_index_name, gen_kb_summary_index_name
+from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, \
+    gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_summary_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -49,6 +51,7 @@ class IndexManager:
         self.summary_vector_index = SummaryVectorIndex(self.seasearch_api, self.seadb_api)
         self.content_vector_index = ContentVectorIndex(self.seasearch_api, self.seadb_api, storage=None)
         self.kb_summary_vector_index = KnowledgeBaseSummaryVectorIndex(self.seasearch_api, self.seadb_api)
+        self.ticket_summary_vector_index = TicketSummaryVectorIndex(self.seasearch_api, self.seadb_api)
 
     def _build_connection_search_params(self, project_connections, keyword, start, size, time_from, time_to):
         bulk_search_params = []
@@ -322,18 +325,41 @@ class IndexManager:
             else:
                 logger.warning('Knowledge base summary index not found')
 
+        if extra_sources and 'ticket' in extra_sources:
+            ticket_summary_index_name = gen_ticket_summary_index_name(project_uuid)
+            if self.ticket_summary_vector_index.check_index(ticket_summary_index_name):
+                try:
+                    ticket_summary_results = self.ticket_summary_vector_index.semantic_search(
+                        ticket_summary_index_name, query_vector, per_connection_limit,
+                        time_from=time_from, time_to=time_to
+                    )
+                    for result in ticket_summary_results:
+                        result['source_type'] = 'ticket_summary'
+                    all_results.extend(ticket_summary_results)
+                except Exception as e:
+                    logger.warning('Ticket summary semantic search failed: %s', e)
+            else:
+                logger.warning('Ticket summary index not found')
+
         all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
 
         # encapsulate data
         connection_pks_map = {}  # {connection_id: {'pks': [pk1, pk2], 'results': [result1, result2]}}
         connection_objects = {}
         kb_pks = set()
+        ticket_pks = set()
 
         for result in all_results:
             if result.get('source_type') == 'knowledge_base_summary':
                 pk = result.get('pk')
                 if pk is not None:
                     kb_pks.add(pk)
+                continue
+
+            if result.get('source_type') == 'ticket_summary':
+                pk = result.get('pk')
+                if pk is not None:
+                    ticket_pks.add(pk)
                 continue
 
             connection_id = int(result.get('connection_id'))
@@ -407,6 +433,22 @@ class IndexManager:
                 logger.error(f'Error querying knowledge base records: {e}')
                 kb_records = {}
 
+        ticket_records = {}
+        if ticket_pks:
+            try:
+                ticket_table_name = TicketsTable.gen_table_name()
+                ticket_pks_str = ','.join(map(str, ticket_pks))
+                sql = f"SELECT * FROM `{ticket_table_name}` WHERE _pk IN ({ticket_pks_str})"
+                res = self.seadb_api.query_rows(project_uuid, sql)
+                records = res.get('results', [])
+                for record in records:
+                    record_pk = record.get('_pk')
+                    ticket_records[record_pk] = record
+                    ticket_records[str(record_pk)] = record
+            except Exception as e:
+                logger.error(f'Error querying ticket records: {e}')
+                ticket_records = {}
+
         processed_results = []
         for result in all_results:
             pk = result.get('pk')
@@ -424,6 +466,24 @@ class IndexManager:
                     '_id': pk,
                     'score': score,
                     'type': 'knowledge_base',
+                    'content': ai_summary,
+                    'title': record.get('title', ''),
+                    'modified_time': record.get('modified_time', ''),
+                    'source_type': source_type
+                }
+                processed_results.append(processed_result)
+                continue
+
+            if source_type == 'ticket_summary':
+                record = ticket_records.get(pk)
+                if not record:
+                    logger.warning(f'Ticket record not found for pk {pk}')
+                    continue
+
+                processed_result = {
+                    '_id': pk,
+                    'score': score,
+                    'type': 'ticket',
                     'content': ai_summary,
                     'title': record.get('title', ''),
                     'modified_time': record.get('modified_time', ''),

@@ -22,7 +22,7 @@ def update_tickets_summary_index(project_uuid, seaqa_db, seadb_api, seasearch_ap
         logger.info('Fixed %d missing embeddings for tickets of project: %s before indexing', fixed_count, project_uuid)
 
     summary_vector_index_ticket = TicketSummaryVectorIndex(seasearch_api, seadb_api)
-    ai_index_name = gen_ticket_summary_index_name('ticket', project_uuid)
+    ai_index_name = gen_ticket_summary_index_name(project_uuid)
     summary_vector_index_ticket.create_index_if_missing(ai_index_name)
 
     index_count = summary_vector_index_ticket.update_tickets(
