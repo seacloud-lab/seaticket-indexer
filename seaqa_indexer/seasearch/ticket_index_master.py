@@ -16,7 +16,7 @@ class TicketIndexMaster(Thread):
         Thread.__init__(self)
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         self.pending_tasks = dict()
-        self.interval = 1 * 60
+        self.interval = 10 * 60
         self.check_pending_tasks_interval = 30
 
     def now(self):
