@@ -16,6 +16,9 @@ def gen_index_name_by_type(connection_id, connection_type):
 def gen_kb_index_name(project_uuid):
     return f"knowledge_base_{uuid_str_to_32_chars(project_uuid)}"
 
+def gen_ticket_index_name(project_uuid):
+    return f"ticket_{uuid_str_to_32_chars(project_uuid)}"
+
 def gen_conn_summary_index_name(connection_id, connection_type):
     return f"{connection_type}_summary_vector_{connection_id}"
 

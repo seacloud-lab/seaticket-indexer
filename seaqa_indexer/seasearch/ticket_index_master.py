@@ -1,17 +1,18 @@
-import json
+from threading import Thread
 import time
 import logging
-from threading import Thread
+import json
 from copy import deepcopy
 from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
-
 from seaqa_indexer import config
 from seaqa_indexer.mq import get_mq, NoMessageException
-
 logger = logging.getLogger(__name__)
 
-
 class TicketIndexMaster(Thread):
+    """
+    Index master for ticket updates.
+    Listens on the ticket_update channel and adds tasks to index_task and ai_process_task.
+    """
     def __init__(self):
         Thread.__init__(self)
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
@@ -86,3 +87,4 @@ class TicketIndexMaster(Thread):
         self.mq.lpush('index_task', msg_data)
         self.mq.lpush('ai_process_task', msg_data)
         logger.info('%s has been add to task queue' % msg_data)
+
