@@ -15,7 +15,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.seasearch.summary_index_ticket import update_tickets_summary_index
+from seaqa_indexer.seasearch.summary_index_utils import update_tickets_summary_index
 
 
 logger = logging.getLogger(__name__)
