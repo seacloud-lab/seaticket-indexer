@@ -8,7 +8,8 @@ from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVect
 from seaqa_indexer.seasearch.utils import gen_conn_summary_index_name, fix_summary_by_connection, gen_kb_summary_index_name, fix_summary_by_knowledge_base
 from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable, ThreadTable
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
-from seaqa_indexer.seasearch.index_store.project_summary_vector_index import ProjectSummaryVectorIndex
+from seaqa_indexer.seasearch.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
+from seaqa_indexer.seasearch.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
 from seaqa_indexer.seasearch.utils import gen_ticket_summary_index_name, fix_summary_by_tickets
 from seaqa_indexer.seadb_models.models import TicketsTable
 
@@ -109,7 +110,7 @@ def update_knowledge_base_summary_index(project_uuid, seaqa_db, seadb_api, sease
     if fixed_count > 0:
         logger.info('Fixed %d missing embeddings for knowledge base of project: %s before indexing', fixed_count, project_uuid)
 
-    kb_summary_vector_index = ProjectSummaryVectorIndex(seasearch_api, seadb_api)
+    kb_summary_vector_index = KnowledgeBaseSummaryVectorIndex(seasearch_api, seadb_api)
     kb_summary_index_name = gen_kb_summary_index_name(project_uuid)
 
     kb_summary_vector_index.create_index_if_missing(kb_summary_index_name)
@@ -145,7 +146,7 @@ def update_tickets_summary_index(project_uuid, seaqa_db, seadb_api, seasearch_ap
     if fixed_count > 0:
         logger.info('Fixed %d missing embeddings for tickets of project: %s before indexing', fixed_count, project_uuid)
 
-    ticket_summary_vector_index = ProjectSummaryVectorIndex(seasearch_api, seadb_api)
+    ticket_summary_vector_index = TicketSummaryVectorIndex(seasearch_api, seadb_api)
     ai_index_name = gen_ticket_summary_index_name(project_uuid)
     ticket_summary_vector_index.create_index_if_missing(ai_index_name)
 

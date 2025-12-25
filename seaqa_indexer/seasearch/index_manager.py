@@ -17,7 +17,8 @@ from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
 
 from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVectorIndex
-from seaqa_indexer.seasearch.index_store.project_summary_vector_index import ProjectSummaryVectorIndex
+from seaqa_indexer.seasearch.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
+from seaqa_indexer.seasearch.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
@@ -49,8 +50,8 @@ class IndexManager:
 
         self.summary_vector_index = SummaryVectorIndex(self.seasearch_api, self.seadb_api)
         self.content_vector_index = ContentVectorIndex(self.seasearch_api, self.seadb_api, storage=None)
-        self.kb_summary_vector_index = ProjectSummaryVectorIndex(self.seasearch_api, self.seadb_api)
-        self.ticket_summary_vector_index = ProjectSummaryVectorIndex(self.seasearch_api, self.seadb_api)
+        self.kb_summary_vector_index = KnowledgeBaseSummaryVectorIndex(self.seasearch_api, self.seadb_api)
+        self.ticket_summary_vector_index = TicketSummaryVectorIndex(self.seasearch_api, self.seadb_api)
 
     def _build_connection_search_params(self, project_connections, keyword, start, size, time_from, time_to):
         bulk_search_params = []
@@ -351,13 +352,13 @@ class IndexManager:
         for result in all_results:
             if result.get('source_type') == 'knowledge_base_summary':
                 pk = result.get('pk')
-                if pk is not None and pk != '':
+                if pk is not None:
                     kb_pks.add(pk)
                 continue
 
             if result.get('source_type') == 'ticket_summary':
                 pk = result.get('pk')
-                if pk is not None and pk != '':
+                if pk is not None:
                     ticket_pks.add(pk)
                 continue
 

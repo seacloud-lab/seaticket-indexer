@@ -78,10 +78,10 @@ class AIProcessTaskWorker(object):
                             if task_type == 'knowledge_base':
                                 project_uuid = data.get('project_uuid')
                                 self.kb_task_handler(project_uuid)
-                            elif data.get('type') == 'ticket':
+                            elif task_type == 'ticket':
                                 project_uuid = data.get('project_uuid')
                                 self.tickets_task_handler(project_uuid)
-                            elif data.get('type') == 'connection':
+                            elif task_type == 'connection':
                                 connection_id = data.get('connection_id')
                                 self.work_task_handler(connection_id)
                             else:
@@ -114,8 +114,7 @@ class AIProcessTaskWorker(object):
     def tickets_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
             lock_key = self._get_ai_process_lock_key('ticket_' + str(project_uuid))
-            if self.mq.set(lock_key, time.time(),
-                      ex=self.LOCK_TIMEOUT, nx=True):
+            if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
                 logger.info('%s start AI process tickets: %s' % (self.tname, project_uuid))
                 self.locked_keys.add(lock_key)
                 self.process_tickets_ai_summary(project_uuid)
@@ -124,10 +123,9 @@ class AIProcessTaskWorker(object):
                 except KeyError:
                     logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                 self.mq.delete(lock_key)
-                logger.info(
-                    "%s Finish AI process tickets: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
+                logger.info("%s Finish AI process tickets: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
             else:
-                self.add_to_undo_task(project_uuid)
+                self.add_ticket_to_undo_task(project_uuid)
 
     def process_tickets_ai_summary(self, project_uuid):
         try:
@@ -141,7 +139,7 @@ class AIProcessTaskWorker(object):
         except Exception as e:
             logger.exception('AI process tickets of project: %s failed, error: %s', project_uuid, e)
 
-    def add_to_undo_task(self, project_uuid):
+    def add_ticket_to_undo_task(self, project_uuid):
         time.sleep(0.5)
         msg_content = {
             'project_uuid': project_uuid,

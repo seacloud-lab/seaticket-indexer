@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 SEASEARCH_BULK_OPERATE_LIMIT = 100
 
 
-class ProjectSummaryVectorIndex(object):
+class TicketSummaryVectorIndex(object):
     mapping = {
         'properties': {
             'project_uuid': {
@@ -219,8 +219,8 @@ class ProjectSummaryVectorIndex(object):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
-                'project_uuid': fields.get('project_uuid', [''])[0],
-                'pk': fields.get('pk', [''])[0],
+                'project_uuid': fields.get('project_uuid')[0],
+                'pk': fields.get('pk')[0],
                 'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0)
             })

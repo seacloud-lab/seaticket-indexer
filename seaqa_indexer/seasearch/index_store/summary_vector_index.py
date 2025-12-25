@@ -236,9 +236,9 @@ class SummaryVectorIndex(object):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
-                'project_id': fields.get('project_id', [''])[0],
-                'connection_id': fields.get('connection_id', [''])[0],
-                'pk': fields.get('pk', [''])[0],
+                'project_id': fields.get('project_id')[0],
+                'connection_id': fields.get('connection_id')[0],
+                'pk': fields.get('pk')[0],
                 'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0)
             })
