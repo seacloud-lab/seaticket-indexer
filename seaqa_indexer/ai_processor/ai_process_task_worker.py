@@ -113,7 +113,7 @@ class AIProcessTaskWorker(object):
 
     def tickets_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
-            lock_key = self._get_ai_process_lock_key(project_uuid)
+            lock_key = self._get_ai_process_lock_key('ticket_' + str(project_uuid))
             if self.mq.set(lock_key, time.time(),
                       ex=self.LOCK_TIMEOUT, nx=True):
                 logger.info('%s start AI process tickets: %s' % (self.tname, project_uuid))
