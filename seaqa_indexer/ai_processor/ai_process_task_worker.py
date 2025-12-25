@@ -81,11 +81,9 @@ class AIProcessTaskWorker(object):
                             elif task_type == 'ticket':
                                 project_uuid = data.get('project_uuid')
                                 self.tickets_task_handler(project_uuid)
-                            elif task_type == 'connection':
+                            else:
                                 connection_id = data.get('connection_id')
                                 self.work_task_handler(connection_id)
-                            else:
-                                logger.warning('ai_process_task: invalid task type: %s', task_type)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
