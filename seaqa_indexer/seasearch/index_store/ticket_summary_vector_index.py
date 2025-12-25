@@ -160,7 +160,7 @@ class TicketSummaryVectorIndex(object):
                 doc_info = {
                     "ai_summary": ai_summary,
                     "vec": ai_summary_vector,
-                    "project_id": project_uuid,
+                    "project_uuid": project_uuid,
                     "doc_id": str(pk),
                     "modified_time": modified_time
                 }
@@ -185,7 +185,7 @@ class TicketSummaryVectorIndex(object):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "project_id", "doc_id", "modified_time"],
+            "return_fields": ["ai_summary", "project_uuid", "doc_id", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -218,7 +218,7 @@ class TicketSummaryVectorIndex(object):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
-                'project_id': fields.get('project_id', [''])[0],
+                'project_uuid': fields.get('project_uuid', [''])[0],
                 'doc_id': fields.get('doc_id', [''])[0],
                 'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0)
