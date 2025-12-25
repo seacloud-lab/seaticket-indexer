@@ -1,16 +1,16 @@
-import logging
-import json
 import datetime
+import logging
+
 import pytz
 
-from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
 
 SEASEARCH_BULK_OPERATE_LIMIT = 100
 
-class TicketSummaryVectorIndex(object):
+
+class ProjectSummaryVectorIndex(object):
     mapping = {
         'properties': {
             'project_uuid': {
@@ -46,11 +46,11 @@ class TicketSummaryVectorIndex(object):
                 index_name,
                 {"shard_num": self.shard_num, "mappings": self.mapping}
             )
+
     def check_index(self, index_name):
         return self.seasearch_api.check_index_mapping(index_name).get('is_exist')
 
     def _query_index_ids_by_pks(self, index_name, pks):
-        """Query index document IDs by doc_id field"""
         if not pks:
             return []
 
@@ -78,17 +78,14 @@ class TicketSummaryVectorIndex(object):
                 for hit in hits:
                     if hit.get('_id'):
                         doc_ids.append(hit.get('_id'))
-
                 if len(hits) < page_size:
                     break
                 offset += page_size
-
             logger.debug('Found %d index documents for %d pks', len(doc_ids), len(pks))
             return doc_ids
         except Exception as e:
             logger.warning('Failed to query index IDs: %s', str(e))
             return []
-
 
     def delete_indexes_by_pks(self, index_name, pks):
         if not pks:
@@ -97,18 +94,19 @@ class TicketSummaryVectorIndex(object):
         doc_ids = self._query_index_ids_by_pks(index_name, pks)
         if not doc_ids:
             return
+
         delete_params = []
         for _id in doc_ids:
             delete_params.append({'delete': {'_id': _id, '_index': index_name}})
             if len(delete_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
                 self.seasearch_api.bulk(index_name, delete_params)
                 delete_params = []
+
         if delete_params:
             self.seasearch_api.bulk(index_name, delete_params)
-
         logger.info('Deleted %d index documents', len(doc_ids))
 
-    def update_tickets(self, table_name, index_name, project_uuid, seaqa_db, last_ticket_ai_indexed_at):
+    def update(self, table_name, index_name, project_uuid, last_ai_indexed_at=None):
         index_count = 0
         page_size = 1000
         offset = 0
@@ -119,31 +117,30 @@ class TicketSummaryVectorIndex(object):
         def _flush_bulk_if_needed(force=False):
             nonlocal bulk_params, pending_pks
             if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPERATE_LIMIT):
-                # Delete old documents first, then insert new ones
                 if pending_pks:
                     self.delete_indexes_by_pks(index_name, pending_pks)
                     pending_pks = set()
                 self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 
-        if not last_ticket_ai_indexed_at:
-            last_ticket_ai_indexed_at = datetime.datetime(1970, 1, 1)
+        if not last_ai_indexed_at:
+            last_ai_indexed_at = datetime.datetime(1970, 1, 1)
 
-        last_ticket_ai_indexed_at = last_ticket_ai_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
+        last_ai_indexed_at = last_ai_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
 
         while True:
             sql = f"""
-                SELECT _pk, ai_summary, ai_summary_vector, deleted, modified_time
+                SELECT _pk, ai_summary, ai_summary_vector, deleted, modified_time, ai_processed_time
                 FROM `{table_name}`
                 WHERE ai_processed_time IS NOT NULL
-                AND ai_processed_time > '{last_ticket_ai_indexed_at}'
+                AND ai_processed_time > '{last_ai_indexed_at}'
                 ORDER BY ai_processed_time
                 LIMIT {page_size} OFFSET {offset}
             """
             result = self.seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])
             if not rows:
-                break 
+                break
 
             for row in rows:
                 pk = row.get('_pk')
@@ -154,6 +151,10 @@ class TicketSummaryVectorIndex(object):
 
                 if deleted:
                     deleted_index_id_set.add(pk)
+                    continue
+
+                if not ai_summary or not ai_summary_vector:
+                    logger.debug('Skip document without AI summary or vector, pk=%s', pk)
                     continue
 
                 index_info = {"index": {"_index": index_name}}
