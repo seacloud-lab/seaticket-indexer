@@ -12,3 +12,4 @@ class TicketIndexMaster(IndexMasterBase):
             message_type='ticket',
             task_queues=['index_task', 'ai_process_task']
         )
+        

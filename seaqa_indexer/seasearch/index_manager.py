@@ -351,13 +351,13 @@ class IndexManager:
         for result in all_results:
             if result.get('source_type') == 'knowledge_base_summary':
                 pk = result.get('pk')
-                if pk is not None:
+                if pk is not None and pk != '':
                     kb_pks.add(pk)
                 continue
 
             if result.get('source_type') == 'ticket_summary':
                 pk = result.get('pk')
-                if pk is not None:
+                if pk is not None and pk != '':
                     ticket_pks.add(pk)
                 continue
 

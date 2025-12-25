@@ -16,7 +16,7 @@ class ProjectSummaryVectorIndex(object):
             'project_uuid': {
                 'type': 'keyword'
             },
-            'doc_id': {
+            'pk': {
                 'type': 'keyword'
             },
             'ai_summary': {
@@ -63,7 +63,7 @@ class ProjectSummaryVectorIndex(object):
                 query = {
                     "query": {
                         "terms": {
-                            "doc_id": pks_str_list
+                            "pk": pks_str_list
                         }
                     },
                     "_source": False,
@@ -162,7 +162,7 @@ class ProjectSummaryVectorIndex(object):
                     "ai_summary": ai_summary,
                     "vec": ai_summary_vector,
                     "project_uuid": project_uuid,
-                    "doc_id": str(pk),
+                    "pk": pk,
                     "modified_time": modified_time
                 }
                 bulk_params.append(index_info)
@@ -186,7 +186,7 @@ class ProjectSummaryVectorIndex(object):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "project_uuid", "doc_id", "modified_time"],
+            "return_fields": ["ai_summary", "project_uuid", "pk", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -220,7 +220,7 @@ class ProjectSummaryVectorIndex(object):
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
                 'project_uuid': fields.get('project_uuid', [''])[0],
-                'doc_id': fields.get('doc_id', [''])[0],
+                'pk': fields.get('pk', [''])[0],
                 'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0)
             })
