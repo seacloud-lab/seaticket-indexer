@@ -13,10 +13,10 @@ SEASEARCH_BULK_OPERATE_LIMIT = 100
 class TicketSummaryVectorIndex(object):
     mapping = {
         'properties': {
-            'project_id': {
+            'project_uuid': {
                 'type': 'keyword'
             },
-            'pk': {
+            'doc_id': {
                 'type': 'keyword'
             },
             'ai_summary': {
@@ -50,7 +50,7 @@ class TicketSummaryVectorIndex(object):
         return self.seasearch_api.check_index_mapping(index_name).get('is_exist')
 
     def _query_index_ids_by_pks(self, index_name, pks):
-        """Query index document IDs by pk field"""
+        """Query index document IDs by doc_id field"""
         if not pks:
             return []
 
@@ -63,7 +63,7 @@ class TicketSummaryVectorIndex(object):
                 query = {
                     "query": {
                         "terms": {
-                            "pk": pks_str_list
+                            "doc_id": pks_str_list
                         }
                     },
                     "_source": False,
@@ -161,7 +161,7 @@ class TicketSummaryVectorIndex(object):
                     "ai_summary": ai_summary,
                     "vec": ai_summary_vector,
                     "project_id": project_uuid,
-                    "pk": pk,
+                    "doc_id": str(pk),
                     "modified_time": modified_time
                 }
                 bulk_params.append(index_info)
@@ -185,7 +185,7 @@ class TicketSummaryVectorIndex(object):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "project_id", "pk", "modified_time"],
+            "return_fields": ["ai_summary", "project_id", "doc_id", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -219,7 +219,7 @@ class TicketSummaryVectorIndex(object):
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
                 'project_id': fields.get('project_id', [''])[0],
-                'pk': fields.get('pk', [''])[0],
+                'doc_id': fields.get('doc_id', [''])[0],
                 'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0)
             })
