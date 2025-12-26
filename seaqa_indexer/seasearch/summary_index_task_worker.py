@@ -191,6 +191,7 @@ class SummaryIndexTaskWorker(object):
 
         msg_content = {
             'connection_id': connection_id,
+            'type': "connection",
         }
         self.mq.lpush('summary_index_task', json.dumps(msg_content))
         logger.info('%s push back summary index task connection_id: %s, to the queue' %
