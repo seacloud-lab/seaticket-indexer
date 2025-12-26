@@ -15,9 +15,6 @@ class TicketIndex(object):
             'project_uuid': {
                 'type': 'keyword'
             },
-            'pk': {
-                'type': 'keyword'
-            },
             'title': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
@@ -168,7 +165,7 @@ class TicketIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, index_name, ticket_seadb_api, since):
+    def update(self, index_name, ticket_seadb_api, since, project_uuid):
         page_size = 1000
         bulk_params = []
         deleted_ids = set()
@@ -193,6 +190,7 @@ class TicketIndex(object):
                     continue
                 index_info = {'index': {'_index': index_name, '_id': doc_id}}
                 doc_info = {
+                    'project_uuid': project_uuid,
                     'title': title,
                     'content': content,
                     'modified_time': row.get('modified_time')
@@ -209,7 +207,6 @@ class TicketIndex(object):
             self.seasearch_api.bulk(index_name, bulk_params)
         if deleted_ids:
             self.delete_indexes_by_ids(index_name, deleted_ids)
-            ticket_seadb_api.delete_tickets_from_db(list(deleted_pk_set))
         
         return indexed_count
 

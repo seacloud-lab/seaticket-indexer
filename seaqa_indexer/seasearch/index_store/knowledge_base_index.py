@@ -135,7 +135,7 @@ class KnowledgeBaseIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, index_name, project_uuid, kb_seadb_api, since):
+    def update(self, index_name, kb_seadb_api, since, project_uuid):
         page_size = 1000
         bulk_params = []
         deleted_ids = set()

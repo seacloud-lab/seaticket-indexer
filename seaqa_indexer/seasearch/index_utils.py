@@ -227,7 +227,7 @@ def update_knowledge_base_index(project_uuid, db_session_class):
             since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
         since = time_to_utc_time(str(since)).isoformat()
 
-        indexed_count = kb_index.update(index_name, uuid_str_to_32_chars(project_uuid), kb_seadb_api, since)
+        indexed_count = kb_index.update(index_name, kb_seadb_api, since, project_uuid)
         indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_knowledge_base_indexed_at(project_uuid, indexed_at)
         logger.info('Finish to index knowledge base project_uuid %s', project_uuid)
@@ -254,7 +254,7 @@ def update_ticket_index(project_uuid, db_session_class):
             since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
         since = time_to_utc_time(str(since)).isoformat()
         
-        indexed_count = ticket_index.update(index_name, ticket_seadb_api, since)
+        indexed_count = ticket_index.update(index_name, ticket_seadb_api, since, project_uuid)
         indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_ticket_indexed_at(project_uuid, indexed_at)
         logger.info('Finish to index ticket project_uuid %s', project_uuid)
