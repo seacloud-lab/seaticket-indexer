@@ -1,17 +1,19 @@
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
 import datetime
+import logging
+
 import pytz
 
-import logging
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
 
 SEASEARCH_BULK_OPERATE_LIMIT = 100
 
+
 class KnowledgeBaseSummaryVectorIndex(object):
     mapping = {
         'properties': {
-            'project_id': {
+            'project_uuid': {
                 'type': 'keyword'
             },
             'pk': {
@@ -43,10 +45,10 @@ class KnowledgeBaseSummaryVectorIndex(object):
             self.seasearch_api.create_index(
                 index_name,
                 {"shard_num": self.shard_num, "mappings": self.mapping}
-            )  
-    
+            )
+
     def check_index(self, index_name):
-        return self.seasearch_api.check_index_mapping(index_name).get('is_exist')  
+        return self.seasearch_api.check_index_mapping(index_name).get('is_exist')
 
     def _query_index_ids_by_pks(self, index_name, pks):
         if not pks:
@@ -96,10 +98,10 @@ class KnowledgeBaseSummaryVectorIndex(object):
         delete_params = []
         for _id in doc_ids:
             delete_params.append({'delete': {'_id': _id, '_index': index_name}})
-    
-        if len(delete_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
-            self.seasearch_api.bulk(index_name, delete_params)
-            delete_params = []
+            if len(delete_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
+                self.seasearch_api.bulk(index_name, delete_params)
+                delete_params = []
+
         if delete_params:
             self.seasearch_api.bulk(index_name, delete_params)
         logger.info('Deleted %d index documents', len(doc_ids))
@@ -151,15 +153,15 @@ class KnowledgeBaseSummaryVectorIndex(object):
                     deleted_index_id_set.add(pk)
                     continue
 
-                if not ai_summary:
-                    logger.debug('Skip KB document without AI summary, pk=%s', pk)
+                if not ai_summary or not ai_summary_vector:
+                    logger.debug('Skip document without AI summary or vector, pk=%s', pk)
                     continue
 
                 index_info = {"index": {"_index": index_name}}
                 doc_info = {
                     "ai_summary": ai_summary,
                     "vec": ai_summary_vector,
-                    "project_id": project_uuid,
+                    "project_uuid": project_uuid,
                     "pk": pk,
                     "modified_time": modified_time
                 }
@@ -184,7 +186,7 @@ class KnowledgeBaseSummaryVectorIndex(object):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "project_id", "pk", "modified_time"],
+            "return_fields": ["ai_summary", "project_uuid", "pk", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -217,8 +219,8 @@ class KnowledgeBaseSummaryVectorIndex(object):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
-                'project_id': fields.get('project_id', [''])[0],
-                'pk': fields.get('pk', [''])[0],
+                'project_uuid': fields.get('project_uuid')[0],
+                'pk': fields.get('pk')[0],
                 'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0)
             })

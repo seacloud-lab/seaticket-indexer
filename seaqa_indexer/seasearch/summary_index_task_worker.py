@@ -15,6 +15,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.seasearch.summary_index_utils import update_tickets_summary_index
 
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,9 @@ class SummaryIndexTaskWorker(object):
 
     def _get_kb_summary_index_lock_key(self, project_uuid):
         return 'summary_index_kb_' + str(project_uuid)
+
+    def _get_ticket_summary_index_lock_key(self, project_uuid):
+        return 'summary_index_ticket_' + str(project_uuid)
 
     def clear_worker(self):
         for th in self.worker_list:
@@ -88,9 +92,14 @@ class SummaryIndexTaskWorker(object):
                             if task_type == 'knowledge_base':
                                 project_uuid = data.get('project_uuid')
                                 self.kb_task_handler(project_uuid)
-                            else:
+                            elif data.get('type') == 'ticket':
+                                project_uuid = data.get('project_uuid')
+                                self.tickets_task_handler(project_uuid)
+                            elif data.get('type') == 'connection':
                                 connection_id = data.get('connection_id')
                                 self.work_task_handler(connection_id)
+                            else:
+                                logger.warning('summary_index_task: invalid.', res)
                 except (ResponseError, NoMQAvailable, TimeoutError) as e:
                     logger.error('The connection to the redis server failed: %s' % e)
         except Exception as e:
@@ -131,6 +140,38 @@ class SummaryIndexTaskWorker(object):
                             (self.tname, project_uuid, lock_key))
             else:
                 self.add_kb_to_undo_task(project_uuid)
+
+    def tickets_task_handler(self, project_uuid):
+        if not self.should_stop.is_set():
+            lock_key = self._get_ticket_summary_index_lock_key(project_uuid)
+            if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
+                logger.info('%s start summary index tickets: %s' % (self.tname, project_uuid))
+                self.locked_keys.add(lock_key)
+                self.update_tickets_ai_index(project_uuid)
+                try:
+                    self.locked_keys.remove(lock_key)
+                except KeyError:
+                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+                self.mq.delete(lock_key)
+                logger.info(
+                    "%s Finish summary index tickets: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
+            else:
+                self.add_tickets_to_undo_task(project_uuid)
+
+    def update_tickets_ai_index(self, project_uuid):
+        try:
+            update_tickets_summary_index(project_uuid, self.seaqa_db, self.seadb_api, self.seasearch_api)
+        except Exception as e:
+            logger.exception('Summary index tickets: %s failed, error: %s', project_uuid, e)
+
+    def add_tickets_to_undo_task(self, project_uuid):
+        time.sleep(0.5)
+        msg_content = {
+            'project_uuid': project_uuid,
+            'type': 'ticket',
+        }
+        self.mq.lpush('summary_index_task', json.dumps(msg_content))
+        logger.info('%s push back summary index task project_uuid: %s, to the queue' % (self.tname, project_uuid))
 
     def update_ai_index(self, connection_id):
         try:

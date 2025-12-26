@@ -143,6 +143,13 @@ class SeaqaDB(object):
             session.execute(text(cmd), {'project_uuid': project_uuid, 'ai_indexed_at': ai_indexed_at})
             session.commit()
 
+    def update_ticket_ai_indexed_at(self, project_uuid, ai_indexed_at):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            cmd = """UPDATE projects SET ticket_ai_indexed_at=:ai_indexed_at WHERE uuid=:project_uuid"""
+            session.execute(text(cmd), {'project_uuid': project_uuid, 'ai_indexed_at': ai_indexed_at})
+            session.commit()
+
     def get_project_info_by_project_uuid(self, project_uuid):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
@@ -153,6 +160,12 @@ class SeaqaDB(object):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
             sql = """SELECT uuid, knowledge_base_ai_indexed_at FROM projects WHERE uuid=:project_uuid AND (deleted=false OR deleted IS NULL)"""
+            return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
+
+    def get_ticket_ai_info_by_project_uuid(self, project_uuid):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = "SELECT ticket_ai_indexed_at FROM projects WHERE uuid=:project_uuid AND deleted=false"
             return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
 
     def get_recently_updated_connections(self, days=7):

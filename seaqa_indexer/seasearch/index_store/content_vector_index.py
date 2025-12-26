@@ -53,7 +53,7 @@ class ContentVectorIndex(object):
     def create_index_if_missing(self, index_name):
         if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
             self.seasearch_api.create_index(
-                index_name, 
+                index_name,
                 {"shard_num": self.shard_num, "mappings": self.mapping}
             )
 
@@ -76,7 +76,7 @@ class ContentVectorIndex(object):
             }
             result = self.seasearch_api.normal_search(index_name, query)
             hits = result.get('hits', {}).get('hits', [])
-            
+
             doc_ids = [hit.get('_id') for hit in hits if hit.get('_id')]
             logger.debug('Found %d index documents for pk=%s', len(doc_ids), pk)
             return doc_ids
@@ -97,12 +97,12 @@ class ContentVectorIndex(object):
                 delete_params = []
         if delete_params:
             self.seasearch_api.bulk(index_name, delete_params)
-        
+
         logger.debug('Deleted %d chunk index documents for pk=%s', len(doc_ids), pk)
 
-    def update(self, table_name, index_name, connection_id, project_uuid, 
+    def update(self, table_name, index_name, connection_id, project_uuid,
                content_vector_status, seaqa_db, last_content_vector_indexed_at):
-        
+
         index_count = 0
         page_size = 100  # Smaller page size since we process chunks
         offset = 0
@@ -116,9 +116,9 @@ class ContentVectorIndex(object):
 
         if not last_content_vector_indexed_at:
             last_content_vector_indexed_at = datetime.datetime(1970, 1, 1)
-        
+
         last_content_vector_indexed_at = last_content_vector_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
-        
+
         while True:
             sql = f"""
                 SELECT _pk, url, deleted, sync_time, modified_time 
@@ -137,14 +137,14 @@ class ContentVectorIndex(object):
                 url = row.get('url')
                 deleted = row.get('deleted')
                 modified_time = row.get('modified_time')
-                
+
                 if deleted:
                     continue
 
                 filename = url_to_filename(url)
                 file_json = self.storage.read_json(connection_id, project_uuid, filename)
                 content = (file_json or {}).get('content')
-                
+
                 if not content:
                     logger.debug('Skip empty content document url=%s', url)
                     continue
@@ -176,7 +176,7 @@ class ContentVectorIndex(object):
                         seaqa_db.update_content_vector_status_and_time(connection_id, json.dumps(content_vector_status))
 
                     _flush_bulk_if_needed()
-            
+
             offset += page_size
 
         _flush_bulk_if_needed(force=True)
@@ -186,7 +186,7 @@ class ContentVectorIndex(object):
 
         if not query_vector:
             return []
-        
+
         try:
             data = {
                 "query_field": "vec",
@@ -195,29 +195,29 @@ class ContentVectorIndex(object):
                 "vector": query_vector,
                 "_source": False
             }
-            
+
             filters = []
-            
+
             if connection_id:
                 filters.append({
                     "term": {
                         "connection_id": connection_id
                     }
                 })
-            
+
             if time_from is not None or time_to is not None:
                 range_filter = {}
                 if time_from is not None:
                     range_filter["gte"] = time_from
                 if time_to is not None:
                     range_filter["lte"] = time_to
-                
+
                 filters.append({
                     "range": {
                         "modified_time": range_filter
                     }
                 })
-            
+
             if filters:
                 if len(filters) == 1:
                     data["filter"] = filters[0]
@@ -234,7 +234,7 @@ class ContentVectorIndex(object):
 
             hits = search_results.get('hits', {}).get('hits', [])
             hits.sort(key=lambda x: x.get('_score', 0), reverse=True)
-            
+
             topk_search_results = []
             for i, hit in enumerate(hits):
                 if i >= top_k:
@@ -242,14 +242,14 @@ class ContentVectorIndex(object):
                 fields = hit.get('fields', {})
                 topk_search_results.append({
                     'content': fields.get('content', [''])[0],
-                    'project_id': fields.get('project_id', [''])[0],
-                    'connection_id': fields.get('connection_id', [''])[0],
-                    'pk': fields.get('pk', [''])[0],
+                    'project_id': fields.get('project_id')[0],
+                    'connection_id': fields.get('connection_id')[0],
+                    'pk': fields.get('pk')[0],
                     'chunk_index': fields.get('chunk_index', [0])[0],
                     'modified_time': fields.get('modified_time', [None])[0],
                     'score': hit.get('_score', 0)
                 })
-            
+
             return topk_search_results
         except Exception as e:
             logger.exception('Semantic search failed: %s', e)
