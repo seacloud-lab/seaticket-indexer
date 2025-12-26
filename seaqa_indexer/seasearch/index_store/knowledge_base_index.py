@@ -13,6 +13,9 @@ SEASEARCH_BULK_OPERATE_LIMIT = 100
 class KnowledgeBaseIndex(object):
     mapping = {
         'properties': {
+            'project_uuid': {
+                'type': 'keyword'
+            },
             'title': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
@@ -109,42 +112,15 @@ class KnowledgeBaseIndex(object):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['title', 'content', 'modified_time'],
+            '_source': ['title', 'project_uuid', 'content', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
                 'post_tags': ['</mark>'],
-                'fields': {'content': {}, 'title': {}},
+                'fields': {'content': {}},
             }
         }
         return {'index': index_name, 'query': data}
-
-    def search(self, index_name, keyword, start=0, size=10, time_from=None, time_to=None, search_title_only=False):
-        bulk_search_params = [self.get_search_param(index_name, keyword, start, size, time_from, time_to, search_title_only)]
-        query_body = json.dumps({'index_queries': bulk_search_params})
-        results = self.seasearch_api.unified_search(query_body)
-        docs = []
-        hits = results.get('hits', {}).get('hits', [])
-        if not hits:
-            return docs
-        for hit in hits:
-            source = hit.get('_source')
-            score = hit.get('_score')
-            _id = hit.get('_id')
-            r = {
-                'title': source['title'],
-                'content': source['content'],
-                'modified_time': source.get('modified_time'),
-                'score': score,
-                '_id': _id,
-            }
-            docs.append(r)
-        return docs
-
-    def normal_search(self, index_name, dsl):
-        doc_item = self.seasearch_api.normal_search(index_name, dsl)
-        total = doc_item.get('hits', {}).get('total', {}).get('value', 0)
-        return doc_item.get('hits', {}).get('hits', []), total
 
     def delete_indexes_by_ids(self, index_name, ids):
         delete_params = []
@@ -159,7 +135,7 @@ class KnowledgeBaseIndex(object):
     def delete_index_by_index_name(self, index_name):
         self.seasearch_api.delete_index_by_name(index_name)
 
-    def update(self, index_name, kb_seadb_api, since):
+    def update(self, index_name, project_uuid, kb_seadb_api, since):
         page_size = 1000
         bulk_params = []
         deleted_ids = set()
@@ -184,6 +160,7 @@ class KnowledgeBaseIndex(object):
                     continue
                 index_info = {'index': {'_index': index_name, '_id': doc_id}}
                 doc_info = {
+                    'project_uuid': project_uuid,
                     'title': title,
                     'content': content,
                     'modified_time': row.get('modified_time')
@@ -200,5 +177,4 @@ class KnowledgeBaseIndex(object):
             self.seasearch_api.bulk(index_name, bulk_params)
         if deleted_ids:
             self.delete_indexes_by_ids(index_name, deleted_ids)
-            kb_seadb_api.delete_knowledge_bases_from_db(list(deleted_pk_set))
         return indexed_count

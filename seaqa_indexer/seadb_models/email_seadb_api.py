@@ -144,8 +144,8 @@ class EmailSeaDBAPI:
         thread_table_name = ThreadTable.gen_table_name(connection_id)
         sql = f"""
             SELECT * FROM `{thread_table_name}`
-            WHERE ai_processed_time IS NULL
-            OR ai_processed_time < modified_time
+            WHERE (ai_processed_time IS NULL OR ai_processed_time < modified_time) 
+            AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """
         res = self.seadb_api.query_rows(self.base_id, sql)

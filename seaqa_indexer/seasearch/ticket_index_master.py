@@ -30,17 +30,17 @@ class TicketIndexMaster(Thread):
         while True:
             try:
                 self.master_handler()
+            except NoMessageException:
+                logger.warning('long time no message, reconnect to redis.')
+            except (ResponseError, NoMQAvailable, TimeoutError) as e:
+                logger.error('The connection to the redis server failed: %s' % e)
             except Exception as e:
                 logger.error('Error handing ticket master task: %s' % e)
-                time.sleep(0.2)
 
     def master_handler(self):
         with self.mq.pubsub(ignore_subscribe_messages=True) as p:  # ensure pubsub connection is closed
-            try:
-                p.subscribe('ticket_update')
-                logger.info('ticket master starting listen')
-            except (ResponseError, NoMQAvailable, TimeoutError) as e:
-                logger.error('The connection to the redis server failed: %s' % e)
+            p.subscribe('ticket_update')
+            logger.info('ticket master starting listen')
 
             message_check_time = time.time()
             last_check_pending_tasks_time = time.time()

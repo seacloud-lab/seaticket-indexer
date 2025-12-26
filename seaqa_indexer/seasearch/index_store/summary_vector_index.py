@@ -14,7 +14,7 @@ SEASEARCH_BULK_OPERATE_LIMIT = 100
 class SummaryVectorIndex(object):
     mapping = {
         'properties': {
-            'project_id': {
+            'project_uuid': {
                 'type': 'keyword'
             },
             'connection_id': {
@@ -173,7 +173,7 @@ class SummaryVectorIndex(object):
                 doc_info = {
                     "ai_summary": ai_summary,
                     "vec": ai_summary_vector,
-                    "project_id": project_uuid,
+                    "project_uuid": project_uuid,
                     "connection_id": connection_id,
                     "pk": pk,
                     "modified_time": modified_time
@@ -202,7 +202,7 @@ class SummaryVectorIndex(object):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "project_id", "connection_id", "pk", "modified_time"],
+            "return_fields": ["ai_summary", "project_uuid", "connection_id", "pk", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -236,7 +236,7 @@ class SummaryVectorIndex(object):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
-                'project_id': fields.get('project_id')[0],
+                'project_uuid': fields.get('project_uuid')[0],
                 'connection_id': fields.get('connection_id')[0],
                 'pk': fields.get('pk')[0],
                 'modified_time': fields.get('modified_time', [None])[0],

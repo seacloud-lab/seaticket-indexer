@@ -93,8 +93,7 @@ class AIProcessTaskWorker(object):
 
     def work_task_handler(self, connection_id):
         if not self.should_stop.is_set():
-            if self.mq.set(self._get_ai_process_lock_key(connection_id), time.time(),
-                      ex=self.LOCK_TIMEOUT, nx=True):
+            if self.mq.set(self._get_ai_process_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
                 logger.info('%s start AI process project connection: %s' % (self.tname, connection_id))
                 lock_key = self._get_ai_process_lock_key(connection_id)
                 self.locked_keys.add(lock_key)
