@@ -11,7 +11,7 @@ class TicketSeaDBAPI:
         sql = f"""
             SELECT * FROM `{table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < modified_time) 
-            AND (deleted IS NULL OR deleted != true)
+            AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """
         res = self.seadb_api.query_rows(self.base_id, sql)

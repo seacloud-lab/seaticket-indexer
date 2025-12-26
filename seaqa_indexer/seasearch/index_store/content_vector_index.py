@@ -19,7 +19,7 @@ class ContentVectorIndex(object):
             'content': {
                 'type': 'text',
             },
-            'project_id': {
+            'project_uuid': {
                 'type': 'keyword'
             },
             'connection_id': {
@@ -161,7 +161,7 @@ class ContentVectorIndex(object):
                     doc_info = {
                         "content": chunks[i],
                         "vec": embeddings[i].get('embedding', []),
-                        "project_id": project_uuid,
+                        "project_uuid": project_uuid,
                         "connection_id": connection_id,
                         "pk": pk,
                         "chunk_index": embeddings[i].get('index'),
@@ -191,7 +191,7 @@ class ContentVectorIndex(object):
             data = {
                 "query_field": "vec",
                 "k": top_k,
-                "return_fields": ["content", "project_id", "connection_id", "pk", "chunk_index", "modified_time"],
+                "return_fields": ["content", "project_uuid", "connection_id", "pk", "chunk_index", "modified_time"],
                 "vector": query_vector,
                 "_source": False
             }
@@ -242,7 +242,7 @@ class ContentVectorIndex(object):
                 fields = hit.get('fields', {})
                 topk_search_results.append({
                     'content': fields.get('content', [''])[0],
-                    'project_id': fields.get('project_id')[0],
+                    'project_uuid': fields.get('project_uuid')[0],
                     'connection_id': fields.get('connection_id')[0],
                     'pk': fields.get('pk')[0],
                     'chunk_index': fields.get('chunk_index', [0])[0],

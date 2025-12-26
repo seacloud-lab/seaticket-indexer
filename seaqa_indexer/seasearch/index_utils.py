@@ -14,7 +14,7 @@ from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
 from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_kb_index_name
-from seaqa_indexer.utils import time_to_utc_time, decrypt_config
+from seaqa_indexer.utils import time_to_utc_time, decrypt_config, uuid_str_to_32_chars
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
@@ -224,7 +224,7 @@ def update_knowledge_base_index(project_uuid, db_session_class):
             since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
         since = time_to_utc_time(str(since)).isoformat()
 
-        indexed_count = kb_index.update(index_name, kb_seadb_api, since)
+        indexed_count = kb_index.update(index_name, uuid_str_to_32_chars(project_uuid), kb_seadb_api, since)
         indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_knowledge_base_indexed_at(project_uuid, indexed_at)
         logger.info('Finish to index knowledge base project_uuid %s', project_uuid)

@@ -91,9 +91,7 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
     while True:
         sql = f"""
             SELECT _pk, url FROM `{table_name}`
-            WHERE ai_processed_time IS NULL 
-            OR ai_processed_time < sync_time
-            ORDER BY _pk
+            WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """
         result = seadb_api.query_rows(project_uuid, sql)
@@ -307,7 +305,7 @@ def process_knowledge_base_ai(seadb_api, project_uuid):
 
     logger.info('Finish AI process knowledge base of project: %s', project_uuid)
 
-    return ai_processing_count 
+    return ai_processing_count
 
 
 def process_ticket_ai(seadb_api, project_uuid):

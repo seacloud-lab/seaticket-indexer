@@ -492,12 +492,10 @@ class IndexManager:
                 processed_results.append(processed_result)
                 continue
 
-            if result.get('connection_id') is None:
+            connection_id = result.get('connection_id')
+            if connection_id is None or int(connection_id) not in connection_objects:
                 continue
-            connection_id = int(result.get('connection_id'))
-
-            if connection_id not in connection_objects:
-                continue
+            connection_id = int(connection_id)
 
             connection = connection_objects[connection_id]
             connection_type = connection.type
