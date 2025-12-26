@@ -73,6 +73,7 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
         seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status), last_ai_processing_time)
         summary_index_msg = {
             'connection_id': connection_id,
+            'type': 'connection',
         }
         mq.lpush('summary_index_task', json.dumps(summary_index_msg))
     except Exception as e:
