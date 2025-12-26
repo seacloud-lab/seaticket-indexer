@@ -1,16 +1,11 @@
 import os
 import sys
 import yaml
+import json
 import logging
 
 basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, basedir)
-logger = logging.getLogger(__name__)
-
-import os
-import yaml
-import logging
-
 logger = logging.getLogger(__name__)
 def _read_yaml(yaml_file_path=None, component_name=None):
     if yaml_file_path:
@@ -60,8 +55,14 @@ class _ConfigParser(object):
     
     @_check_type
     def get(self, key, default=None):
-        
-        return os.getenv(key) if key in os.environ else self.yaml_configs.get(key, default)
+        if key in os.environ:
+            value = os.getenv(key)
+            try:
+                value = json.loads(value)
+            except:
+                pass
+            return value
+        return self.yaml_configs.get(key, default)
 
 # init configs reader
 CONF_DIR = os.environ.get('CONF_PATH', '/opt/seaqa/conf/')
