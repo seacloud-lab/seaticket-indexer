@@ -179,18 +179,9 @@ class GitHubSeaDBAPI:
         return {}
 
     # *** github_issue index function ***
-    def delete_issues_from_db(self, connection_id, need_delete_issue_pks, need_deleted_comment_issue_ids):
-        table_name = GithubIssuesTable.gen_table_name(connection_id)
-        self.seadb_api.delete_rows(self.base_id, table_name, need_delete_issue_pks)
-
+    def delete_comment_from_db(self, connection_id, comment_id):
         comments_table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
-        for issue_id in need_deleted_comment_issue_ids:
-            delete_sql = f"DELETE FROM `{comments_table_name}` WHERE issue_id = {issue_id}"
-            self.seadb_api.query_rows(self.base_id, delete_sql)
-
-    def delete_comments_from_db(self, connection_id, issue_id):
-        comments_table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
-        sql = f"DELETE FROM `{comments_table_name}` WHERE issue_id = {issue_id} AND deleted = True"
+        sql = f"DELETE FROM `{comments_table_name}` WHERE comment_id = {comment_id}"
         self.seadb_api.query_rows(self.base_id, sql)
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):

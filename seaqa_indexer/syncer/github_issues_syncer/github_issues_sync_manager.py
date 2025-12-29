@@ -39,7 +39,7 @@ class GithubIssuesSyncManager:
 
             if action == 'deleted':
                 comment_id = comment_data['id']
-                github_seadb_api.tag_comment_deleted(connection_id, comment_id)
+                github_seadb_api.delete_comment_from_db(connection_id, comment_id)
                 github_seadb_api.update_issue_record(connection_id, issue_id, modified_time, comment_count)
                 self.add_issues_index_task(connection_id)
                 return

@@ -232,7 +232,6 @@ class GitHubIssuesIndex(object):
 
             for issue in issues:
                 issue_id = issue.get('issue_id')
-                github_seadb_api.delete_comments_from_db(connection_id, issue_id)
                 pk = issue.get('_pk')
                 key = str(pk)
                 if issue.get('deleted'):
@@ -247,7 +246,7 @@ class GitHubIssuesIndex(object):
                         if not comments_data or len(content) > INDEX_CONTENT_LIMIT:
                             break
                         for comment in comments_data:
-                            content += comment.get('body') or ''
+                            content += comment.get('content') or ''
                         comments_offset += comments_page_size
 
                     doc = {
