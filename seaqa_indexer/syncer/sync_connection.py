@@ -403,7 +403,7 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
                 _status_last_update_count = new_count
             sync_count += 1
         if new_email_list:
-            insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list)
+            insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
 
     total_count = email_seadb_api.get_email_total_count(connection_id)
     return sync_count, total_count

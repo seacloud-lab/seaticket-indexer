@@ -35,7 +35,7 @@ def upload_email_attachment(connection_id, project_uuid, storage, email):
     email['html_content'] = html_content
 
 
-def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_list):
+def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_list, is_first_sync=False):
     email_list = sorted(email_list, key=lambda x: time_to_utc_time(x['email_date']))
     email_rows = []
     page_size = 100
@@ -89,7 +89,7 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
                 }
                 update_thread['last_updated_at'] = email['email_date']
             if not email.get('is_sender'):
-                update_thread['unread'] = True
+                update_thread['unread'] = not is_first_sync
             if update_thread:
                 update_thread['thread_id'] = thread_id
                 email_seadb_api.update_thread_to_db(connection_id, update_thread)
@@ -100,7 +100,7 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
                 'last_updated_at': email['email_date']
             }
             if not email.get('is_sender'):
-                insert_thread['unread'] = True
+                insert_thread['unread'] = not is_first_sync
             insert_thread_id = email_seadb_api.save_thread_to_db(connection_id, insert_thread)
             to_be_updated_thread_dict[insert_thread_id] = {
                 'last_updated_at': email['email_date']
