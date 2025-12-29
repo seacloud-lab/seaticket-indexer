@@ -71,12 +71,6 @@ class DiscourseSync:
             topic_data[self.topics_table.resolved.name] = resolved
         self.discourse_seadb_api.insert_topic(connection_id, topic_data)
 
-    def delete_topic_and_replies(self, topic_id, connection_id):
-        """Delete a topic and all its replies"""
-        self.discourse_seadb_api.delete_replies_by_topic(connection_id, topic_id)
-
-        self.discourse_seadb_api.delete_topic(connection_id, topic_id)
-
     def get_discourse_forum_topic_count(self, connection_id):
         """Retrieve the number of discourse topics for the specified connection"""
         return self.discourse_seadb_api.get_topic_count(connection_id)
@@ -119,7 +113,7 @@ class DiscourseSync:
             self.update_reply(content, author, topic_id, post_number, modified_time, connection_id, reply_pk, accepted_answer=None)
             logger.debug(f"Updated existing reply {post_number} in topic {topic_id}")
         else:
-            self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id)
+            self.insert_reply(topic_id, post_number, content, author, modified_time, connection_id, accepted_answer=None)
             logger.debug(f"Created new reply {post_number} in topic {topic_id}")
         self.discourse_seadb_api.update_topic_sync_time(connection_id, topic_id)
 
