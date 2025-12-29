@@ -211,6 +211,7 @@ class DiscourseTopicsTable(BaseModel):
     views = MappedColumn('views', PropertyTypes.INT)
     category_id = MappedColumn('category_id', PropertyTypes.INT)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    resolved = MappedColumn('resolved', PropertyTypes.BOOL)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
@@ -229,6 +230,7 @@ class DiscourseRepliesTable(BaseModel):
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
     author = MappedColumn('author', PropertyTypes.TEXT)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    accepted_answer = MappedColumn('accepted_answer', PropertyTypes.BOOL)
 
     @classmethod
     def gen_table_name(cls, connection_id):
