@@ -17,3 +17,14 @@ class TicketSeaDBAPI:
         res = self.seadb_api.query_rows(self.base_id, sql)
         tickets = res.get('results', [])
         return tickets
+
+    def get_tickets_by_page(self, since, page_size, offset):
+        table_name = TicketsTable.gen_table_name()
+        sql = f"SELECT * FROM `{table_name}` WHERE modified_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        tickets = res.get('results', [])
+        return tickets
+    
+    def delete_tickets_from_db(self, deleted_seadb_pk_list):
+        table_name = TicketsTable.gen_table_name()
+        self.seadb_api.delete_rows(self.base_id, table_name, deleted_seadb_pk_list)

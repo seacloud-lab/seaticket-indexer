@@ -8,7 +8,7 @@ from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, Ti
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.index_utils import update_connection_index, update_knowledge_base_index
+from seaqa_indexer.seasearch.index_utils import update_connection_index, update_knowledge_base_index, update_ticket_index
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 
@@ -74,6 +74,9 @@ class IndexTaskWorker(object):
                             if type == 'knowledge_base':
                                 project_uuid = data.get('project_uuid')
                                 self.kb_task_handler(project_uuid)
+                            elif type == 'ticket':
+                                project_uuid = data.get('project_uuid')
+                                self.ticket_task_handler(project_uuid)
                             elif type == 'connection':
                                 connection_id = data.get('connection_id')
                                 self.connection_task_handler(connection_id)
@@ -122,6 +125,22 @@ class IndexTaskWorker(object):
         else:
             self.add_kb_to_undo_task(project_uuid)
 
+    def ticket_task_handler(self, project_uuid):
+        lock_key = self._get_index_lock_key('ticket_' + str(project_uuid))
+        if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
+            logger.info('%s start index ticket: %s' % (self.tname, project_uuid))
+            self.locked_keys.add(lock_key)
+            update_ticket_index(project_uuid, self.db_session_class)
+            try:
+                self.locked_keys.remove(lock_key)
+            except KeyError:
+                logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+            self.mq.delete(lock_key)
+            logger.info(
+                    "%s Finish index ticket: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
+        else:
+            self.add_ticket_to_undo_task(project_uuid)
+
     def update_index(self, connection_id):
         try:
             update_connection_index(connection_id, self.db_session_class)
@@ -150,6 +169,15 @@ class IndexTaskWorker(object):
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
         logger.info('%s push back kb task project_uuid: %s, to the queue' % (threading.current_thread().name, project_uuid))
+
+    def add_ticket_to_undo_task(self, project_uuid):
+        time.sleep(0.5)
+        msg_content = {
+            'project_uuid': project_uuid,
+            'type': 'ticket',
+        }
+        self.mq.lpush('index_task', json.dumps(msg_content))
+        logger.info('%s push back ticket task project_uuid: %s, to the queue' % (threading.current_thread().name, project_uuid))
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)

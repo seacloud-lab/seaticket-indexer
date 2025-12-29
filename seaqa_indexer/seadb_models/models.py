@@ -341,6 +341,40 @@ class TicketCommentsTable(BaseModel):
     def gen_table_name(cls):
         return 'ticket_comments'
 
+class TicketsTable(BaseModel):
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    content = MappedColumn('content', PropertyTypes.TEXT)
+    state = MappedColumn('state', PropertyTypes.SINGLE_SELECT, data=SelectTypes.ticket_status)
+    substate = MappedColumn('substate', PropertyTypes.SINGLE_SELECT, data=SelectTypes.ticket_substate)
+    type = MappedColumn('type', PropertyTypes.SINGLE_SELECT)
+    tags = MappedColumn('tags', PropertyTypes.MULTIPLE_SELECT)
+    assignees = MappedColumn('assignees', PropertyTypes.LIST)
+    participants = MappedColumn('participants', PropertyTypes.LIST)
+    priority = MappedColumn('priority', PropertyTypes.INT)
+    creator = MappedColumn('creator', PropertyTypes.TEXT)
+    comment_count = MappedColumn('comment_count', PropertyTypes.INT)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    closed_time = MappedColumn('closed_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+
+    @classmethod
+    def gen_table_name(cls):
+        return 'tickets'
+
+class TicketCommentsTable(BaseModel):
+    ticket_id = MappedColumn('ticket_id', PropertyTypes.INT)
+    content = MappedColumn('content', PropertyTypes.TEXT)
+    creator = MappedColumn('creator', PropertyTypes.TEXT)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+
+    @classmethod
+    def gen_table_name(cls):
+        return 'ticket_comments'
+
+
 class EmailTable(BaseModel):
     email_from = MappedColumn('email_from', PropertyTypes.TEXT)
     email_to = MappedColumn('email_to', PropertyTypes.TEXT)

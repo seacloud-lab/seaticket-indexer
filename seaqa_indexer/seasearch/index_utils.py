@@ -20,6 +20,9 @@ from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
+from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
+from seaqa_indexer.seasearch.index_store.ticket_index import TicketIndex
+from seaqa_indexer.seasearch.utils import gen_ticket_index_name
 
 
 logger = logging.getLogger(__name__)
@@ -230,3 +233,30 @@ def update_knowledge_base_index(project_uuid, db_session_class):
         logger.info('Finish to index knowledge base project_uuid %s', project_uuid)
     except Exception as e:
         logger.exception('update knowledge base: %s index failed, error: %s', project_uuid, e)
+
+def update_ticket_index(project_uuid, db_session_class):
+    try:
+        logger.info('Start to index ticket project_uuid %s', project_uuid)
+        seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
+        ticket_index = TicketIndex(seasearch_api)
+        seaqa_db = SeaqaDB(db_session_class)
+        ticket_seadb_api = TicketSeaDBAPI(project_uuid)
+
+        project = seaqa_db.get_ticket_indexed_at_by_project_uuid(project_uuid)
+        if not project:
+            logger.warning('Project %s does not exist', project_uuid)
+            return
+        index_name = gen_ticket_index_name(project_uuid)
+        ticket_index.create_index_if_missing(index_name)
+        old_indexed_at = project.ticket_indexed_at
+        since = old_indexed_at
+        if not since:
+            since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+        since = time_to_utc_time(str(since)).isoformat()
+        
+        indexed_count = ticket_index.update(index_name, uuid_str_to_32_chars(project_uuid), ticket_seadb_api, since)
+        indexed_at = datetime.datetime.now(datetime.UTC)
+        seaqa_db.update_ticket_indexed_at(project_uuid, indexed_at)
+        logger.info('Finish to index ticket project_uuid %s', project_uuid)
+    except Exception as e:
+        logger.exception('update ticket: %s index failed, error: %s', project_uuid, e)

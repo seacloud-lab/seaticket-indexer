@@ -23,11 +23,12 @@ from seaqa_indexer.seasearch.index_store.ticket_summary_vector_index import Tick
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, \
-    gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_summary_index_name
+    gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.ai_processor.utils import generate_embedding
+from seaqa_indexer.seasearch.index_store.ticket_index import TicketIndex
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,8 @@ class IndexManager:
         self.discourse_index = DiscourseIndex(self.seasearch_api)
         self.email_index = EmailIndex(self.seasearch_api)
         self.knowledge_base_index = KnowledgeBaseIndex(self.seasearch_api)
-
+        self.ticket_index = TicketIndex(self.seasearch_api)
+        
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
         self.seadb_api = SeaDBAPI()
@@ -116,6 +118,11 @@ class IndexManager:
             kb_index_name = gen_kb_index_name(project_uuid)
             knowledge_base_search_param = self.knowledge_base_index.get_search_param(kb_index_name, keyword, start, size, time_from, time_to)
             bulk_search_params.append(knowledge_base_search_param)
+
+        if extra_sources and "ticket" in extra_sources:
+            ticket_index_name = gen_ticket_index_name(project_uuid)
+            ticket_search_param = self.ticket_index.get_search_param(ticket_index_name, keyword, start, size, time_from, time_to)
+            bulk_search_params.append(ticket_search_param)
 
         if not bulk_search_params:
             return []
@@ -245,6 +252,16 @@ class IndexManager:
                     'score': score,
                     '_id': _id,
                     'type': 'knowledge_base',
+                }
+                result_docs.append(r)
+            elif index_name.startswith("ticket_"):
+                r = {
+                    'title': source.get('title'),
+                    'content': source.get('content'),
+                    'modified_time': source.get('modified_time'),
+                    'score': score,
+                    '_id': _id,
+                    'type': 'ticket',
                 }
                 result_docs.append(r)
 
