@@ -82,10 +82,20 @@ class IndexManager:
             connection_type = project_connection.type
             self.delete_index_by_connection(connection_id, connection_type)
 
+        kb_index_name = gen_kb_index_name(project_uuid)
+        self.knowledge_base_index.delete_index_by_index_name(kb_index_name)
+        kb_summary_index_name = gen_kb_summary_index_name(project_uuid)
+        self.seasearch_api.delete_index_by_name(kb_summary_index_name)
+
+        ticket_index_name = gen_ticket_index_name(project_uuid)
+        self.ticket_index.delete_index_by_index_name(ticket_index_name)
+        ticket_summary_index_name = gen_ticket_summary_index_name(project_uuid)
+        self.seasearch_api.delete_index_by_name(ticket_summary_index_name)
+
     def delete_index_by_connection(self, connection_id, connection_type):
         index_name = gen_index_name_by_type(connection_id, connection_type)
         # summary vector index
-        summary_index_name = gen_summary_index_name(connection_id, connection_type)
+        summary_index_name = gen_conn_summary_index_name(connection_id, connection_type)
         self.summary_vector_index.delete_index_by_index_name(summary_index_name)
 
         if connection_type == ConnectionType.SITE.value:
