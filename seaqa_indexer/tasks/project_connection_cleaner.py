@@ -99,7 +99,9 @@ class ProjectConnectionCleaner(object):
         self.index_manager.delete_index_by_project(project_uuid)
 
         # delete crawled file folder
-        self.storage.delete_project(project_uuid)
+        self.storage.delete_project_crawl_data(project_uuid)
+        # delete project attachment
+        self.storage.delete_project_attachment(project_uuid)
 
         self.seadb_api.delete_base(project_uuid)
         # delete db record

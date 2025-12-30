@@ -3,9 +3,11 @@ import boto3
 import logging
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
+from seaqa_indexer.utils import uuid_str_to_36_chars
 
 from seaqa_indexer.config import (
     S3_HOST,
+    S3_FILE_BUCKET,
     S3_WEB_CRAWL_BUCKET,
     S3_KEY_ID,
     S3_SECRET_KEY,
@@ -32,8 +34,12 @@ class BaseStorage:
         """Delete all crawled files for a site (project_uuid/site_id)."""
         raise NotImplementedError
 
-    def delete_project(self, project_uuid):
+    def delete_project_crawl_data(self, project_uuid):
         """Delete all crawled files for a project (project_uuid/*)."""
+        raise NotImplementedError
+
+    def delete_project_attachment(self, project_uuid):
+        """Delete all uploaded files for a project (/projects/{project_uuid}/*)."""
         raise NotImplementedError
 
 
@@ -48,6 +54,7 @@ class S3Storage(BaseStorage):
             config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
         )
         self.bucket = S3_WEB_CRAWL_BUCKET
+        self.file_bucket = S3_FILE_BUCKET
 
     def ping(self):
         """Check if S3 bucket is accessible. Returns True if ok, else False."""
@@ -116,11 +123,11 @@ class S3Storage(BaseStorage):
             else:
                 break
 
-    def _delete_by_prefix(self, prefix):
+    def _delete_by_prefix(self, bucket, prefix):
         continuation_token = None
         to_delete = []
         while True:
-            params = {'Bucket': self.bucket, 'Prefix': prefix}
+            params = {'Bucket': bucket, 'Prefix': prefix}
             if continuation_token:
                 params['ContinuationToken'] = continuation_token
             resp = self.client.list_objects_v2(**params)
@@ -130,22 +137,30 @@ class S3Storage(BaseStorage):
                 for obj in contents:
                     to_delete.append({'Key': obj['Key']})
                     if len(to_delete) == 1000:
-                        self.client.delete_objects(Bucket=self.bucket, Delete={'Objects': to_delete})
+                        self.client.delete_objects(Bucket=bucket, Delete={'Objects': to_delete})
                         to_delete = []
             if resp.get('IsTruncated'):
                 continuation_token = resp.get('NextContinuationToken')
             else:
                 break
         if to_delete:
-            self.client.delete_objects(Bucket=self.bucket, Delete={'Objects': to_delete})
+            self.client.delete_objects(Bucket=bucket, Delete={'Objects': to_delete})
 
     def delete_site(self, site_id, project_uuid):
         prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=site_id)
-        self._delete_by_prefix(prefix)
+        self._delete_by_prefix(self.bucket, prefix)
 
-    def delete_project(self, project_uuid):
+    def delete_project_crawl_data(self, project_uuid):
         prefix = f"{project_uuid}/"
-        self._delete_by_prefix(prefix)
+        self._delete_by_prefix(self.bucket, prefix)
+
+    def delete_project_attachment(self, project_uuid):
+        if not self.file_bucket:
+            return
+        if len(project_uuid) == 32:
+            project_uuid = uuid_str_to_36_chars(project_uuid)
+        prefix = f"projects/{project_uuid}/"
+        self._delete_by_prefix(self.file_bucket, prefix)
 
 
 _storage = None
