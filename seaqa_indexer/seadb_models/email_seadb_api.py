@@ -95,7 +95,9 @@ class EmailSeaDBAPI:
 
     def get_threads_by_page(self, connection_id, since, page_size, offset):
         table_name = ThreadTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        sql = f"""SELECT * FROM `{table_name}` 
+                WHERE sync_time >= '{since}' OR record_modified_time >= '{since}' 
+                LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results

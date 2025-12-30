@@ -77,8 +77,9 @@ class EmailIndex(BaseIndex):
             for thread in threads:
                 deleted = thread.get('deleted')
                 pk = thread.get('_pk')
+                outdated = thread.get('outdated')
                 key = str(pk)
-                if deleted:
+                if deleted or outdated:
                     deleted_index_id_set.add(key)
                 else:
                     content = ''

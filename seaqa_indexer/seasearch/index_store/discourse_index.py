@@ -91,7 +91,7 @@ class DiscourseIndex(BaseIndex):
                 topic_id = topic.get('topic_id')
                 pk = topic.get('_pk')
                 key = str(pk)
-                if topic.get('deleted'):
+                if topic.get('deleted') or topic.get('outdated'):
                     need_cleared_topic_index_id_set.add(key)
                 else:
                     replies_offset = 0

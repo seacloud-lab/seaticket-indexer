@@ -53,9 +53,9 @@ class ContentVectorIndex(VectorBaseIndex):
 
         while True:
             sql = f"""
-                SELECT _pk, url, deleted, sync_time, modified_time 
+                SELECT _pk, url, deleted, outdated, sync_time, modified_time 
                 FROM `{table_name}` 
-                WHERE sync_time > '{since}'
+                WHERE sync_time >= '{since}' OR record_modified_time >= '{since}'
                 ORDER BY sync_time 
                 LIMIT {page_size} OFFSET {offset}
             """
@@ -68,9 +68,10 @@ class ContentVectorIndex(VectorBaseIndex):
                 pk = row.get('_pk')
                 url = row.get('url')
                 deleted = row.get('deleted')
+                outdated = row.get('outdated')
                 modified_time = row.get('modified_time')
 
-                if deleted:
+                if deleted or outdated:
                     deleted_index_pk_set.add(pk)
                     continue
 

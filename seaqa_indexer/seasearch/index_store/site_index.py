@@ -85,8 +85,9 @@ class SiteIndex(BaseIndex):
 
         table_name = WebCrawlTable.gen_table_name(connection_id)
         while True:
-            sql = f"""SELECT * FROM `{table_name}` WHERE sync_time > '{since}'
-                            ORDER BY sync_time LIMIT {page_size} OFFSET {offset}"""
+            sql = f"""SELECT * FROM `{table_name}` 
+                    WHERE sync_time >= '{since}' OR record_modified_time >= '{since}' 
+                    LIMIT {page_size} OFFSET {offset}"""
             result = seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])
             if not rows:
@@ -99,8 +100,9 @@ class SiteIndex(BaseIndex):
                 title = row.get('title')
                 deleted = row.get('deleted')
                 pk = row.get('_pk')
+                outdated = row.get('outdated')
                 key = str(pk)
-                if deleted:
+                if deleted or outdated:
                     deleted_index_id_set.add(key)
                     continue
                 else:

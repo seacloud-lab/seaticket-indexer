@@ -329,7 +329,7 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
         # format connection vector search result
         connection_id = result.get('connection_id')
         connection = connection_id_to_connection.get(int(connection_id))
-        record = connection_pk_to_record.get(connection_id, {}).get(pk)
+        record = connection_pk_to_record.get(int(connection_id), {}).get(pk)
         connection_type = connection.type
 
         formatted_result['connection_id'] = connection_id
