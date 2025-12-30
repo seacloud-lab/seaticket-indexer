@@ -157,8 +157,7 @@ class S3Storage(BaseStorage):
     def delete_project_attachment(self, project_uuid):
         if not self.file_bucket:
             return
-        if len(project_uuid) == 32:
-            project_uuid = uuid_str_to_36_chars(project_uuid)
+        project_uuid = uuid_str_to_36_chars(project_uuid)
         prefix = f"projects/{project_uuid}/"
         self._delete_by_prefix(self.file_bucket, prefix)
 
