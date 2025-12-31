@@ -3,9 +3,13 @@ import datetime
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
+from seaqa_indexer.utils import time_to_utc_time
 
 
 logger = logging.getLogger(__name__)
+
+MAX_CONTENT_LENGTH = 10000
+
 
 class DiscourseSeaDBAPI:
     def __init__(self, base_id, username='', timeout=30):
@@ -13,10 +17,29 @@ class DiscourseSeaDBAPI:
         self.seadb_api = SeaDBAPI(username=username, timeout=timeout)
 
     # Topics operations
-    def insert_topic(self, connection_id, topic_data):
-        """Insert a single topic record"""
+    def insert_topic(self, connection_id, topic_id, topic_data):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        rows = [topic_data]
+
+        title = topic_data.get('title')
+        slug = topic_data.get('slug')
+        views = topic_data.get('views', 0)
+        category_id = topic_data.get('category_id')
+        resolved = topic_data.get('has_accepted_answer', False)
+        modified_time = topic_data.get('bumped_at')
+        topic_created_time = topic_data.get('created_at')
+
+        rows = [{
+            DiscourseTopicsTable.topic_id.name: topic_id,
+            DiscourseTopicsTable.title.name: title,
+            DiscourseTopicsTable.slug.name: slug,
+            DiscourseTopicsTable.views.name: views,
+            DiscourseTopicsTable.category_id.name: category_id,
+            DiscourseTopicsTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+            DiscourseTopicsTable.deleted.name: False,
+            DiscourseTopicsTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            DiscourseTopicsTable.created_time.name: time_to_utc_time(topic_created_time).isoformat(),
+            DiscourseTopicsTable.resolved.name: resolved,
+        }]
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
     def get_topics_by_page(self, connection_id, since, page_size, offset):
@@ -32,7 +55,7 @@ class DiscourseSeaDBAPI:
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
-        return None
+        return {}
 
     def get_reply_by_id(self, connection_id, topic_id, post_number):
         """Get discourse reply by topic_id and post_number"""
@@ -43,17 +66,34 @@ class DiscourseSeaDBAPI:
             return response['results'][0]
         return {}
 
-    def update_topic(self, connection_id, topic_data, primary_key):
+    def update_topic(self, connection_id, primary_key, topic_data):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+
+        title = topic_data.get('title')
+        slug = topic_data.get('slug')
+        views = topic_data.get('views', 0)
+        category_id = topic_data.get('category_id')
+        resolved = topic_data.get('has_accepted_answer', False)
+        bumped_at = topic_data.get('bumped_at')
+        last_posted_at = topic_data.get('last_posted_at')
+        # When using the webhook, in TOPIC_CREATED mode,
+        # the received data does not have bumped_at, so last_posted_at is used
+        modified_time = bumped_at if bumped_at else last_posted_at
+
         updates = [{
             "pk": primary_key,
-            "row": topic_data
+            "row": {
+                DiscourseTopicsTable.title.name: title,
+                DiscourseTopicsTable.slug.name: slug,
+                DiscourseTopicsTable.views.name: views,
+                DiscourseTopicsTable.category_id.name: category_id,
+                DiscourseTopicsTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+                DiscourseTopicsTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                DiscourseTopicsTable.deleted.name: False,
+                DiscourseTopicsTable.resolved.name: resolved,
+            }
         }]
-        return self.seadb_api.update_rows(
-            base_id=self.base_id,
-            table_name=table_name,
-            rows=updates
-        )
+        return self.seadb_api.update_rows(self.base_id, table_name, updates)
 
     def delete_topic(self, connection_id, topic_id):
         """Logically delete topic record"""
@@ -81,19 +121,48 @@ class DiscourseSeaDBAPI:
             delete_sql = f"DELETE FROM `{comments_table_name}` WHERE topic_id = {topic_id}"
             self.seadb_api.query_rows(self.base_id, delete_sql)
 
-    # Replies operations
-    def insert_reply(self, connection_id, reply_data):
+    def insert_reply(self, connection_id, topic_id, reply):
         """Insert a single reply record"""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        rows = [reply_data]
+        post_number = reply.get('post_number')
+        content = reply.get('cooked')
+        author = reply.get('username')
+        modified_time = reply.get('updated_at')
+        accepted_answer = reply.get('accepted_answer', False)
+
+        if content and len(content) > MAX_CONTENT_LENGTH:
+            content = content[:MAX_CONTENT_LENGTH]
+        rows = [{
+            DiscourseRepliesTable.topic_id.name: topic_id,
+            DiscourseRepliesTable.post_number.name: post_number,
+            DiscourseRepliesTable.content.name: content,
+            DiscourseRepliesTable.author.name: author,
+            DiscourseRepliesTable.accepted_answer.name: accepted_answer,
+            DiscourseRepliesTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+        }]
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
-    def update_reply(self, connection_id, reply_pk, reply_data):
+    def update_reply(self, connection_id, reply_pk, topic_id, reply):
         """Update reply records"""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        post_number = reply.get('post_number')
+        content = reply.get('cooked', '')
+        author = reply.get('username')
+        modified_time = reply.get('updated_at')
+        accepted_answer = reply.get('accepted_answer', False)
+
+        if content and len(content) > MAX_CONTENT_LENGTH:
+            content = content[:MAX_CONTENT_LENGTH]
         updates = [{
             "pk": reply_pk,
-            "row": reply_data
+            "row": {
+                DiscourseRepliesTable.content.name: content,
+                DiscourseRepliesTable.author.name: author,
+                DiscourseRepliesTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+                DiscourseRepliesTable.topic_id.name: topic_id,
+                DiscourseRepliesTable.post_number.name: post_number,
+                DiscourseRepliesTable.accepted_answer.name: accepted_answer,
+            }
         }]
         return self.seadb_api.update_rows(
             base_id=self.base_id,
