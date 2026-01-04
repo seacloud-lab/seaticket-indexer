@@ -6,7 +6,7 @@ from sqlalchemy import text
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
+from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class DiscourseSyncManager:
             raise ForumNotFoundException()
 
         project_uuid = project_connection.project_uuid
-        discourse_sync = DiscourseSync(project_uuid, self.db_session_class)
+        discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
 
         connection_is_active = project_connection.is_active
         if not connection_is_active:
@@ -60,13 +60,31 @@ class DiscourseSyncManager:
 
         topic_id = request_data.get('topic', {}).get('id')
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited']:
-            discourse_sync.handle_topic_update(connection_id, topic_id, request_data)
+            topic_data = request_data.get('topic', {})
+            existing_topic = discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id)
+            if topic_pk := existing_topic.get('_pk'):
+                discourse_seadb_api.update_topic(connection_id, topic_pk, topic_data)
+            else:
+                discourse_seadb_api.insert_topic(connection_id, topic_id, topic_data)
+                logger.debug(f"Created new topic {topic_id}")
         elif event_type in ['post_created', 'post_edited', 'post_recovered']:
-            discourse_sync.handle_reply_update(connection_id, topic_id, request_data)
+            reply_data = request_data.get('post', {})
+            post_number = reply_data.get('post_number')
+            existing_reply = discourse_seadb_api.get_reply_by_id(connection_id, topic_id, post_number)
+            if existing_reply:
+                reply_pk = existing_reply.get('_pk')
+                discourse_seadb_api.update_reply(connection_id, reply_pk, topic_id, reply_data)
+            else:
+                discourse_seadb_api.insert_reply(connection_id, topic_id, reply_data)
+            discourse_seadb_api.update_topic_sync_time(connection_id, topic_id)
         elif event_type == 'topic_destroyed':
-            discourse_sync.handle_topic_deleted(topic_id, connection_id)
+            discourse_seadb_api.delete_topic(connection_id, topic_id)
         elif event_type == 'post_destroyed':
-            discourse_sync.handle_reply_delete(connection_id, topic_id, request_data)
+            reply_data = request_data.get('post', {})
+            post_number = reply_data.get('post_number')
+            if post_number:
+                discourse_seadb_api.delete_reply_from_db(connection_id, topic_id, post_number)
+                discourse_seadb_api.update_topic_sync_time(connection_id, topic_id)
         else:
             logger.warning(f"Unknown event type: {event_type}")
         self.add_discourse_index_task(connection_id)

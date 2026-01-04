@@ -6,11 +6,10 @@ class GitHubAPIException(Exception):
 
 
 class GitHubAPI:
-    def __init__(self, token, owner, repo, issues_sync_id, timeout=60):
+    def __init__(self, token, owner, repo, timeout=60):
         self.owner = owner
         self.repo = repo
         self.token = token
-        self.issues_sync_id = issues_sync_id
         self.timeout = timeout
         self.headers = self._gen_headers()
         self.base_url = f'https://api.github.com/repos/{self.owner}/{self.repo}'

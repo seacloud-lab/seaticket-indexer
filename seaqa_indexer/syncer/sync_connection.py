@@ -1,13 +1,13 @@
 import logging
 import json
 import datetime
+import time
 import os
 
 from urllib.parse import urlparse
 from dateutil.relativedelta import relativedelta
 
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
-from seaqa_indexer.syncer.discourse_syncer.discourse_sync import DiscourseSync
 from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.utils import decrypt_config, time_to_utc_time, encrypt_config, get_file_suffix
 from seaqa_indexer.utils import need_update_connection_last_sync_count
@@ -24,8 +24,11 @@ from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
 from seaqa_indexer.utils.imap_mail import ImapMail
 from seaqa_indexer.crawler.storage import get_storage
+from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
+from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
 
 logger = logging.getLogger(__name__)
+
 
 def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     logger.info(f"Start sync connection: {connection_id}")
@@ -61,7 +64,6 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     sync_count = 0
     total_count = 0
     try:
-        # sync discourse
         if connection_type == ConnectionType.DISCOURSE_FORUM.value:
             forum_url = config['url']
             discourse_api_key = config['api_key']
@@ -70,20 +72,13 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
 
             project_uuid = project_connection.project_uuid
             project_created_at = project_connection.created_at
-            discourse_sync = DiscourseSync(project_uuid, seaqa_db)
-            sync_count = discourse_sync.sync(
-                connection_id,
-                forum_url,
-                sync_years,
-                project_created_at,
-                discourse_api_key,
-                discourse_api_username,
-                old_last_sync_time,
-                connection_status,
-                sync_logger,
-            )
+            discourse_forum_api = DiscourseForumAPI(forum_url, discourse_api_key, discourse_api_username)
 
-            total_count = discourse_sync.get_discourse_forum_topic_count(connection_id)
+            discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
+            # Calculate sync_earliest_time by subtracting sync_years from project_created_time
+            project_created_time_utc = time_to_utc_time(str(project_created_at))
+            sync_earliest_time = project_created_time_utc - relativedelta(years=sync_years)
+            sync_discourse(connection_id, sync_earliest_time, old_last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db)
 
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
             server_url = config.get('repository')
@@ -100,7 +95,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
                 sync_logger.stop_capture()
                 return
             since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
-            github_api = GitHubAPI(token, repo_owner, repo_name, connection_id)
+            github_api = GitHubAPI(token, repo_owner, repo_name)
             github_seadb_api = GitHubSeaDBAPI(project_uuid)
             sync_count, total_count = sync_github_issue(connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api)
 
@@ -406,4 +401,83 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
             insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
 
     total_count = email_seadb_api.get_email_total_count(connection_id)
+    return sync_count, total_count
+
+
+def sync_discourse(connection_id, sync_earliest_time, last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db):
+    page = 0
+    should_stop = False
+    sync_count = 0
+    _status_last_update_time = datetime.datetime.now()
+    _status_last_update_count = 0
+
+    if last_sync_time:
+        last_sync_time = time_to_utc_time(str(last_sync_time))
+
+    while True:
+        topics = discourse_forum_api.fetch_latest_topics_page(page)
+
+        if not topics:
+            break
+
+        for topic_data in topics:
+            topic_modified_time = time_to_utc_time(topic_data.get('bumped_at'))
+
+            if last_sync_time and topic_modified_time <= last_sync_time and not topic_data.get('pinned'):
+                should_stop = True
+                break
+
+            if topic_modified_time <= sync_earliest_time:
+                if topic_data.get('pinned'):
+                    continue
+                should_stop = True
+                break
+
+            topic_id = topic_data.get('id')
+
+            # Check if topic already exists in DB
+            existing_topic = discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id)
+            if existing_topic:
+                existing_modified_time = time_to_utc_time(str(existing_topic.get('modified_time')))
+                if topic_modified_time <= existing_modified_time:
+                    logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
+                    continue
+
+            primary_key = existing_topic.get('_pk')
+            if primary_key:
+                discourse_seadb_api.update_topic(connection_id, primary_key, topic_data)
+            else:
+                discourse_seadb_api.insert_topic(connection_id, topic_id, topic_data)
+
+            is_insert_topic = not primary_key
+            topic_replies = discourse_forum_api.fetch_topic_replies(topic_id)
+            # Upate existing reply, but the deleted reply will be retained.
+            for reply in topic_replies:
+                if reply.get('post_type') != 1:
+                    continue
+                post_number = reply.get('post_number')
+
+                if not is_insert_topic:
+                    if existing_reply := discourse_seadb_api.get_reply_by_id(connection_id, topic_id, post_number):
+                        reply_pk = existing_reply.get('_pk')
+                        discourse_seadb_api.update_reply(connection_id, reply_pk, topic_id, reply)
+                        continue
+                discourse_seadb_api.insert_reply(connection_id, topic_id, reply)
+
+            sync_count += 1
+            should, new_time, new_count = need_update_connection_last_sync_count(
+                sync_count, _status_last_update_time, _status_last_update_count
+            )
+            if should:
+                connection_status['last_sync_count'] = sync_count
+                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                _status_last_update_time = new_time
+                _status_last_update_count = new_count
+            time.sleep(1)
+
+        page += 1
+        if should_stop:
+            break
+
+    total_count = discourse_seadb_api.get_topic_count(connection_id)
     return sync_count, total_count
