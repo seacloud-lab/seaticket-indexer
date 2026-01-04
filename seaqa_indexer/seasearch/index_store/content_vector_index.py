@@ -59,6 +59,9 @@ class ContentVectorIndex(object):
 
     def check_index(self, index_name):
         return self.seasearch_api.check_index_mapping(index_name).get('is_exist')
+    
+    def delete_index_by_index_name(self, index_name):
+        self.seasearch_api.delete_index_by_name(index_name)
 
     def _query_index_ids_by_pk(self, index_name, pk):
         """Query index document IDs by pk and url fields"""
