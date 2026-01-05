@@ -12,11 +12,6 @@ class GitHubSeaDBAPI:
         self.base_id = base_id
         self.seadb_api = SeaDBAPI()
 
-    def tag_comment_deleted(self, connection_id, comment_id):
-        table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
-        sql = f"UPDATE `{table_name}` SET deleted = True WHERE comment_id = {comment_id}"
-        self.seadb_api.query_rows(self.base_id, sql)
-
     def update_issue_record(self, connection_id, issue_id, modified_time, comments_count=None, deleted=False):
 
         row = {
@@ -99,8 +94,8 @@ class GitHubSeaDBAPI:
         if issues:
             _pk = issues[0].get('_pk')
             update_row = {
-                "pk":_pk,
-                "row":insert_row,
+                "pk": _pk,
+                "row": insert_row,
             }
             self.seadb_api.update_rows(self.base_id, table_name, [update_row])
         else:
@@ -129,13 +124,63 @@ class GitHubSeaDBAPI:
             _pk = comments[0].get('_pk')
             update_row = [
                 {
-                "pk":_pk,
-                "row":insert_row,
+                    "pk": _pk,
+                    "row": insert_row,
                 }
             ]
             self.seadb_api.update_rows(self.base_id, table_name, update_row)
         else:
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
+
+    def save_or_update_issue_comments(self, connection_id, issue_id, comments):
+        offset = 0
+        page_size = 1000
+        old_comment_ids = set()
+        new_comment_ids = set()
+        comment_id_to_pk = {}
+        while True:
+            old_issue_comments = self.get_issue_comments_by_page(connection_id, issue_id, page_size, offset)
+            for comment in old_issue_comments:
+                comment_id = comment.get('comment_id')
+                old_comment_ids.add(comment_id)
+                comment_id_to_pk[comment_id] = comment.get('_pk')
+            if not old_issue_comments or len(old_issue_comments) < page_size:
+                break
+            offset += page_size
+
+        for comment in comments:
+            comment_id = comment['id']
+            new_comment_ids.add(comment_id)
+            issue_id = int(issue_id)
+            content = comment.get('body', '')
+            if content and len(content) > MAX_CONTENT_LENGTH:
+                content = content[:MAX_CONTENT_LENGTH]
+
+            insert_row = {
+                GithubIssueCommentsTable.comment_id.name: comment_id,
+                GithubIssueCommentsTable.issue_id.name: issue_id,
+                GithubIssueCommentsTable.author.name: comment.get('user', {}).get('login', ''),
+                GithubIssueCommentsTable.content.name: content,
+                GithubIssueCommentsTable.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
+                GithubIssueCommentsTable.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
+            }
+
+            table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
+            pk = comment_id_to_pk.get(comment_id)
+            if pk:
+                update_row = [
+                    {
+                        "pk": pk,
+                        "row": insert_row,
+                    }
+                ]
+                self.seadb_api.update_rows(self.base_id, table_name, update_row)
+            else:
+                self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
+
+        need_deleted_comment_ids = old_comment_ids - new_comment_ids
+        for comment_id in need_deleted_comment_ids:
+            self.delete_comment_from_db(connection_id, comment_id)
 
     def add_or_update_issue_label_column_options(self, connection_id, issues_labels):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
@@ -153,12 +198,19 @@ class GitHubSeaDBAPI:
                 label_column = column
                 break
 
+        old_label_names = set()
+        label_name_to_option_id = {}
+        if label_column.get('data'):
+            for option in label_column.get('data')['options']:
+                old_label_names.add(option['name'])
+                label_name_to_option_id[option['name']] = option['id']
+
+        label_column_key = label_column.get('key')
+        new_label_names = set()
         for issues_label in issues_labels:
-            if label_column['data'] is not None:
-                option_names = {opt['name'] for opt in label_column['data']['options']}
-            else:
-                option_names = None
-            if option_names is None or issues_label.get('name') not in option_names:
+            label_name = issues_label.get('name')
+            new_label_names.add(label_name)
+            if label_name not in old_label_names:
                 column_key = label_column.get('key')
                 column_option = {
                     'table_id': table_id,
@@ -169,6 +221,10 @@ class GitHubSeaDBAPI:
                     },
                 }
                 self.seadb_api.add_column_option(self.base_id, column_option)
+        need_deleted_labels = old_label_names - new_label_names
+        if need_deleted_labels:
+            need_deleted_option_ids = [label_name_to_option_id[label_name] for label_name in need_deleted_labels]
+            self.seadb_api.delete_column_option(self.base_id, table_id, label_column_key, option_ids=need_deleted_option_ids)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)

@@ -78,7 +78,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             # Calculate sync_earliest_time by subtracting sync_years from project_created_time
             project_created_time_utc = time_to_utc_time(str(project_created_at))
             sync_earliest_time = project_created_time_utc - relativedelta(years=sync_years)
-            sync_discourse(connection_id, sync_earliest_time, old_last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db)
+            sync_count, total_count = sync_discourse(connection_id, sync_earliest_time, old_last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db)
 
         if connection_type == ConnectionType.GITHUB_ISSUE.value:
             server_url = config.get('repository')
@@ -241,14 +241,17 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
                 seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
                 _status_last_update_time = new_time
                 _status_last_update_count = new_count
+
             comments_page = 1
+            all_comments = []
             while True:
                 comments = github_api.get_issue_comments(issue['number'], per_page=per_page, page=comments_page)
+                all_comments += comments
                 comments_page += 1
-                if not comments:
+                if not comments or len(comments) < per_page:
                     break
-                for comment in comments:
-                    github_seadb_api.save_or_update_issue_comment_to_db(connection_id, issue['id'], comment)
+
+            github_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
 
         if len(issues) < per_page:
             break
@@ -449,20 +452,9 @@ def sync_discourse(connection_id, sync_earliest_time, last_sync_time, connection
             else:
                 discourse_seadb_api.insert_topic(connection_id, topic_id, topic_data)
 
-            is_insert_topic = not primary_key
             topic_replies = discourse_forum_api.fetch_topic_replies(topic_id)
-            # Upate existing reply, but the deleted reply will be retained.
-            for reply in topic_replies:
-                if reply.get('post_type') != 1:
-                    continue
-                post_number = reply.get('post_number')
 
-                if not is_insert_topic:
-                    if existing_reply := discourse_seadb_api.get_reply_by_id(connection_id, topic_id, post_number):
-                        reply_pk = existing_reply.get('_pk')
-                        discourse_seadb_api.update_reply(connection_id, reply_pk, topic_id, reply)
-                        continue
-                discourse_seadb_api.insert_reply(connection_id, topic_id, reply)
+            discourse_seadb_api.update_topic_replies(connection_id, topic_id, topic_replies)
 
             sync_count += 1
             should, new_time, new_count = need_update_connection_last_sync_count(

@@ -58,7 +58,6 @@ class DiscourseSeaDBAPI:
         return {}
 
     def get_reply_by_id(self, connection_id, topic_id, post_number):
-        """Get discourse reply by topic_id and post_number"""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id} AND `post_number` = {post_number}"
         response = self.seadb_api.query_rows(self.base_id, sql)
@@ -112,17 +111,7 @@ class DiscourseSeaDBAPI:
         }]
         return self.seadb_api.update_rows(self.base_id, table_name, updates)
 
-    def delete_topics_from_db(self, connection_id, need_delete_topic_pks, need_deleted_reply_topic_ids):
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        self.seadb_api.delete_rows(self.base_id, table_name, need_delete_topic_pks)
-
-        comments_table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        for topic_id in need_deleted_reply_topic_ids:
-            delete_sql = f"DELETE FROM `{comments_table_name}` WHERE topic_id = {topic_id}"
-            self.seadb_api.query_rows(self.base_id, delete_sql)
-
     def insert_reply(self, connection_id, topic_id, reply):
-        """Insert a single reply record"""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
         post_number = reply.get('post_number')
         content = reply.get('cooked')
@@ -143,7 +132,6 @@ class DiscourseSeaDBAPI:
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
     def update_reply(self, connection_id, reply_pk, topic_id, reply):
-        """Update reply records"""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
         post_number = reply.get('post_number')
         content = reply.get('cooked', '')
@@ -170,20 +158,45 @@ class DiscourseSeaDBAPI:
             rows=updates
         )
 
-    def delete_replies_by_topic(self, connection_id, topic_id):
-        """Physically delete all replies for the specified topic."""
-        table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        sql = f"DELETE FROM `{table_name}` WHERE topic_id = {topic_id}"
-        return self.seadb_api.query_rows(self.base_id, sql)
+    def update_topic_replies(self, connection_id, topic_id, topic_replies):
+        offset = 0
+        page_size = 1000
+        old_reply_ids = set()
+        new_reply_ids = set()
+        post_number_to_pk = {}
+        while True:
+            replies = self.get_topic_replies_by_page(connection_id, topic_id, page_size, offset)
+            for reply in replies:
+                post_number = reply.get('post_number')
+                post_number_to_pk[post_number] = reply.get('_pk')
+                old_reply_ids.add(post_number)
+            if not replies or len(replies) < page_size:
+                break
+            offset += page_size
+
+        for reply in topic_replies:
+            if reply.get('post_type') != 1:
+                continue
+            post_number = reply.get('post_number')
+            new_reply_ids.add(post_number)
+
+            pk = post_number_to_pk.get(post_number)
+
+            if pk:
+                self.update_reply(connection_id, pk, topic_id, reply)
+            else:
+                self.insert_reply(connection_id, topic_id, reply)
+
+        need_deleted_reply_ids = old_reply_ids - new_reply_ids
+        for reply_id in need_deleted_reply_ids:
+            self.delete_reply_from_db(connection_id, topic_id, reply_id)
 
     def delete_reply_from_db(self, connection_id, topic_id, post_number):
-        """Physically delete a single reply by topic_id and post_number."""
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
         sql = f"DELETE FROM `{table_name}` WHERE topic_id = {topic_id} AND post_number = {post_number}"
         return self.seadb_api.query_rows(self.base_id, sql)
 
     def update_topic_sync_time(self, connection_id, topic_id):
-        """Update only the sync_time of a topic."""
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
         topic = self.get_topic_by_topic_id(connection_id, topic_id)
         if not topic:
@@ -212,14 +225,7 @@ class DiscourseSeaDBAPI:
             return result[0]
         return {}
 
-    def delete_topic_from_db(self, topic_id, connection_id):
-        """Delete topic from database"""
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"DELETE FROM `{table_name}` WHERE topic_id = '{topic_id}'"
-        return self.seadb_api.query_rows(self.base_id, sql)
-
     def get_topic_count(self, connection_id):
-        """Retrieve topic count for the specified connection_id."""
         topics_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
 
         # Obtain the number of topics
