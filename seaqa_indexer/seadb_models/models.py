@@ -33,7 +33,7 @@ class PropertyTypes:
 
 class ListTypes:
     vector = {
-        "list_type": "float64",
+        "list_type": "float32",
     }
 
 class SelectTypes:
