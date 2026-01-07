@@ -592,38 +592,69 @@ class IndexManager:
 
         return top_results
 
-
-    def summary_vector_search(self, project_uuid, connection_ids, query_vector, top_k=10, score_threshold=0.5):
-        project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_ids)
-
-        if not project_connections:
-            return []
-
+    def summary_vector_search(self, project_uuid, connection_ids, include_tickets, query_vector, top_k=10, score_threshold=0.5):
         all_results = []
         per_connection_limit = max(top_k, 20)
 
-        for project_connection in project_connections:
-            connection_type = project_connection.type
-            connection_id = project_connection.id
+        # Search tickets if requested
+        if include_tickets:
+            ticket_results = self._search_tickets_summary(
+                project_uuid, query_vector, per_connection_limit, score_threshold
+            )
+            all_results.extend(ticket_results)
 
-            index_name = gen_conn_summary_index_name(connection_id, connection_type)
+        # Search connections
+        connection_index_names = self._get_connection_index_names(project_uuid, connection_ids)
+        connection_results = self._search_connections_summary(
+            connection_index_names, query_vector, per_connection_limit, score_threshold
+        )
+        all_results.extend(connection_results)
 
-            index_exists = self.summary_vector_index.check_index(index_name)
-            if not index_exists:
-                logger.debug('Index %s does not exist, skipping connection %s', index_name, connection_id)
-                continue
-
-            try:
-                search_results = self.summary_vector_index.semantic_search(
-                        index_name, query_vector, per_connection_limit
-                )
-                filtered_results = [r for r in search_results if r.get('score', 0) >= score_threshold]
-                all_results.extend(filtered_results)
-            except Exception as e:
-                logger.exception('Vector search failed for connection %s: %s', connection_id, e)
-                continue
-
+        # Sort and return top results
         all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
-        top_results = all_results[:top_k]
+        final_results = all_results[:top_k]
+        return final_results
 
-        return top_results
+    def _search_tickets_summary(self, project_uuid, query_vector, limit, score_threshold):
+        results = []
+        ticket_summary_index_name = gen_ticket_summary_index_name(project_uuid)
+        if self.ticket_summary_vector_index.check_index(ticket_summary_index_name):
+            try:
+                ticket_results = self.ticket_summary_vector_index.semantic_search(
+                    ticket_summary_index_name, query_vector, limit
+                )
+                for result in ticket_results:
+                    result['source_type'] = 'ticket'
+                results = [r for r in ticket_results if r.get('score', 0) >= score_threshold]
+            except Exception as e:
+                logger.exception('Ticket vector search failed: %s', e)
+        return results
+
+    def _get_connection_index_names(self, project_uuid, connection_ids):
+        if connection_ids:
+            project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_ids)
+        else:
+            project_connections = self.seaqa_db.get_connections_by_project_uuid(project_uuid)
+
+        connection_index_names = []
+        if project_connections:
+            for project_connection in project_connections:
+                connection_type = project_connection.type
+                connection_id = project_connection.id
+                index_name = gen_conn_summary_index_name(connection_id, connection_type)
+                if self.summary_vector_index.check_index(index_name):
+                    connection_index_names.append(index_name)
+        
+        return connection_index_names
+
+    def _search_connections_summary(self, connection_index_names, query_vector, limit, score_threshold):
+        results = []
+        if connection_index_names:
+            try:
+                connection_results = self.summary_vector_index.semantic_search(
+                    connection_index_names, query_vector, limit
+                )
+                results = [r for r in connection_results if r.get('score', 0) >= score_threshold]
+            except Exception as e:
+                logger.exception('Connection vector search failed: %s', e)
+        return results

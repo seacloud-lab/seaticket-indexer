@@ -204,6 +204,7 @@ def summary_vector_search():
     query_vector = data.get('query_vector')
     project_uuid = data.get('project_uuid')
     connection_ids = data.get('connection_ids')
+    include_tickets = data.get('include_tickets', False)
 
     if not query_vector:
         return {'error_msg': 'query_vector invalid.'}, 400
@@ -216,7 +217,7 @@ def summary_vector_search():
     except:
         count = 10
     results = application.app.index_manager.summary_vector_search(
-        project_uuid, connection_ids, query_vector, count
+        project_uuid, connection_ids, include_tickets, query_vector, count
     )
     return {'results': results}, 200
 
