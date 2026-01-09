@@ -8,7 +8,7 @@ from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, Ti
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.content_vector_index_connection import update_connection_content_vector_index
+from seaqa_indexer.seasearch.index_utils import update_connection_content_vector_index
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
@@ -61,8 +61,8 @@ class ContentVectorIndexTaskWorker(object):
             return
         for i in range(int(self.worker_num)):
             t = threading.Thread(
-                target=self.content_vector_index_task_worker, 
-                name='content_vector_index_task_worker_thread_' + str(i), 
+                target=self.content_vector_index_task_worker,
+                name='content_vector_index_task_worker_thread_' + str(i),
                 daemon=True
             )
             t.start()
@@ -109,24 +109,13 @@ class ContentVectorIndexTaskWorker(object):
                 logger.info(
                     "%s Finish content vector index connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
             else:
-                self.add_to_undo_task(connection_id)
+                logger.warning('another content vector index task is running, drop this task, connection_id: %s', connection_id)
 
     def update_content_vector_index(self, connection_id):
         try:
             update_connection_content_vector_index(connection_id, self.seaqa_db, self.seadb_api, self.storage, self.seasearch_api)
         except Exception as e:
             logger.exception('Content vector index connection: %s failed, error: %s', connection_id, e)
-
-    def add_to_undo_task(self, connection_id):
-        """Push task back to the end of the queue."""
-        time.sleep(0.5)
-
-        msg_content = {
-            'connection_id': connection_id,
-        }
-        self.mq.lpush('content_vector_index_task', json.dumps(msg_content))
-        logger.info('%s push back content vector index task connection_id: %s, to the queue' %
-                     (threading.current_thread().name, connection_id))
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)

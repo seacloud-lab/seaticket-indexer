@@ -106,7 +106,7 @@ class AIProcessTaskWorker(object):
                 logger.info(
                     "%s Finish AI process connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
             else:
-                self.add_to_undo_task(connection_id)
+                logger.warning('another ai process task is running, drop this task, connection_id: %s', connection_id)
 
     def tickets_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
@@ -122,7 +122,7 @@ class AIProcessTaskWorker(object):
                 self.mq.delete(lock_key)
                 logger.info("%s Finish AI process tickets: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
             else:
-                self.add_ticket_to_undo_task(project_uuid)
+                logger.warning('another ticket ai process task is running, drop this task, project_uuid: %s', project_uuid)
 
     def process_tickets_ai_summary(self, project_uuid):
         try:
@@ -136,30 +136,11 @@ class AIProcessTaskWorker(object):
         except Exception as e:
             logger.exception('AI process tickets of project: %s failed, error: %s', project_uuid, e)
 
-    def add_ticket_to_undo_task(self, project_uuid):
-        time.sleep(0.5)
-        msg_content = {
-            'project_uuid': project_uuid,
-            'type': 'ticket',
-        }
-        self.mq.lpush('ai_process_task', json.dumps(msg_content))
-        logger.info('%s push back AI process task project_uuid: %s, to the queue' % (threading.current_thread().name, project_uuid))
-
     def process_ai_summary(self, connection_id):
         try:
             generate_summaries_and_vectors(self.seadb_api, self.storage, self.seaqa_db, self.mq, connection_id)
         except Exception as e:
             logger.exception('AI process connection: %s failed, error: %s', connection_id, e)
-
-    def add_to_undo_task(self, connection_id):
-        time.sleep(0.5)
-
-        msg_content = {
-            'connection_id': connection_id,
-        }
-        self.mq.lpush('ai_process_task', json.dumps(msg_content))
-        logger.info('%s push back AI process task connection_id: %s, to the queue' %
-                     (threading.current_thread().name, connection_id))
 
     def kb_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
@@ -173,10 +154,9 @@ class AIProcessTaskWorker(object):
                 except KeyError:
                     logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                 self.mq.delete(lock_key)
-                logger.info(
-                    "%s Finish AI process knowledge base of project: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
+                logger.info("%s Finish AI process knowledge base of project: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
             else:
-                self.add_kb_to_undo_task(project_uuid)
+                logger.warning('another kb ai process task is running, drop this task, project_uuid: %s', project_uuid)
 
     def process_kb_ai_summary(self, project_uuid):
         try:
@@ -188,14 +168,6 @@ class AIProcessTaskWorker(object):
             self.mq.lpush('summary_index_task', json.dumps(msg_content))
         except Exception as e:
             logger.exception('AI process knowledge base of project: %s failed, error: %s', project_uuid, e)
-
-    def add_kb_to_undo_task(self, project_uuid):
-        time.sleep(0.5)
-        msg_content = {
-            'project_uuid': project_uuid,
-            'type': 'knowledge_base',
-        }
-        self.mq.lpush('ai_process_task', json.dumps(msg_content))
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)

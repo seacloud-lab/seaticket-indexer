@@ -28,7 +28,8 @@ class GithubIssuesSyncManager:
                 github_seadb_api.update_issue_record(connection_id, issue_id, modified_time, deleted=True)
                 self.add_issues_index_task(connection_id)
                 return
-            github_seadb_api.save_or_update_issue_to_db(connection_id, update_data)
+            existed_issue = github_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
+            github_seadb_api.save_or_update_issue_to_db(connection_id, update_data, existed_issue)
 
         elif event == "issue_comment":
             logger.info(f"Received webhook for issue_comment #{issue_id}, action: {action}, event: {event}")

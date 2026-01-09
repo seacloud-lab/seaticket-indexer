@@ -9,13 +9,13 @@ from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, Ti
 from seaqa_indexer import config
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.summary_index_utils import update_connection_summary_index, update_knowledge_base_summary_index
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.seasearch.summary_index_utils import update_tickets_summary_index
+from seaqa_indexer.seasearch.index_utils import update_tickets_summary_index, update_connection_summary_index, \
+    update_knowledge_base_summary_index
 
 
 logger = logging.getLogger(__name__)
@@ -122,7 +122,7 @@ class SummaryIndexTaskWorker(object):
                 logger.info(
                     "%s Finish summary index connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
             else:
-                self.add_to_undo_task(connection_id)
+                logger.warning('another summary index task is running, drop this task, connection_id: %s', connection_id)
 
     def kb_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
@@ -139,7 +139,7 @@ class SummaryIndexTaskWorker(object):
                 logger.info("%s Finish summary index knowledge base of project: %s, delete redis lock %s" %
                             (self.tname, project_uuid, lock_key))
             else:
-                self.add_kb_to_undo_task(project_uuid)
+                logger.warning('another kb summary index task is running, drop this task, project_uuid: %s', project_uuid)
 
     def tickets_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
@@ -156,22 +156,13 @@ class SummaryIndexTaskWorker(object):
                 logger.info(
                     "%s Finish summary index tickets: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
             else:
-                self.add_tickets_to_undo_task(project_uuid)
+                logger.warning('another ticket summary index task is running, drop this task, project_uuid: %s', project_uuid)
 
     def update_tickets_ai_index(self, project_uuid):
         try:
             update_tickets_summary_index(project_uuid, self.seaqa_db, self.seadb_api, self.seasearch_api)
         except Exception as e:
             logger.exception('Summary index tickets: %s failed, error: %s', project_uuid, e)
-
-    def add_tickets_to_undo_task(self, project_uuid):
-        time.sleep(0.5)
-        msg_content = {
-            'project_uuid': project_uuid,
-            'type': 'ticket',
-        }
-        self.mq.lpush('summary_index_task', json.dumps(msg_content))
-        logger.info('%s push back summary index task project_uuid: %s, to the queue' % (self.tname, project_uuid))
 
     def update_ai_index(self, connection_id):
         try:
@@ -184,29 +175,6 @@ class SummaryIndexTaskWorker(object):
             update_knowledge_base_summary_index( project_uuid, self.seaqa_db, self.seadb_api, self.seasearch_api)
         except Exception as e:
             logger.exception('Summary index knowledge base of project: %s failed, error: %s', project_uuid, e)
-
-    def add_to_undo_task(self, connection_id):
-        """Push task back to the end of the queue."""
-        time.sleep(0.5)
-
-        msg_content = {
-            'connection_id': connection_id,
-            'type': "connection",
-        }
-        self.mq.lpush('summary_index_task', json.dumps(msg_content))
-        logger.info('%s push back summary index task connection_id: %s, to the queue' %
-                     (threading.current_thread().name, connection_id))
-
-    def add_kb_to_undo_task(self, project_uuid):
-        time.sleep(0.5)
-
-        msg_content = {
-            'project_uuid': project_uuid,
-            'type': 'knowledge_base',
-        }
-        self.mq.lpush('summary_index_task', json.dumps(msg_content))
-        logger.info('%s push back summary index kb task project_uuid: %s, to the queue' %
-                     (threading.current_thread().name, project_uuid))
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)

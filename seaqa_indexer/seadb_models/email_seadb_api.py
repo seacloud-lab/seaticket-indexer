@@ -10,7 +10,7 @@ class EmailSeaDBAPI:
         self.base_id = base_id
         self.seadb_api = SeaDBAPI()
 
-    def save_or_update_email_to_db(self, connection_id, email):
+    def save_or_update_email_to_db(self, connection_id, email, existed_email):
         insert_row = {
             'email_from': email['email_from'],
             'email_to': email['email_to'],
@@ -28,12 +28,9 @@ class EmailSeaDBAPI:
         }
 
         table_name = EmailTable.gen_table_name(connection_id)
-        message_id = email['message_id']
 
-        sql = f"SELECT _pk FROM `{table_name}` WHERE `message_id`='{message_id}'"
-        results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if results:
-            _pk = results[0].get('_pk')
+        if existed_email:
+            _pk = existed_email.get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -129,10 +126,10 @@ class EmailSeaDBAPI:
 
     def get_email_by_message_id(self, connection_id, message_id):
         table_name = EmailTable.gen_table_name(connection_id)
-        sql = f"SELECT modified_time FROM `{table_name}` WHERE message_id='{message_id}'"
+        sql = f"SELECT _pk, modified_time FROM `{table_name}` WHERE message_id='{message_id}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         result = res.get('results', [])
-        return result[0] if result else None
+        return result[0] if result else {}
 
     def get_thread_emails_by_page(self, connection_id, thread_id, page_size, offset):
         email_table_name = EmailTable.gen_table_name(connection_id)

@@ -106,8 +106,7 @@ class IndexTaskWorker(object):
                 logger.info(
                     "%s Finish index connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
             else:
-                # the repo is updated by other thread, push back to the queue
-                self.add_to_undo_task(connection_id)
+                logger.warning('another index task is running, drop this task, connection_id: %s', connection_id)
 
     def kb_task_handler(self, project_uuid):
         lock_key = self._get_index_lock_key('kb_' + str(project_uuid))
@@ -123,7 +122,7 @@ class IndexTaskWorker(object):
             logger.info(
                 "%s Finish index knowledge base: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
         else:
-            self.add_kb_to_undo_task(project_uuid)
+            logger.warning('another kb index task is running, drop this task, project_uuid: %s', project_uuid)
 
     def ticket_task_handler(self, project_uuid):
         lock_key = self._get_index_lock_key('ticket_' + str(project_uuid))
@@ -136,48 +135,15 @@ class IndexTaskWorker(object):
             except KeyError:
                 logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
             self.mq.delete(lock_key)
-            logger.info(
-                    "%s Finish index ticket: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
+            logger.info("%s Finish index ticket: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
         else:
-            self.add_ticket_to_undo_task(project_uuid)
+            logger.warning('another ticket index task is running, drop this task, project_uuid: %s', project_uuid)
 
     def update_index(self, connection_id):
         try:
             update_connection_index(connection_id, self.db_session_class)
         except Exception as e:
             logger.exception('update connection: %s index failed, error: %s', connection_id, e)
-
-    def add_to_undo_task(self, connection_id):
-        """Push task back to the end of the queue.
-        """
-        # avoid get the same task repeatly
-        time.sleep(0.5)
-
-        msg_content = {
-            'connection_id': connection_id,
-            'type': 'connection',
-        }
-        self.mq.lpush('index_task', json.dumps(msg_content))
-        logger.info('%s push back task connection_id: %s, to the queue' % (threading.current_thread().name, connection_id))
-
-
-    def add_kb_to_undo_task(self, project_uuid):
-        time.sleep(0.5)
-        msg_content = {
-            'project_uuid': project_uuid,
-            'type': 'knowledge_base',
-        }
-        self.mq.lpush('index_task', json.dumps(msg_content))
-        logger.info('%s push back kb task project_uuid: %s, to the queue' % (threading.current_thread().name, project_uuid))
-
-    def add_ticket_to_undo_task(self, project_uuid):
-        time.sleep(0.5)
-        msg_content = {
-            'project_uuid': project_uuid,
-            'type': 'ticket',
-        }
-        self.mq.lpush('index_task', json.dumps(msg_content))
-        logger.info('%s push back ticket task project_uuid: %s, to the queue' % (threading.current_thread().name, project_uuid))
 
     def refresh_lock(self):
         logger.info('%s Starting refresh locks', self.tname)

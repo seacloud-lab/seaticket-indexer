@@ -60,11 +60,12 @@ class SelectTypes:
           "0010",
           "0011",
           "0012",
+          "0013"
         ],
         "0002": [
-          "0013",
           "0014",
-          "0015"
+          "0015",
+          "0016"
         ]
       },
       "options": [
@@ -88,34 +89,44 @@ class SelectTypes:
         },
         {
           "id": "0013",
+          "name": "Waiting on user",
+          "color": "#EAA775",
+          "text_color": "#FFFFFF"
+        },
+        {
+          "id": "0014",
           "name": "Completed",
           "color": "#8250DF",
           "text_color": "#FFFFFF",
         },
         {
-          "id": "0014",
+          "id": "0015",
           "name": "Not planned",
           "color": "#59636E",
           "text_color": "#FFFFFF"
         },
         {
-          "id": "0015",
+          "id": "0016",
           "name": "Duplicate",
           "color": "#59636E",
           "text_color": "#FFFFFF"
         },
       ]
     }
-    
+
     state = {
       "options": [
         {
           "id": "0001",
-          "name": "open"
+          "name": "open",
+          "color": "#1A7F37",
+          "text_color": "#FFFFFF"
         },
         {
           "id": "0002",
-          "name": "closed"
+          "name": "closed",
+          "color": "#8250DF",
+          "text_color": "#FFFFFF"
         }
       ]
     }
@@ -124,19 +135,27 @@ class SelectTypes:
       "options": [
         {
           "id": "0001",
-          "name": "completed"
+          "name": "completed",
+          "color": "#8250DF",
+          "text_color": "#FFFFFF"
         },
         {
           "id": "0002",
-          "name": "not_planned"
+          "name": "not_planned",
+          "color": "#59636E",
+          "text_color": "#FFFFFF"
         },
         {
           "id": "0003",
-          "name": "duplicate"
+          "name": "duplicate",
+          "color": "#59636E",
+          "text_color": "#FFFFFF"
         },
         {
           "id": "0004",
-          "name": "reopened"
+          "name": "reopened",
+          "color": "#1A7F37",
+          "text_color": "#FFFFFF"
         }
       ]
     }
@@ -146,14 +165,20 @@ class SelectTypes:
         {
           "id": "0001",
           "name": "Bug",
+          "color": "#ffebe9",
+          "text_color": "#d1242f"
         },
         {
           "id": "0002",
-          "name": "Feature"
+          "name": "Feature",
+          "color": "#ddf4ff",
+          "text_color": "#0969da"
         },
         {
           "id": "0003",
-          "name": "Task"
+          "name": "Task",
+          "color": "#fff8c5",
+          "text_color": "#9a6700"
         }
       ]
     }
@@ -288,7 +313,6 @@ class GithubIssueCommentsTable(BaseModel):
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
-    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
 
     @classmethod
     def gen_table_name(cls, connection_id):
@@ -310,9 +334,13 @@ class SeafileTable(BaseModel):
     def gen_table_name(cls, connection_id):
         return ConnectionType.SEAFILE.value + '_' + str(connection_id)
 
+
 class TicketsTable(BaseModel):
     title = MappedColumn('title', PropertyTypes.TEXT)
     content = MappedColumn('content', PropertyTypes.TEXT)
+    ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
+    ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
+    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
     state = MappedColumn('state', PropertyTypes.SINGLE_SELECT, data=SelectTypes.ticket_status)
     substate = MappedColumn('substate', PropertyTypes.SINGLE_SELECT, data=SelectTypes.ticket_substate)
     type = MappedColumn('type', PropertyTypes.SINGLE_SELECT)
@@ -331,37 +359,6 @@ class TicketsTable(BaseModel):
     def gen_table_name(cls):
         return 'tickets'
 
-class TicketCommentsTable(BaseModel):
-    ticket_id = MappedColumn('ticket_id', PropertyTypes.INT)
-    content = MappedColumn('content', PropertyTypes.TEXT)
-    creator = MappedColumn('creator', PropertyTypes.TEXT)
-    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
-    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
-
-    @classmethod
-    def gen_table_name(cls):
-        return 'ticket_comments'
-
-class TicketsTable(BaseModel):
-    title = MappedColumn('title', PropertyTypes.TEXT)
-    content = MappedColumn('content', PropertyTypes.TEXT)
-    state = MappedColumn('state', PropertyTypes.SINGLE_SELECT, data=SelectTypes.ticket_status)
-    substate = MappedColumn('substate', PropertyTypes.SINGLE_SELECT, data=SelectTypes.ticket_substate)
-    type = MappedColumn('type', PropertyTypes.SINGLE_SELECT)
-    tags = MappedColumn('tags', PropertyTypes.MULTIPLE_SELECT)
-    assignees = MappedColumn('assignees', PropertyTypes.LIST)
-    participants = MappedColumn('participants', PropertyTypes.LIST)
-    priority = MappedColumn('priority', PropertyTypes.INT)
-    creator = MappedColumn('creator', PropertyTypes.TEXT)
-    comment_count = MappedColumn('comment_count', PropertyTypes.INT)
-    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
-    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
-    closed_time = MappedColumn('closed_time', PropertyTypes.DATETIME)
-    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
-
-    @classmethod
-    def gen_table_name(cls):
-        return 'tickets'
 
 class TicketCommentsTable(BaseModel):
     ticket_id = MappedColumn('ticket_id', PropertyTypes.INT)
@@ -417,7 +414,7 @@ class KnowledgeBaseTable(BaseModel):
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
     ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
     ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
-    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)    
+    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
     creator = MappedColumn('creator', PropertyTypes.TEXT)
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
     last_modifier = MappedColumn('last_modifier', PropertyTypes.TEXT)
