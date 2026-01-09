@@ -1,16 +1,13 @@
-import datetime
 import logging
 
-import pytz
+from seaqa_indexer.seasearch.index_store.vector_base_index import VectorBaseIndex
+from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 logger = logging.getLogger(__name__)
 
-SEASEARCH_BULK_OPERATE_LIMIT = 100
 
-
-class TicketSummaryVectorIndex(object):
+class TicketSummaryVectorIndex(VectorBaseIndex):
     mapping = {
         'properties': {
             'project_uuid': {
@@ -35,82 +32,11 @@ class TicketSummaryVectorIndex(object):
         }
     }
 
-    def __init__(self, seasearch_api, seadb_api=None, shard_num=1):
-        self.seasearch_api = seasearch_api
-        self.seadb_api = seadb_api or SeaDBAPI()
-        self.shard_num = shard_num
-
-    def create_index_if_missing(self, index_name):
-        if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
-            self.seasearch_api.create_index(
-                index_name,
-                {"shard_num": self.shard_num, "mappings": self.mapping}
-            )
-
-    def check_index(self, index_name):
-        return self.seasearch_api.check_index_mapping(index_name).get('is_exist')
-
-    def _query_index_ids_by_pks(self, index_name, pks):
-        if not pks:
-            return []
-
-        pks_str_list = [str(pk) for pk in pks]
-        doc_ids = []
-        try:
-            page_size = max(len(pks) * 10, 200)
-            offset = 0
-            while True:
-                query = {
-                    "query": {
-                        "terms": {
-                            "pk": pks_str_list
-                        }
-                    },
-                    "_source": False,
-                    "size": page_size,
-                    "from": offset
-                }
-                result = self.seasearch_api.normal_search(index_name, query)
-                hits = result.get('hits', {}).get('hits', [])
-                if not hits:
-                    break
-
-                for hit in hits:
-                    if hit.get('_id'):
-                        doc_ids.append(hit.get('_id'))
-                if len(hits) < page_size:
-                    break
-                offset += page_size
-            logger.debug('Found %d index documents for %d pks', len(doc_ids), len(pks))
-            return doc_ids
-        except Exception as e:
-            logger.warning('Failed to query index IDs: %s', str(e))
-            return []
-
-    def delete_indexes_by_pks(self, index_name, pks):
-        if not pks:
-            return
-
-        doc_ids = self._query_index_ids_by_pks(index_name, pks)
-        if not doc_ids:
-            return
-
-        delete_params = []
-        for _id in doc_ids:
-            delete_params.append({'delete': {'_id': _id, '_index': index_name}})
-            if len(delete_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
-                self.seasearch_api.bulk(index_name, delete_params)
-                delete_params = []
-
-        if delete_params:
-            self.seasearch_api.bulk(index_name, delete_params)
-        logger.info('Deleted %d index documents', len(doc_ids))
-
-    def update(self, table_name, index_name, project_uuid, last_ai_indexed_at=None):
+    def update(self, table_name, index_name, project_uuid, seadb_api, since):
         index_count = 0
         page_size = 1000
         offset = 0
-        deleted_index_id_set = set()
+        deleted_index_pk_set = set()
         bulk_params = []
         pending_pks = set()
 
@@ -123,21 +49,16 @@ class TicketSummaryVectorIndex(object):
                 self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 
-        if not last_ai_indexed_at:
-            last_ai_indexed_at = datetime.datetime(1970, 1, 1)
-
-        last_ai_indexed_at = last_ai_indexed_at.replace(tzinfo=pytz.UTC).isoformat()
-
         while True:
             sql = f"""
                 SELECT _pk, ai_summary, ai_summary_vector, deleted, modified_time, ai_processed_time
                 FROM `{table_name}`
                 WHERE ai_processed_time IS NOT NULL
-                AND ai_processed_time > '{last_ai_indexed_at}'
+                AND ai_processed_time > '{since}'
                 ORDER BY ai_processed_time
                 LIMIT {page_size} OFFSET {offset}
             """
-            result = self.seadb_api.query_rows(project_uuid, sql)
+            result = seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])
             if not rows:
                 break
@@ -150,7 +71,7 @@ class TicketSummaryVectorIndex(object):
                 modified_time = row.get('modified_time')
 
                 if deleted:
-                    deleted_index_id_set.add(pk)
+                    deleted_index_pk_set.add(pk)
                     continue
 
                 if not ai_summary or not ai_summary_vector:
@@ -177,8 +98,8 @@ class TicketSummaryVectorIndex(object):
 
         _flush_bulk_if_needed(force=True)
 
-        if deleted_index_id_set:
-            self.delete_indexes_by_pks(index_name, deleted_index_id_set)
+        if deleted_index_pk_set:
+            self.delete_indexes_by_pks(index_name, deleted_index_pk_set)
 
         return index_count
 
@@ -191,18 +112,7 @@ class TicketSummaryVectorIndex(object):
             "_source": False
         }
 
-        if time_from is not None or time_to is not None:
-            range_filter = {}
-            if time_from is not None:
-                range_filter["gte"] = time_from
-            if time_to is not None:
-                range_filter["lte"] = time_to
-
-            data["filter"] = {
-                "range": {
-                    "modified_time": range_filter
-                }
-            }
+        self._add_time_range_filter(data, time_from, time_to)
 
         search_results = self.seasearch_api.vector_search(
             index_names=[index_name],

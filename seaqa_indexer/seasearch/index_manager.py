@@ -45,15 +45,15 @@ class IndexManager:
         self.email_index = EmailIndex(self.seasearch_api)
         self.knowledge_base_index = KnowledgeBaseIndex(self.seasearch_api)
         self.ticket_index = TicketIndex(self.seasearch_api)
-        
+
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
         self.seadb_api = SeaDBAPI()
 
-        self.summary_vector_index = SummaryVectorIndex(self.seasearch_api, self.seadb_api)
-        self.content_vector_index = ContentVectorIndex(self.seasearch_api, self.seadb_api, storage=None)
-        self.kb_summary_vector_index = KnowledgeBaseSummaryVectorIndex(self.seasearch_api, self.seadb_api)
-        self.ticket_summary_vector_index = TicketSummaryVectorIndex(self.seasearch_api, self.seadb_api)
+        self.summary_vector_index = SummaryVectorIndex(self.seasearch_api)
+        self.content_vector_index = ContentVectorIndex(self.seasearch_api)
+        self.kb_summary_vector_index = KnowledgeBaseSummaryVectorIndex(self.seasearch_api)
+        self.ticket_summary_vector_index = TicketSummaryVectorIndex(self.seasearch_api)
 
     def _build_connection_search_params(self, project_connections, keyword, start, size, time_from, time_to):
         bulk_search_params = []

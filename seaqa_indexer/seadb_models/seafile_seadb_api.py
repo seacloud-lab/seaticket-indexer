@@ -9,7 +9,7 @@ class SeafileSeaDBAPI:
         self.base_id = base_id
         self.seadb_api = SeaDBAPI()
 
-    def save_or_update_file_to_db(self, connection_id, file):
+    def save_or_update_file_to_db(self, connection_id, file, existed_file):
         content = file.get('content')
         path = file['path']
         filename = file['filename']
@@ -24,10 +24,8 @@ class SeafileSeaDBAPI:
         }
         table_name = SeafileTable.gen_table_name(connection_id)
 
-        sql = f"SELECT _pk FROM `{table_name}` WHERE `path`='{path}' AND title='{filename}'"
-        results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if results:
-            _pk = results[0].get('_pk')
+        if existed_file:
+            _pk = existed_file.get('_pk')
             update_row = [
                 {
                 "pk":_pk,
@@ -74,10 +72,10 @@ class SeafileSeaDBAPI:
 
     def get_file_by_path(self, connection_id, path, filename):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT modified_time FROM `{table_name}` WHERE `path` = '{path}' and title='{filename}'"
+        sql = f"SELECT _pk, modified_time FROM `{table_name}` WHERE `path` = '{path}' and title='{filename}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         files = res.get('results', [])
-        return files[0] if files else None
+        return files[0] if files else {}
 
     def get_need_ai_files_by_page(self, connection_id, page_size):
         table_name = SeafileTable.gen_table_name(connection_id)

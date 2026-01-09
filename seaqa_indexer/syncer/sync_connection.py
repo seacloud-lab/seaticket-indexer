@@ -8,14 +8,13 @@ from urllib.parse import urlparse
 from dateutil.relativedelta import relativedelta
 
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
-from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT
-from seaqa_indexer.utils import decrypt_config, time_to_utc_time, encrypt_config, get_file_suffix
-from seaqa_indexer.utils import need_update_connection_last_sync_count
+from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT, REPO_FILE_SIZE_LIMIT, SYNC_FILE_SUFFIXES
+from seaqa_indexer.utils import decrypt_config, time_to_utc_time, encrypt_config, get_file_suffix, \
+    need_update_connection_last_sync_count
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seasearch.utils import get_content_by_download_link
 from seaqa_indexer.utils.seahub_api import FileNotFoundException
 from seaqa_indexer.seasearch.extract import ExtractorFactory
-from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT, SYNC_FILE_SUFFIXES
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
@@ -232,7 +231,7 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
                     continue
 
             sync_count += 1
-            github_seadb_api.save_or_update_issue_to_db(connection_id, issue)
+            github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
             should, new_time, new_count = need_update_connection_last_sync_count(
                 sync_count, _status_last_update_time, _status_last_update_count
             )
@@ -242,6 +241,7 @@ def sync_github_issue(connection_id, since, connection_status, github_api, seaqa
                 _status_last_update_time = new_time
                 _status_last_update_count = new_count
 
+            # sync issue comments
             comments_page = 1
             all_comments = []
             while True:
@@ -312,7 +312,7 @@ def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, s
                 'size': size,
                 'content': content if content else '',
             }
-            seafile_seadb_api.save_or_update_file_to_db(connection_id, file_info)
+            seafile_seadb_api.save_or_update_file_to_db(connection_id, file_info, existed_file)
             should, new_time, new_count = need_update_connection_last_sync_count(
                 sync_count, _status_last_update_time, _status_last_update_count
             )
@@ -369,6 +369,7 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
         for email in email_list:
             if not email:
                 continue
+            existed_email = {}
             if not is_first_sync:
                 message_id = email.get('message_id')
                 modified_time = email.get('email_date')
@@ -390,7 +391,7 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
 
             upload_email_attachment(connection_id, project_uuid, storage, email)
 
-            email_seadb_api.save_or_update_email_to_db(connection_id, email)
+            email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email)
             should, new_time, new_count = need_update_connection_last_sync_count(
                 sync_count, _status_last_update_time, _status_last_update_count
             )
@@ -452,8 +453,8 @@ def sync_discourse(connection_id, sync_earliest_time, last_sync_time, connection
             else:
                 discourse_seadb_api.insert_topic(connection_id, topic_id, topic_data)
 
+            # sync topic replies
             topic_replies = discourse_forum_api.fetch_topic_replies(topic_id)
-
             discourse_seadb_api.update_topic_replies(connection_id, topic_id, topic_replies)
 
             sync_count += 1

@@ -46,7 +46,7 @@ class GitHubSeaDBAPI:
             issues_count = response['results'][0].get('count', 0)
         return issues_count
 
-    def save_or_update_issue_to_db(self, connection_id, issue):
+    def save_or_update_issue_to_db(self, connection_id, issue, existed_issue):
         label_names = [label['name'] for label in issue.get('labels', []) if 'name' in label]
         assignees_list = [assignee['login'] for assignee in issue.get('assignees', []) if 'login' in assignee]
         issue_type = issue.get('type', None)
@@ -55,7 +55,6 @@ class GitHubSeaDBAPI:
         else:
             type_name = None
 
-        issue_id = issue['id']
         content = issue.get('body')
         state_reason = issue.get('state_reason')
 
@@ -89,10 +88,8 @@ class GitHubSeaDBAPI:
             insert_row[GithubIssuesTable.issue_type.name] = type_name
 
         table_name = GithubIssuesTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE issue_id={issue_id}"
-        issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if issues:
-            _pk = issues[0].get('_pk')
+        if existed_issue:
+            _pk = existed_issue.get('_pk')
             update_row = {
                 "pk": _pk,
                 "row": insert_row,

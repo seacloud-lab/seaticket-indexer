@@ -126,29 +126,15 @@ class ConnectionSyncTaskWorker(object):
                 except KeyError:
                     logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                 self.mq.delete(lock_key)
-                logger.info(
-                    "%s Finish sync connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
+                logger.info("%s Finish sync connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
             else:
-                # the connection is updated by other thread, push back to the queue
-                self.add_to_undo_task(connection_id)
+                logger.warning('another sync task is running, drop this task, connection_id: %s', connection_id)
 
     def sync(self, connection_id):
         try:
             sync_connection(connection_id, self.seaqa_db, self.mq, self.db_session_class)
         except Exception as e:
             logger.exception('%s sync connection %s error: %s' % (self.tname, connection_id, e))
-
-    def add_to_undo_task(self, connection_id):
-        """Push task back to the front of the queue.
-        """
-        # avoid get the same task repeatly
-        time.sleep(0.5)
-
-        msg_content = {
-            'connection_id': connection_id,
-        }
-        self.mq.lpush('sync_task', json.dumps(msg_content))
-        logger.debug('%s push back task connection_id: %s, to the queue' % (threading.current_thread().name, connection_id))
 
     def clear(self):
         if not self.mq:

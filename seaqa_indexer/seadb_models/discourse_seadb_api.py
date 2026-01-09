@@ -228,7 +228,6 @@ class DiscourseSeaDBAPI:
     def get_topic_count(self, connection_id):
         topics_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
 
-        # Obtain the number of topics
         topics_sql = f"SELECT COUNT(*) as count FROM `{topics_table_name}`"
         topics_result = self.seadb_api.query_rows(self.base_id, topics_sql)
         topic_count = 0
