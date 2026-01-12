@@ -79,7 +79,10 @@ class ConnectionSyncTaskWorker(object):
                     self.mq.lpush('web_crawl_task', json.dumps(msg_content))
                     continue
 
-                self.add_to_undo_task(connection_id)
+                msg_content = {
+                    'connection_id': connection_id,
+                }
+                self.mq.lpush('sync_task', json.dumps(msg_content))
 
         except Exception as e:
             logger.exception(f"Error during task recovery: {e}")
