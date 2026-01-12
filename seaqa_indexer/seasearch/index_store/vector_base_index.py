@@ -47,8 +47,8 @@ class VectorBaseIndex(BaseIndex):
                 break
 
     def _ensure_filter_exists(self, data):
-        if 'filter' not in data:
-            data['filter'] = []
+        if 'filter_query' not in data:
+            data['filter_query'] = {'bool': {'filter': []}}
         return data
 
     def _add_time_range_filter(self, data, time_from, time_to):
@@ -60,5 +60,5 @@ class VectorBaseIndex(BaseIndex):
         if not search_content:
             return data
         data = self._ensure_filter_exists(data)
-        data['filter'].append({'range': {'modified_time': search_content}})
+        data['filter_query']['bool']['filter'].append({'range': {'modified_time': search_content}})
         return data
