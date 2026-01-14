@@ -26,11 +26,11 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVectorIndex
 
 from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
-from seaqa_indexer.seasearch.utils import gen_conn_summary_index_name, fix_summary_by_connection, \
-    gen_kb_summary_index_name, fix_summary_by_knowledge_base, gen_ticket_index_name, gen_content_vector_index_name, \
-    gen_ticket_summary_index_name, fix_summary_by_tickets, gen_index_name_by_type, gen_kb_index_name
-from seaqa_indexer.seadb_models.models import WebCrawlTable, DiscourseTopicsTable, GithubIssuesTable, SeafileTable, \
-    ThreadTable, KnowledgeBaseTable, TicketsTable
+from seaqa_indexer.seasearch.utils import gen_conn_summary_index_name, fix_summary, \
+    gen_kb_summary_index_name, gen_ticket_index_name, gen_content_vector_index_name, \
+    gen_ticket_summary_index_name, gen_index_name_by_type, gen_kb_index_name
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable, \
+    gen_table_name_by_connection_type
 from seaqa_indexer.seasearch.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.seasearch.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
 
@@ -313,7 +313,7 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
             seaqa_db.update_content_vector_status_and_time(connection_id, json.dumps(content_vector_status))
             return
 
-        table_name = WebCrawlTable.gen_table_name(connection_id)
+        table_name = gen_table_name_by_connection_type(connection_type, connection_id)
         content_vector_index = ContentVectorIndex(seasearch_api)
         content_index_name = gen_content_vector_index_name(connection_id, connection_type)
         content_vector_index.create_index_if_missing(content_index_name)
@@ -386,23 +386,14 @@ def update_connection_summary_index(connection_id, seaqa_db, seadb_api, seasearc
     last_ai_indexed_at = connection.ai_indexed_at
 
     try:
-        if connection_type == ConnectionType.SITE.value:
-            table_name = WebCrawlTable.gen_table_name(connection_id)
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            table_name = GithubIssuesTable.gen_table_name(connection_id)
-        elif connection_type == ConnectionType.SEAFILE.value:
-            table_name = SeafileTable.gen_table_name(connection_id)
-        elif connection_type == ConnectionType.EMAIL.value:
-            table_name = ThreadTable.gen_table_name(connection_id)
-        else:
+        table_name = gen_table_name_by_connection_type(connection_type, connection_id)
+        if not table_name:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             ai_status['last_ai_index_status'] = IndexStatus.FAILED
             seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
             return
 
-        fixed_count = fix_summary_by_connection(connection_id, table_name, project_uuid, seadb_api)
+        fixed_count = fix_summary(project_uuid, table_name, seadb_api)
         if fixed_count > 0:
             logger.info('Fixed %d missing embeddings for connection %s before indexing', fixed_count, connection_id)
 
@@ -449,7 +440,7 @@ def update_knowledge_base_summary_index(project_uuid, seaqa_db, seadb_api, sease
     last_kb_ai_indexed_at = kb.knowledge_base_ai_indexed_at
 
     table_name = KnowledgeBaseTable.gen_table_name()
-    fixed_count = fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api)
+    fixed_count = fix_summary(project_uuid, table_name, seadb_api)
     if fixed_count > 0:
         logger.info('Fixed %d missing embeddings for knowledge base of project: %s before indexing', fixed_count, project_uuid)
 
@@ -484,7 +475,7 @@ def update_tickets_summary_index(project_uuid, seaqa_db, seadb_api, seasearch_ap
 
     table_name = TicketsTable.gen_table_name()
 
-    fixed_count = fix_summary_by_tickets(project_uuid, table_name, seadb_api)
+    fixed_count = fix_summary(project_uuid, table_name, seadb_api)
     if fixed_count > 0:
         logger.info('Fixed %d missing embeddings for tickets of project: %s before indexing', fixed_count, project_uuid)
 

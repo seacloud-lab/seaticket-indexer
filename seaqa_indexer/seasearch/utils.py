@@ -2,10 +2,13 @@ import requests
 import logging
 import datetime
 import re
+import json
+from urllib.parse import urlparse
 
-from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX
+from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX, ConnectionType
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.utils import uuid_str_to_32_chars
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable, gen_table_name_by_connection_type
 
 
 logger = logging.getLogger(__name__)
@@ -40,8 +43,8 @@ def get_content_by_download_link(download_url):
     return file_content
 
 
-def fix_summary_by_connection(connection_id, table_name, project_uuid, seadb_api):
-    logger.info('Start fixing AI summary embeddings for connection %s', connection_id)
+def fix_summary(project_uuid, table_name, seadb_api):
+    logger.info('Start fixing AI summary embeddings for table %s', table_name)
 
     try:
         page_size = 100
@@ -90,123 +93,13 @@ def fix_summary_by_connection(connection_id, table_name, project_uuid, seadb_api
             if updates:
                 seadb_api.update_rows(project_uuid, table_name, updates)
 
-        logger.info('Finished fixing embeddings for connection %s, fixed %d records', connection_id, fixed_count)
+        logger.info('Finished fixing embeddings for table %s, fixed %d records', table_name, fixed_count)
         return fixed_count
 
     except Exception as e:
         logger.exception('Failed to fix embeddings for connection %s: %s', connection_id, e)
         return 0
 
-def fix_summary_by_knowledge_base(project_uuid, table_name, seadb_api):
-    logger.info('Start fixing AI summary embeddings for knowledge base of project %s', project_uuid)
-
-    try:
-        page_size = 100
-        fixed_count = 0
-        updates = []
-
-        while True:
-            sql = f"""
-                SELECT _pk, ai_summary
-                FROM `{table_name}`
-                WHERE ai_summary IS NOT NULL 
-                AND ai_summary != ''
-                AND ai_summary_vector IS NULL
-                AND (deleted = false OR deleted IS NULL)
-                LIMIT {page_size}
-            """
-            result = seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-
-            if not rows:
-                break
-
-            for row in rows:
-                pk = row.get('_pk')
-                ai_summary = row.get('ai_summary')
-
-                embedding = generate_embedding(ai_summary, project_uuid)
-                if not embedding:
-                    logger.warning('Failed to generate embedding for pk=%s', pk)
-                    continue
-
-                update_data = {
-                    'pk': pk,
-                    'row': {
-                        'ai_summary_vector': embedding,
-                        'ai_processed_time': datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                }
-
-                updates.append(update_data)
-                if len(updates) >= 50:
-                    seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
-
-                fixed_count += 1
-            if updates:
-                seadb_api.update_rows(project_uuid, table_name, updates)
-
-        logger.info('Finished fixing embeddings for knowledge base of project %s, fixed %d records', project_uuid, fixed_count)
-        return fixed_count
-
-    except Exception as e:
-        logger.exception('Failed to fix embeddings for knowledge base of project %s: %s', project_uuid, e)
-        return 0
-
-def fix_summary_by_tickets(project_uuid, table_name, seadb_api):
-    logger.info('Start fixing AI summary embeddings for tickets of project: %s', project_uuid)
-    try:
-        page_size = 100
-        fixed_count = 0
-        updates = []
-        while True:
-            sql = f"""
-                SELECT _pk, ai_summary
-                FROM `{table_name}`
-                WHERE ai_summary IS NOT NULL 
-                AND ai_summary != ''
-                AND ai_summary_vector IS NULL
-                AND (deleted = false OR deleted IS NULL)
-                LIMIT {page_size}
-            """
-            result = seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-
-            if not rows:
-                break
-
-            for row in rows:
-                pk = row.get('_pk')
-                ai_summary = row.get('ai_summary')
-
-                embedding = generate_embedding(ai_summary, project_uuid)
-                if not embedding:
-                    logger.warning('Failed to generate embedding for pk=%s', pk)
-                    continue
-
-                update_data = {
-                    'pk': pk,
-                    'row': {
-                        'ai_summary_vector': embedding,
-                        'ai_processed_time': datetime.datetime.now(datetime.UTC).isoformat()
-                    }
-                }
-
-                updates.append(update_data)
-                if len(updates) >= 50:
-                    seadb_api.update_rows(project_uuid, table_name, updates)
-                    updates = []
-
-                fixed_count += 1
-            if updates:
-                seadb_api.update_rows(project_uuid, table_name, updates)
-        logger.info('Finished fixing embeddings for tickets of project: %s, fixed %d records', project_uuid, fixed_count)
-        return fixed_count
-        
-    except Exception as e:
-        logger.exception('Failed to fix embeddings for tickets of project: %s: %s', project_uuid, e)
-        return 0
 
 class EmailMessage(object):
     """ An email message represents a parsed email body.
@@ -351,3 +244,151 @@ class Fragment(object):
     @property
     def content(self):
         return self._content.strip()
+
+
+def get_result_related_seadb_records(project_uuid, all_results, connection_id_to_connection, seadb_api):
+    def query_records_by_pks(table_name, pks):
+        pks_str = ','.join(map(str, pks))
+        sql = f"SELECT * FROM `{table_name}` WHERE _pk IN ({pks_str})"
+        res = seadb_api.query_rows(project_uuid, sql)
+        return res.get('results', [])
+
+    connection_id_to_pks = {}  # {connection_id: [pk1, pk2]}
+    kb_pks = set()
+    ticket_pks = set()
+
+    for result in all_results:
+        if result.get('source_type') == 'knowledge_base_summary':
+            kb_pks.add(result.get('pk'))
+        elif result.get('source_type') == 'ticket_summary':
+            ticket_pks.add(result.get('pk'))
+        else:
+            connection_id = int(result.get('connection_id'))
+            if connection_id not in connection_id_to_pks:
+                connection_id_to_pks[connection_id] = []
+            connection_id_to_pks[connection_id].append(result.get('pk'))
+
+    connection_pk_to_record = {}  # {connection_id: {pk: record}}
+    for connection_id, connection_pks in connection_id_to_pks.items():
+        connection = connection_id_to_connection[connection_id]
+        connection_table_name = gen_table_name_by_connection_type(connection.type, connection_id)
+        if not connection_table_name:
+            logger.warning(f'Table name not found for connection {connection_id}')
+            continue
+
+        records = query_records_by_pks(connection_table_name, connection_pks)
+        connection_pk_to_record[connection_id] = {}
+        for record in records:
+            connection_pk_to_record[connection_id][record.get('_pk')] = record
+
+    kb_pk_to_record = {}
+    if kb_pks:
+        kb_table_name = KnowledgeBaseTable.gen_table_name()
+        records = query_records_by_pks(kb_table_name, kb_pks)
+        kb_pk_to_record = {record.get('_pk'): record for record in records}
+
+    ticket_pk_to_record = {}
+    if ticket_pks:
+        ticket_table_name = TicketsTable.gen_table_name()
+        records = query_records_by_pks(ticket_table_name, ticket_pks)
+        ticket_pk_to_record = {record.get('_pk'): record for record in records}
+    return connection_pk_to_record, kb_pk_to_record, ticket_pk_to_record
+
+
+def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_record, ticket_pk_to_record, connection_pk_to_record):
+    pk = result.get('pk')
+    source_type = result.get('source_type')
+    score = result.get('score')
+    ai_summary = result.get('ai_summary', '')
+
+    formatted_result = {
+        '_id': pk,
+        'score': score,
+        'content': ai_summary,
+    }
+
+    if source_type == 'knowledge_base_summary':
+        record = kb_pk_to_record.get(pk)
+        return {
+            'type': 'knowledge_base',
+            'title': record.get('title', ''),
+            'modified_time': record.get('modified_time', ''),
+            'source_type': source_type
+        }
+
+    elif source_type == 'ticket_summary':
+        record = ticket_pk_to_record.get(pk)
+        return {
+            'type': 'ticket',
+            'title': record.get('title', ''),
+            'modified_time': record.get('modified_time', ''),
+            'source_type': source_type
+        }
+
+    else:
+        # format connection vector search result
+        connection_id = result.get('connection_id')
+        connection = connection_id_to_connection.get(int(connection_id))
+        record = connection_pk_to_record.get(connection_id, {}).get(pk)
+        connection_type = connection.type
+
+        formatted_result['connection_id'] = connection_id
+        formatted_result['type'] = connection_type
+
+        if connection_type == ConnectionType.SITE.value:
+            url = record.get('url', '')
+            if source_type == 'chunk':
+                formatted_result['source_type'] = 'chunk'
+                formatted_result['content'] = result.get('content', '')
+            formatted_result['title'] = record.get('title', '')
+            formatted_result['url'] = url
+
+        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
+            connection_config = json.loads(connection.config)
+            discourse_forum_url = connection_config.get('url')
+            slug = record.get('slug')
+            topic_id = record.get('topic_id')
+            topic_url = discourse_forum_url.rstrip('/') + '/t/' + slug + '/' + str(topic_id)
+            formatted_result['title'] = record.get('title', '')
+            formatted_result['slug'] = record.get('slug', '')
+            formatted_result['topic_id'] = record.get('topic_id', '')
+            formatted_result['modified_time'] = record.get('modified_time', '')
+            formatted_result['url'] = topic_url
+
+        elif connection_type == ConnectionType.SEAFILE.value:
+            connection_config = json.loads(connection.config)
+            repo_name = connection_config.get('repo_name')
+            repo_id = connection_config.get('repo_id')
+            server_url = connection_config.get('server_url')
+            url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + record.get('path', '').strip(
+                '/') + '/' + record.get('title', '')
+            formatted_result['title'] = record.get('title', '')
+            formatted_result['path'] = record.get('path', '')
+            formatted_result['repo_id'] = repo_id
+            formatted_result['repo_name'] = repo_name
+            formatted_result['server_url'] = server_url
+            formatted_result['modified_time'] = record.get('modified_time', '')
+            formatted_result['url'] = url
+
+        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
+            connection_config = json.loads(connection.config)
+            server_url = connection_config.get('repository')
+            url_parsed = urlparse(server_url)
+            base_url = url_parsed.scheme + "://" + url_parsed.netloc
+            parts = url_parsed.path.strip("/").split("/")
+            repo_owner, repo_name = parts[0], parts[1]
+            url = f'{base_url}/{repo_owner}/{repo_name}/issues/' + str(record.get('issue_number', ''))
+            formatted_result['title'] = record.get('title', '')
+            formatted_result['issue_number'] = record.get('issue_number', '')
+            formatted_result['state'] = record.get('state', '')
+            formatted_result['labels'] = record.get('labels')
+            formatted_result['repo_name'] = repo_name
+            formatted_result['repo_owner'] = repo_owner
+            formatted_result['url'] = url
+        elif connection_type == ConnectionType.EMAIL.value:
+            formatted_result['title'] = record.get('title', '')
+            formatted_result['modified_time'] = record.get('modified_time', '')
+        else:
+            logger.warning(f'Unsupported connection type: {connection_type}')
+            return
+        return formatted_result
