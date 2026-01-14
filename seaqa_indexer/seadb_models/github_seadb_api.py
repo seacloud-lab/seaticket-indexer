@@ -264,3 +264,18 @@ class GitHubSeaDBAPI:
         res = self.seadb_api.query_rows(self.base_id, sql)
         issues = res.get('results', [])
         return issues
+
+    def update_issue_sync_and_record_time(self, connection_id, issue_id):
+        issues_table_name = GithubIssuesTable.gen_table_name(connection_id)
+        issue = self.get_issue_by_issue_id(issue_id, connection_id)
+        if not issue:
+            return
+        _pk = issue.get('_pk')
+        updates = [{
+            "pk": _pk,
+            "row": {
+                "sync_time": datetime.datetime.now(datetime.UTC).isoformat(),
+                "record_modified_time": datetime.datetime.now(datetime.UTC).isoformat()
+            }
+        }]
+        self.seadb_api.update_rows(self.base_id, issues_table_name, updates)

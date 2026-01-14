@@ -4,6 +4,7 @@ import datetime
 from seaqa_indexer.utils import time_to_utc_time
 
 EMAIL_SYNC_INTERVAL_DAYS = 10
+SYNC_TASK_RATE_LIMIT_SECONDS = 5 * 60 # Rate limit: allow at most one sync task per connection every 5 minutes
 
 
 def upload_email_attachment(connection_id, project_uuid, storage, email):
