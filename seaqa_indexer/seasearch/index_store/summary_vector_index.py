@@ -131,12 +131,9 @@ class SummaryVectorIndex(VectorBaseIndex):
         )
 
         hits = search_results.get('hits', {}).get('hits', [])
-        hits.sort(key=lambda x: x.get('_score', 0), reverse=True)
 
         topk_search_results = []
-        for i, hit in enumerate(hits):
-            if i >= top_k:
-                break
+        for hit in hits:
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
@@ -144,6 +141,7 @@ class SummaryVectorIndex(VectorBaseIndex):
                 'connection_id': fields.get('connection_id')[0],
                 'pk': fields.get('pk')[0],
                 'modified_time': fields.get('modified_time', [None])[0],
-                'score': hit.get('_score', 0)
+                'score': hit.get('_score', 0),
+                'source_type': 'summary',
             })
         return topk_search_results
