@@ -277,8 +277,9 @@ def get_result_related_seadb_records(project_uuid, all_results, connection_id_to
             continue
 
         records = query_records_by_pks(connection_table_name, connection_pks)
-        connection_pk_to_record[connection_id] = {}
         for record in records:
+            if connection_id not in connection_pk_to_record:
+                connection_pk_to_record[connection_id] = {}
             connection_pk_to_record[connection_id][record.get('_pk')] = record
 
     kb_pk_to_record = {}
@@ -329,7 +330,7 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
         # format connection vector search result
         connection_id = result.get('connection_id')
         connection = connection_id_to_connection.get(int(connection_id))
-        record = connection_pk_to_record.get(connection_id, {}).get(pk)
+        record = connection_pk_to_record.get(int(connection_id), {}).get(pk)
         connection_type = connection.type
 
         formatted_result['connection_id'] = connection_id
