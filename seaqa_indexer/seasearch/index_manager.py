@@ -280,8 +280,8 @@ class IndexManager:
                         project_uuid, result_docs)
 
         return result_docs
-
-    def get_vector_search_results(self, project_connections, extra_sources, project_uuid, query_vector, count, time_from, time_to):
+    
+    def get_vector_search_results(self, project_connections, extra_sources, project_uuid, query_vector, count, time_from=None, time_to=None):
         summary_index_names = []
         content_index_names = []
         kb_summary_index_name = None
@@ -340,22 +340,19 @@ class IndexManager:
                 logger.warning('Ticket summary semantic search failed: %s', e)
 
         return all_results
-
-    def semantic_search(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from, time_to, top_k=10):
+    
+    def vector_search(self, project_uuid, connection_ids, extra_sources, query_vector, time_from=None, time_to=None, top_k=10, score_threshold=None):
         project_connections = []
         if connection_ids:
-            connection_id_list = connection_ids.split(',')
+            connection_id_list = connection_ids if isinstance(connection_ids, list) else connection_ids.split(',')
             project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list) or []
 
         result_count = max(top_k, 20)
-        query_vector = generate_embedding(query_text, project_uuid, username=username)
-        if not query_vector:
-            logger.warning('Failed to generate query vector for: %s', query_text)
-            return []
-
         all_results = self.get_vector_search_results(project_connections, extra_sources, project_uuid, query_vector, result_count, time_from, time_to)
-        all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
 
+        if score_threshold:
+            all_results = [r for r in all_results if r.get('score', 0) >= score_threshold]
+        all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
         all_results = all_results[:top_k]
 
         connection_id_to_connection = {connection.id: connection for connection in project_connections}
@@ -369,38 +366,12 @@ class IndexManager:
                 formatted_results.append(formatted_result)
 
         return formatted_results
+    
+    def semantic_search(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
 
-    def summary_vector_search(self, project_uuid, connection_ids, query_vector, top_k=10, score_threshold=0.5):
-        project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_ids)
-
-        if not project_connections:
+        query_vector = generate_embedding(query_text, project_uuid, username=username)
+        if not query_vector:
+            logger.warning('Failed to generate query vector for: %s', query_text)
             return []
 
-        all_results = []
-        per_connection_limit = max(top_k, 20)
-
-        for project_connection in project_connections:
-            connection_type = project_connection.type
-            connection_id = project_connection.id
-
-            index_name = gen_conn_summary_index_name(connection_id, connection_type)
-
-            index_exists = self.summary_vector_index.check_index(index_name)
-            if not index_exists:
-                logger.debug('Index %s does not exist, skipping connection %s', index_name, connection_id)
-                continue
-
-            try:
-                search_results = self.summary_vector_index.semantic_search(
-                        index_name, query_vector, per_connection_limit
-                )
-                filtered_results = [r for r in search_results if r.get('score', 0) >= score_threshold]
-                all_results.extend(filtered_results)
-            except Exception as e:
-                logger.exception('Vector search failed for connection %s: %s', connection_id, e)
-                continue
-
-        all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
-        top_results = all_results[:top_k]
-
-        return top_results
+        return self.vector_search(project_uuid, connection_ids, extra_sources, query_vector, time_from, time_to, top_k)

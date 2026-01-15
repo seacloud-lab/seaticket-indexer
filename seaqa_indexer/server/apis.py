@@ -5,6 +5,7 @@ from functools import wraps
 from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
+from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException, \
     ForumInActiveException
 from seaqa_indexer.utils.constants import ConnectionType
@@ -167,14 +168,17 @@ def search():
     except:
         count = 20
     if search_type == 'semantic_search':
-        results = application.app.index_manager.semantic_search(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count)
+        query_vector = generate_embedding(query, project_uuid, username=username)
+        if not query_vector:
+            return {'error_msg': ('Failed to generate query vector for: %s', query)}, 500
+        results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, time_from, time_to, count)
     else:
         results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
         # Skip deleted kb
-        kb_ids = []
-        for r in results or []:
-            if r.get('type') == 'knowledge_base':
-                _id = int(r.get('_id'))
+        kb_ids = [
+            int(r.get('_id'))
+            for r in results or [] if r.get('type') == 'knowledge_base'
+        ]
         if kb_ids:
             seadb_api = SeaDBAPI(username)
             table_name = KnowledgeBaseTable.gen_table_name()
@@ -192,9 +196,9 @@ def search():
     return {'results': results}, 200
 
 
-@application.route('/summary_vector_search', methods=['POST'])
+@application.route('/vector_search', methods=['POST'])
 @auth_required
-def summary_vector_search():
+def vector_search():
     try:
         data = json.loads(request.data)
     except Exception as e:
@@ -204,20 +208,28 @@ def summary_vector_search():
     query_vector = data.get('query_vector')
     project_uuid = data.get('project_uuid')
     connection_ids = data.get('connection_ids')
+    extra_sources = data.get('extra_sources', [])
+    score_threshold = data.get('score_threshold')
 
     if not query_vector:
         return {'error_msg': 'query_vector invalid.'}, 400
 
     if not project_uuid:
         return {'error_msg': 'project_uuid invalid.'}, 400
+    
+    if not isinstance(extra_sources, (list, tuple)):
+        return {'error_msg': 'extra_sources invalid.'}, 400
+
+    try:
+        score_threshold = int(score_threshold)
+    except:
+        score_threshold = 0.5
 
     try:
         count = int(data.get('count'))
     except:
         count = 10
-    results = application.app.index_manager.summary_vector_search(
-        project_uuid, connection_ids, query_vector, count
-    )
+    results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=0.5)
     return {'results': results}, 200
 
 
