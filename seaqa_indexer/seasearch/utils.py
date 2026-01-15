@@ -306,6 +306,7 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
         '_id': pk,
         'score': score,
         'content': ai_summary,
+        'source_type': source_type,
     }
 
     if source_type == 'knowledge_base_summary':
@@ -314,7 +315,6 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
             'type': 'knowledge_base',
             'title': record.get('title', ''),
             'modified_time': record.get('modified_time', ''),
-            'source_type': source_type
         }
 
     elif source_type == 'ticket_summary':
@@ -323,7 +323,6 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
             'type': 'ticket',
             'title': record.get('title', ''),
             'modified_time': record.get('modified_time', ''),
-            'source_type': source_type
         }
 
     else:
