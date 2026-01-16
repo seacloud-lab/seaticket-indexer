@@ -391,4 +391,4 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
         else:
             logger.warning(f'Unsupported connection type: {connection_type}')
             return
-        return formatted_result
+    return formatted_result
