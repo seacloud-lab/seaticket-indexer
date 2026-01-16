@@ -311,19 +311,15 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
 
     if source_type == 'knowledge_base_summary':
         record = kb_pk_to_record.get(pk)
-        return {
-            'type': 'knowledge_base',
-            'title': record.get('title', ''),
-            'modified_time': record.get('modified_time', ''),
-        }
+        formatted_result['type'] = 'knowledge_base'
+        formatted_result['title'] = record.get('title', '')
+        formatted_result['modified_time'] = record.get('modified_time', '')
 
     elif source_type == 'ticket_summary':
         record = ticket_pk_to_record.get(pk)
-        return {
-            'type': 'ticket',
-            'title': record.get('title', ''),
-            'modified_time': record.get('modified_time', ''),
-        }
+        formatted_result['type'] = 'ticket'
+        formatted_result['title'] = record.get('title', '')
+        formatted_result['modified_time'] = record.get('modified_time', '')
 
     else:
         # format connection vector search result
