@@ -197,9 +197,10 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     sync_logger.stop_capture()
 
     msg_content = {
-        'connection_id': connection_id
+        'connection_id': connection_id,
+        'type': 'connection'
     }
-    mq.lpush('index_task', json.dumps(msg_content | {'type': 'connection'}))
+    mq.lpush('index_task', json.dumps(msg_content))
     mq.lpush('ai_process_task', json.dumps(msg_content))
 
 
