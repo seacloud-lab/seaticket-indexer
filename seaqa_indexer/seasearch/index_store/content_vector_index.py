@@ -55,7 +55,7 @@ class ContentVectorIndex(VectorBaseIndex):
             sql = f"""
                 SELECT _pk, url, deleted, outdated, sync_time, modified_time 
                 FROM `{table_name}` 
-                WHERE sync_time >= '{since}' OR record_modified_time >= '{since}'
+                WHERE record_modified_time >= '{since}'
                 ORDER BY sync_time 
                 LIMIT {page_size} OFFSET {offset}
             """

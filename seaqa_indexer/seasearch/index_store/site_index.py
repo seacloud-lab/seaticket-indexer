@@ -86,7 +86,7 @@ class SiteIndex(BaseIndex):
         table_name = WebCrawlTable.gen_table_name(connection_id)
         while True:
             sql = f"""SELECT * FROM `{table_name}` 
-                    WHERE sync_time >= '{since}' OR record_modified_time >= '{since}' 
+                    WHERE record_modified_time >= '{since}' 
                     LIMIT {page_size} OFFSET {offset}"""
             result = seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])

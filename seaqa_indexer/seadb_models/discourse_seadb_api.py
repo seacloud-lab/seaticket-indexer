@@ -37,6 +37,7 @@ class DiscourseSeaDBAPI:
             DiscourseTopicsTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
             DiscourseTopicsTable.deleted.name: False,
             DiscourseTopicsTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            DiscourseTopicsTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             DiscourseTopicsTable.created_time.name: time_to_utc_time(topic_created_time).isoformat(),
             DiscourseTopicsTable.resolved.name: resolved,
         }]
@@ -45,7 +46,7 @@ class DiscourseSeaDBAPI:
     def get_topics_by_page(self, connection_id, since, page_size, offset):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
         sql = f"""SELECT * FROM `{table_name}` 
-                WHERE sync_time >= '{since}' OR record_modified_time >= '{since}' 
+                WHERE record_modified_time >= '{since}' 
                 LIMIT {page_size} OFFSET {offset}"""
         response = self.seadb_api.query_rows(self.base_id, sql)
         results = response.get('results', [])
@@ -90,6 +91,7 @@ class DiscourseSeaDBAPI:
                 DiscourseTopicsTable.category_id.name: category_id,
                 DiscourseTopicsTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
                 DiscourseTopicsTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                DiscourseTopicsTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                 DiscourseTopicsTable.deleted.name: False,
                 DiscourseTopicsTable.resolved.name: resolved,
             }
@@ -108,7 +110,8 @@ class DiscourseSeaDBAPI:
             "pk": primary_key,
             "row": {
                 "deleted": True,
-                "sync_time": datetime.datetime.now(datetime.UTC).isoformat()
+                "sync_time": datetime.datetime.now(datetime.UTC).isoformat(),
+                "record_modified_time": datetime.datetime.now(datetime.UTC).isoformat()
             }
         }]
         return self.seadb_api.update_rows(self.base_id, table_name, updates)
@@ -198,7 +201,7 @@ class DiscourseSeaDBAPI:
         sql = f"DELETE FROM `{table_name}` WHERE topic_id = {topic_id} AND post_number = {post_number}"
         return self.seadb_api.query_rows(self.base_id, sql)
 
-    def update_topic_sync_time(self, connection_id, topic_id):
+    def update_topic_sync_and_record_time(self, connection_id, topic_id):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
         topic = self.get_topic_by_topic_id(connection_id, topic_id)
         if not topic:
@@ -206,7 +209,10 @@ class DiscourseSeaDBAPI:
         primary_key = topic.get('_pk')
         updates = [{
             "pk": primary_key,
-            "row": {"sync_time": datetime.datetime.now(datetime.UTC).isoformat()}
+            "row": {
+                "sync_time": datetime.datetime.now(datetime.UTC).isoformat(),
+                "record_modified_time": datetime.datetime.now(datetime.UTC).isoformat()
+            }
         }]
         return self.seadb_api.update_rows(self.base_id, table_name, updates)
 

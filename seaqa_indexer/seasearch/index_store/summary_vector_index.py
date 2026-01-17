@@ -58,7 +58,7 @@ class SummaryVectorIndex(VectorBaseIndex):
             sql = f"""
                 SELECT _pk, ai_summary, ai_summary_vector, deleted, outdated, modified_time 
                 FROM `{table_name}` 
-                WHERE ai_processed_time > '{since}' OR record_modified_time > '{since}'
+                WHERE ai_processed_time > '{since}'
                 ORDER BY ai_processed_time 
                 LIMIT {page_size} OFFSET {offset}
             """

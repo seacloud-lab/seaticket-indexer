@@ -17,6 +17,7 @@ class GitHubSeaDBAPI:
         row = {
             GithubIssuesTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
             GithubIssuesTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            GithubIssuesTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
 
         if comments_count is not None:
@@ -73,6 +74,7 @@ class GitHubSeaDBAPI:
             GithubIssuesTable.created_time.name: time_to_utc_time(issue.get('created_at')).isoformat(),
             GithubIssuesTable.modified_time.name: time_to_utc_time(issue.get('updated_at')).isoformat(),
             GithubIssuesTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            GithubIssuesTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             GithubIssuesTable.closed_time.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
             GithubIssuesTable.comments_count.name: issue.get('comments'),
             GithubIssuesTable.deleted.name: False,
@@ -240,7 +242,7 @@ class GitHubSeaDBAPI:
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
         issues_table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"""SELECT * FROM `{issues_table_name}` 
-                WHERE sync_time >= '{last_indexed_at}' OR record_modified_time >= '{last_indexed_at}' 
+                WHERE record_modified_time >= '{last_indexed_at}' 
                 LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
         issues = res.get('results', [])

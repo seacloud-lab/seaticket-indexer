@@ -112,7 +112,6 @@ def process_site_ai(seadb_api, storage, connection_id, project_uuid):
                     "ai_summary": summary,
                     "ai_summary_vector": vector,
                     "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
-
                 }
             })
             ai_processing_count += 1

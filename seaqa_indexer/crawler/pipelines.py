@@ -34,6 +34,7 @@ class BatchCrawlPipeline:
                     "row": {
                         WebCrawlTable.deleted.name: True,
                         WebCrawlTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        WebCrawlTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     }
                 }
                 rows.append(row)
@@ -90,6 +91,7 @@ class BatchCrawlPipeline:
                         WebCrawlTable.etag.name: etag,
                         WebCrawlTable.modified_time.name: modified_time,
                         WebCrawlTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        WebCrawlTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                         WebCrawlTable.hash.name: hash,
                     }
                 }
@@ -104,6 +106,7 @@ class BatchCrawlPipeline:
                     WebCrawlTable.etag.name: etag,
                     WebCrawlTable.modified_time.name: modified_time,
                     WebCrawlTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                    WebCrawlTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     WebCrawlTable.hash.name: hash,
                 }
             ]
