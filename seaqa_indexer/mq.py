@@ -4,10 +4,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class NoMessageException(Exception):
-    pass
-
-
 def get_mq(server, port, password):
     if not (server and port):
         logging.warning('Redis has not been set up')

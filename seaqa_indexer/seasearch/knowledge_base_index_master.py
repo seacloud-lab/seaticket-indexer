@@ -6,7 +6,7 @@ from copy import deepcopy
 from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
 
 from seaqa_indexer import config
-from seaqa_indexer.mq import get_mq, NoMessageException
+from seaqa_indexer.mq import get_mq
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,6 @@ class KnowledgeBaseIndexMaster(Thread):
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         self.pending_tasks = dict()
         self.interval = 10 * 60
-        self.no_message_check_interval = 5 * 60
 
     def now(self):
         return time.time()
@@ -29,10 +28,10 @@ class KnowledgeBaseIndexMaster(Thread):
         while True:
             try:
                 self.master_handler()
-            except NoMessageException:
-                logger.warning('long time no message, reconnect to redis.')
-            except (ResponseError, NoMQAvailable, TimeoutError) as e:
+            except (ResponseError, TimeoutError) as e:
                 logger.error('The connection to the redis server failed: %s' % e)
+            except NoMQAvailable as e:
+                logger.error('no MQ available failed: %s' % e)
             except Exception as e:
                 logger.error('Error handing master task: %s' % e)
             #prevent waste resource if redis or others didn't connectioned
@@ -43,13 +42,11 @@ class KnowledgeBaseIndexMaster(Thread):
         p.subscribe('knowledge_base_update')
         logger.info('knowledge_base master starting listen')
 
-        message_check_time = time.time()
         last_check_pending_tasks_time = time.time()
         while True:
             message = p.get_message()
             now_time = time.time()
             if message is not None and isinstance(message['data'], str):
-                message_check_time = time.time()
                 try:
                     data = json.loads(message['data'])
                 except:
@@ -85,7 +82,5 @@ class KnowledgeBaseIndexMaster(Thread):
                         logger.info('pending task %s has been add to task queue' % msg_data)
 
             if message is None:
-                if (time.time() - message_check_time) > self.no_message_check_interval:
-                    raise NoMessageException
                 # prevent waste resource when no message has been send
                 time.sleep(1)
