@@ -100,7 +100,7 @@ class GitHubIssuesIndex(BaseIndex):
                 issue_id = issue.get('issue_id')
                 pk = issue.get('_pk')
                 key = str(pk)
-                if issue.get('deleted'):
+                if issue.get('deleted') or issue.get('outdated'):
                     need_cleared_issues_index_set.add(key)
                 else:
                     content = issue.get('content') or ''

@@ -24,6 +24,7 @@ class EmailSeaDBAPI:
             'reply_to_message_id': email['reply_to_message_id'],
             'is_sender': email['is_sender'],
             'sync_time': datetime.datetime.now(datetime.UTC).isoformat(),
+            'record_modified_time': datetime.datetime.now(datetime.UTC).isoformat(),
             'deleted': False,
         }
 
@@ -62,6 +63,7 @@ class EmailSeaDBAPI:
             ThreadTable.modified_time.name: time_to_utc_time(thread['last_updated_at']).isoformat(),
             ThreadTable.unread.name: thread.get('unread'),
             ThreadTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            ThreadTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             ThreadTable.deleted.name: False
         }
 
@@ -95,7 +97,9 @@ class EmailSeaDBAPI:
 
     def get_threads_by_page(self, connection_id, since, page_size, offset):
         table_name = ThreadTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        sql = f"""SELECT * FROM `{table_name}` 
+                WHERE record_modified_time >= '{since}' 
+                LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results

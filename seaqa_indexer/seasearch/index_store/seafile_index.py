@@ -82,9 +82,10 @@ class SeafileIndex(BaseIndex):
                 parent_dir = file.get('path')
                 title = file.get('title')
                 deleted = file.get('deleted')
+                outdated = file.get('outdated')
                 pk = file.get('_pk')
                 key = str(pk)
-                if deleted:
+                if deleted or outdated:
                     deleted_index_id_set.add(key)
                 else:
                     doc = {

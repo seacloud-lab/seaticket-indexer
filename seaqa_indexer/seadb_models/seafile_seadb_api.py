@@ -20,6 +20,7 @@ class SeafileSeaDBAPI:
             SeafileTable.content.name: content[:SEADB_CONTENT_SIZE_LIMIT],
             SeafileTable.modified_time.name: file.get('modified_time'),
             SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SeafileTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             SeafileTable.deleted.name: False,
         }
         table_name = SeafileTable.gen_table_name(connection_id)
@@ -49,6 +50,7 @@ class SeafileSeaDBAPI:
                 "row": {
                     SeafileTable.deleted.name: True,
                     SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                    SeafileTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                 }
             }
             self.seadb_api.update_rows(self.base_id, table_name, [row])
@@ -61,7 +63,9 @@ class SeafileSeaDBAPI:
 
     def get_files_by_page(self, connection_id, since, page_size, offset):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE sync_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        sql = f"""SELECT * FROM `{table_name}` 
+                WHERE record_modified_time >= '{since}' 
+                LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results

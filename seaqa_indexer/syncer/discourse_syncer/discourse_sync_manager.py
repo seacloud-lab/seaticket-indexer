@@ -76,7 +76,7 @@ class DiscourseSyncManager:
                 discourse_seadb_api.update_reply(connection_id, reply_pk, topic_id, reply_data)
             else:
                 discourse_seadb_api.insert_reply(connection_id, topic_id, reply_data)
-            discourse_seadb_api.update_topic_sync_time(connection_id, topic_id)
+            discourse_seadb_api.update_topic_sync_and_record_time(connection_id, topic_id)
         elif event_type == 'topic_destroyed':
             discourse_seadb_api.delete_topic(connection_id, topic_id)
         elif event_type == 'post_destroyed':
@@ -84,7 +84,7 @@ class DiscourseSyncManager:
             post_number = reply_data.get('post_number')
             if post_number:
                 discourse_seadb_api.delete_reply_from_db(connection_id, topic_id, post_number)
-                discourse_seadb_api.update_topic_sync_time(connection_id, topic_id)
+                discourse_seadb_api.update_topic_sync_and_record_time(connection_id, topic_id)
         else:
             logger.warning(f"Unknown event type: {event_type}")
         self.add_discourse_index_task(connection_id)

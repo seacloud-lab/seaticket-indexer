@@ -56,10 +56,9 @@ class SummaryVectorIndex(VectorBaseIndex):
 
         while True:
             sql = f"""
-                SELECT _pk, ai_summary, ai_summary_vector, deleted, modified_time 
+                SELECT _pk, ai_summary, ai_summary_vector, deleted, outdated, modified_time 
                 FROM `{table_name}` 
-                WHERE ai_processed_time IS NOT NULL 
-                AND ai_processed_time > '{since}'
+                WHERE ai_processed_time > '{since}'
                 ORDER BY ai_processed_time 
                 LIMIT {page_size} OFFSET {offset}
             """
@@ -74,8 +73,9 @@ class SummaryVectorIndex(VectorBaseIndex):
                 ai_summary_vector = row.get('ai_summary_vector')
                 deleted = row.get('deleted')
                 modified_time = row.get('modified_time')
+                outdated = row.get('outdated')
 
-                if deleted:
+                if deleted or outdated:
                     deleted_index_pk_set.add(pk)
                     continue
 
