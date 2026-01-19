@@ -37,6 +37,11 @@ from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSu
 logger = logging.getLogger(__name__)
 
 
+def get_since_time(old_indexed_at) -> str:
+    if not old_indexed_at:
+        return datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc).isoformat()
+    return time_to_utc_time(str(old_indexed_at)).isoformat()
+
 def update_connection_index(connection_id, db_session_class):
     logger.info('Start to index project connection %s', connection_id)
     seaqa_db = SeaqaDB(db_session_class)
@@ -91,10 +96,7 @@ def update_site_index(project_connection, seasearch_api, seaqa_db):
     seadb_api = SeaDBAPI()
     storage = get_storage()
 
-    since = old_indexed_at
-    if not since:
-        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_to_utc_time(str(since)).isoformat()
+    since = get_since_time(old_indexed_at)
 
     index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db, seadb_api, storage, since)
     connection_status['last_indexed_count'] = index_count
@@ -116,10 +118,7 @@ def update_seafile_index(project_connection, seasearch_api, seaqa_db):
 
     seafile_index = SeafileIndex(seasearch_api)
 
-    since = old_indexed_at
-    if not since:
-        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_to_utc_time(str(since)).isoformat()
+    since = get_since_time(old_indexed_at)
 
     seafile_index_name = gen_index_name_by_type(connection_id, connection_type)
     seafile_index.create_index_if_missing(seafile_index_name)
@@ -152,10 +151,7 @@ def update_github_issues_index(project_connection, seasearch_api, seaqa_db):
     issues_index_name = gen_index_name_by_type(connection_id, connection_type)
     github_issues_index.create_index_if_missing(issues_index_name)
 
-    since = old_indexed_at
-    if not since:
-        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_to_utc_time(str(since)).isoformat()
+    since = get_since_time(old_indexed_at)
 
     index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, since)
     # finish index
@@ -180,10 +176,7 @@ def update_discourse_forum_index(project_connection, seasearch_api, seaqa_db):
     discourse_index_name = gen_index_name_by_type(connection_id, connection_type)
     discourse_forum_index.create_index_if_missing(discourse_index_name)
 
-    since = old_indexed_at
-    if not since:
-        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_to_utc_time(str(since)).isoformat()
+    since = get_since_time(old_indexed_at)
 
     index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db, discourse_seadb_api, since)
     indexed_at = datetime.datetime.now(datetime.UTC)
@@ -207,10 +200,7 @@ def update_email_index(project_connection, seasearch_api, seaqa_db):
     index_name = gen_index_name_by_type(connection_id, connection_type)
     email_index.create_index_if_missing(index_name)
 
-    since = old_indexed_at
-    if not since:
-        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_to_utc_time(str(since)).isoformat()
+    since = get_since_time(old_indexed_at)
 
     index_count = email_index.update(index_name, connection_id, connection_status, seaqa_db, email_seadb_api, since)
     indexed_at = datetime.datetime.now(datetime.UTC)
@@ -234,10 +224,7 @@ def update_knowledge_base_index(project_uuid, db_session_class):
         index_name = gen_kb_index_name(project_uuid)
         kb_index.create_index_if_missing(index_name)
         old_indexed_at = project.knowledge_base_indexed_at
-        since = old_indexed_at
-        if not since:
-            since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-        since = time_to_utc_time(str(since)).isoformat()
+        since = get_since_time(old_indexed_at)
 
         indexed_count = kb_index.update(index_name, uuid_str_to_32_chars(project_uuid), kb_seadb_api, since)
         indexed_at = datetime.datetime.now(datetime.UTC)
@@ -262,10 +249,7 @@ def update_ticket_index(project_uuid, db_session_class):
         index_name = gen_ticket_index_name(project_uuid)
         ticket_index.create_index_if_missing(index_name)
         old_indexed_at = project.ticket_indexed_at
-        since = old_indexed_at
-        if not since:
-            since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-        since = time_to_utc_time(str(since)).isoformat()
+        since = get_since_time(old_indexed_at)
 
         indexed_count = ticket_index.update(index_name, uuid_str_to_32_chars(project_uuid), ticket_seadb_api, since)
         indexed_at = datetime.datetime.now(datetime.UTC)
@@ -315,10 +299,7 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
         content_index_name = gen_content_vector_index_name(connection_id, connection_type)
         content_vector_index.create_index_if_missing(content_index_name)
 
-        since = last_content_vector_indexed_at
-        if not since:
-            since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-        since = time_to_utc_time(str(since)).isoformat()
+        since = get_since_time(last_content_vector_indexed_at)
 
         index_count = content_vector_index.update(
             table_name,
@@ -398,10 +379,7 @@ def update_connection_summary_index(connection_id, seaqa_db, seadb_api, seasearc
         ai_index_name = gen_conn_summary_index_name(connection_id, connection_type)
         summary_vector_index.create_index_if_missing(ai_index_name)
 
-        since = last_ai_indexed_at
-        if not since:
-            since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-        since = time_to_utc_time(str(since)).isoformat()
+        since = get_since_time(last_ai_indexed_at)
 
         index_count = summary_vector_index.update(
             table_name,
@@ -446,10 +424,7 @@ def update_knowledge_base_summary_index(project_uuid, seaqa_db, seadb_api, sease
 
     kb_summary_vector_index.create_index_if_missing(index_name)
 
-    since = last_kb_ai_indexed_at
-    if not since:
-        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_to_utc_time(str(since)).isoformat()
+    since = get_since_time(last_kb_ai_indexed_at)
     try:
         indexed_count = kb_summary_vector_index.update(table_name, index_name, project_uuid, seadb_api, since)
         ai_indexed_at = datetime.datetime.now(datetime.UTC)
@@ -480,10 +455,7 @@ def update_tickets_summary_index(project_uuid, seaqa_db, seadb_api, seasearch_ap
     ai_index_name = gen_ticket_summary_index_name(project_uuid)
     ticket_summary_vector_index.create_index_if_missing(ai_index_name)
 
-    since = last_ticket_ai_indexed_at
-    if not since:
-        since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    since = time_to_utc_time(str(since)).isoformat()
+    since = get_since_time(last_ticket_ai_indexed_at)
 
     index_count = ticket_summary_vector_index.update(table_name, ai_index_name, project_uuid, seadb_api, since)
     return index_count
