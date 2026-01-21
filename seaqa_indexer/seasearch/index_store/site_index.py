@@ -116,7 +116,7 @@ class SiteIndex(BaseIndex):
 
                 index_info = {'index': {'_index': index_name, '_id': key}}
                 doc_info = {
-                    'connection_id': connection_id,
+                    'connection_id': str(connection_id),
                     'content': content,
                     'url': url,
                     'etag': etag,

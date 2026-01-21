@@ -310,13 +310,13 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
     }
 
     if source_type == 'knowledge_base_summary':
-        record = kb_pk_to_record.get(pk)
+        record = kb_pk_to_record.get(int(pk))
         formatted_result['type'] = 'knowledge_base'
         formatted_result['title'] = record.get('title', '')
         formatted_result['modified_time'] = record.get('modified_time', '')
 
     elif source_type == 'ticket_summary':
-        record = ticket_pk_to_record.get(pk)
+        record = ticket_pk_to_record.get(int(pk))
         formatted_result['type'] = 'ticket'
         formatted_result['title'] = record.get('title', '')
         formatted_result['modified_time'] = record.get('modified_time', '')
@@ -325,7 +325,7 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
         # format connection vector search result
         connection_id = result.get('connection_id')
         connection = connection_id_to_connection.get(int(connection_id))
-        record = connection_pk_to_record.get(int(connection_id), {}).get(pk)
+        record = connection_pk_to_record.get(int(connection_id), {}).get(int(pk))
         connection_type = connection.type
 
         formatted_result['connection_id'] = connection_id

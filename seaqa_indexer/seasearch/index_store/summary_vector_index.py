@@ -89,8 +89,8 @@ class SummaryVectorIndex(VectorBaseIndex):
                     "ai_summary": ai_summary,
                     "vec": ai_summary_vector,
                     "project_uuid": project_uuid,
-                    "connection_id": connection_id,
-                    "pk": pk,
+                    "connection_id": str(connection_id),
+                    "pk": str(pk),
                     "modified_time": modified_time
                 }
                 bulk_params.append(index_info)

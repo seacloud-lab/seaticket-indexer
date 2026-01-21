@@ -97,7 +97,7 @@ class EmailIndex(BaseIndex):
                             break
                         email_offset += email_page_size
                     doc = {
-                        'connection_id': connection_id,
+                        'connection_id': str(connection_id),
                         'title': thread.get('title'),
                         'content': content,
                         'modified_time': thread.get('modified_time'),

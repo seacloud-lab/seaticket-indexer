@@ -81,7 +81,7 @@ class KnowledgeBaseSummaryVectorIndex(VectorBaseIndex):
                     "ai_summary": ai_summary,
                     "vec": ai_summary_vector,
                     "project_uuid": project_uuid,
-                    "pk": pk,
+                    "pk": str(pk),
                     "modified_time": modified_time
                 }
                 bulk_params.append(index_info)
