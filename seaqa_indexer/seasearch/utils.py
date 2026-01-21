@@ -97,7 +97,7 @@ def fix_summary(project_uuid, table_name, seadb_api):
         return fixed_count
 
     except Exception as e:
-        logger.exception('Failed to fix embeddings for connection %s: %s', connection_id, e)
+        logger.exception('Failed to fix embeddings for table_name %s: %s', table_name, e)
         return 0
 
 
