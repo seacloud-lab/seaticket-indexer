@@ -89,7 +89,7 @@ class SeafileIndex(BaseIndex):
                     deleted_index_id_set.add(key)
                 else:
                     doc = {
-                        'connection_id': connection_id,
+                        'connection_id': str(connection_id),
                         'repo_id': repo_id,
                         'path': parent_dir,
                         'title': title,

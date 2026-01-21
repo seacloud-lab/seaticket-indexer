@@ -6,7 +6,7 @@ from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
 from seaqa_indexer.ai_processor.utils import generate_embedding
-from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import ForumNotFoundException, \
+from seaqa_indexer.syncer.sync_manager import ForumNotFoundException, \
     ForumInActiveException
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
@@ -55,13 +55,8 @@ def add_connection_sync_task():
     task_type = request.args.get('type')
     if task_type == ConnectionType.SITE.value:
         application.app.web_crawl_manager.add_crawl_site_task(connection_id)
-    elif task_type == ConnectionType.DISCOURSE_FORUM.value:
-        application.app.discourse_sync_manager.add_discourse_sync_task(connection_id)
-    elif task_type == ConnectionType.GITHUB_ISSUE.value:
-        application.app.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
-    elif task_type == ConnectionType.SEAFILE.value:
-        application.app.seafile_sync_manager.add_sync_task(connection_id)
-    elif task_type == ConnectionType.EMAIL.value:
+    elif task_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
+                       ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
         application.app.seafile_sync_manager.add_sync_task(connection_id)
     else:
         return jsonify({'success': False, 'error_msg': f'Unsupported type: {task_type}'}), 400
@@ -83,14 +78,9 @@ def manual_sync_connection():
     try:
         if connection_type == ConnectionType.SITE.value:
             application.app.web_crawl_manager.add_crawl_site_task(connection_id)
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            application.app.github_issues_sync_manager.add_github_issues_sync_task(connection_id)
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            application.app.discourse_sync_manager.add_discourse_sync_task(connection_id)
-        elif connection_type == ConnectionType.SEAFILE.value:
-            application.app.seafile_sync_manager.add_sync_task(connection_id)
-        elif connection_type == ConnectionType.EMAIL.value:
-            application.app.seafile_sync_manager.add_sync_task(connection_id)
+        elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
+                                 ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
+            application.app.sync_manager.add_sync_task(connection_id)
         else:
             return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
     except Exception as e:
@@ -131,7 +121,7 @@ def github_webhook():
             return jsonify({'error_msg': 'Missing expected field in webhook payload'}), 400
 
     try:
-        application.app.github_issues_sync_manager.update_github_issues_by_webhook(connection_id, update_data, issue_id, action, event)
+        application.app.sync_manager.update_github_issues_by_webhook(connection_id, update_data, issue_id, action, event)
     except Exception as e:
         logger.error(e)
         return jsonify({'error_msg': 'Internal Server Error'}), 500
@@ -216,7 +206,7 @@ def vector_search():
 
     if not project_uuid:
         return {'error_msg': 'project_uuid invalid.'}, 400
-    
+
     if not isinstance(extra_sources, (list, tuple)):
         return {'error_msg': 'extra_sources invalid.'}, 400
 
@@ -252,7 +242,7 @@ def discourse_webhook():
         return jsonify({'error': 'event_type invalid'}), 400
 
     try:
-        application.app.discourse_sync_manager.handle_webhook(connection_id, data, event_type)
+        application.app.sync_manager.handle_discourse_webhook(connection_id, data, event_type)
     except ForumNotFoundException:
         return {'error': 'Forum not found'}, 404
     except ForumInActiveException:

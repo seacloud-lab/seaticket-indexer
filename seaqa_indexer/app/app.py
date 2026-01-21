@@ -1,5 +1,4 @@
 from seaqa_indexer.server.http_server import HttpServer
-from seaqa_indexer.syncer.github_issues_syncer.github_issues_sync_manager import GithubIssuesSyncManager
 from seaqa_indexer.workers.web_crawl_worker_starter import WebCrawlWorkerStarter
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 from seaqa_indexer.seasearch.index_manager import IndexManager
@@ -7,8 +6,6 @@ from seaqa_indexer.workers.index_worker_starter import IndexWorkerStarter
 from seaqa_indexer.workers.ai_index_worker_starter import AIIndexWorkerStarter
 from seaqa_indexer.tasks.project_connection_cleaner_starter import ProjectConnectionCleanerStarter
 from seaqa_indexer.workers.connection_sync_starter import ConnectionSyncWorkerStarter
-from seaqa_indexer.syncer.discourse_syncer.discourse_sync_manager import DiscourseSyncManager
-from seaqa_indexer.syncer.seafile_syncer.seafile_sync_manager import SeafileSyncManager
 from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
 from seaqa_indexer.workers.ai_process_worker_starter import AIProcessWorkerStarter
@@ -16,15 +13,14 @@ from seaqa_indexer.workers.content_vector_index_worker_starter import ContentVec
 from seaqa_indexer.tasks.deleted_records_cleaner_starter import DeletedRecordsCleanerStarter
 from seaqa_indexer.seasearch.knowledge_base_index_master import KnowledgeBaseIndexMaster
 from seaqa_indexer.seasearch.ticket_index_master import TicketIndexMaster
+from seaqa_indexer.syncer.sync_manager import SyncManager
 
 
 class SeaqaIndexerApp(object):
     def __init__(self, ):
         self.web_crawl_manager = WebCrawlManager()
         self.index_manager = IndexManager()
-        self.github_issues_sync_manager = GithubIssuesSyncManager()
-        self.discourse_sync_manager = DiscourseSyncManager()
-        self.seafile_sync_manager = SeafileSyncManager()
+        self.sync_manager = SyncManager()
 
         self.web_crawl_worker_starter = WebCrawlWorkerStarter()
         self.index_worker_starter = IndexWorkerStarter()

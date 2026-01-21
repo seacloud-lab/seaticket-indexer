@@ -96,8 +96,8 @@ class ContentVectorIndex(VectorBaseIndex):
                         "content": chunks[i],
                         "vec": embeddings[i].get('embedding', []),
                         "project_uuid": project_uuid,
-                        "connection_id": connection_id,
-                        "pk": pk,
+                        "connection_id": str(connection_id),
+                        "pk": str(pk),
                         "chunk_index": embeddings[i].get('index'),
                         "modified_time": modified_time
                     }

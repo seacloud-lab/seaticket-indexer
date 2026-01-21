@@ -107,7 +107,7 @@ class DiscourseIndex(BaseIndex):
                         replies_offset += replies_page_size
 
                     doc = {
-                        'connection_id': connection_id,
+                        'connection_id': str(connection_id),
                         'topic_id': topic['topic_id'],
                         'title': topic['title'],
                         'content': body_content,

@@ -116,7 +116,7 @@ class GitHubIssuesIndex(BaseIndex):
                         comments_offset += comments_page_size
 
                     doc = {
-                        'connection_id': connection_id,
+                        'connection_id': str(connection_id),
                         'repo_owner': repo_owner,
                         'repo_name': repo_name,
                         'issue_id': issue_id,
