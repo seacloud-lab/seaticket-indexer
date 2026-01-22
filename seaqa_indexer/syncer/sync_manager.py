@@ -7,7 +7,7 @@ from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.syncer.utils import SYNC_TASK_RATE_LIMIT_SECONDS
+from seaqa_indexer.syncer.utils import SYNC_TASK_RATE_LIMIT_SECONDS, PENDING_SYNC_TASK_TTL
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,18 @@ class SyncManager:
     def _get_rate_limit_key(self, connection_id):
         return f'sync_task_rate_limit:{connection_id}'
 
+    def _get_pending_key(self, connection_id):
+        return f'sync_task_pending:{connection_id}'
+
     def add_sync_task(self, connection_id):
         rate_limit_key = self._get_rate_limit_key(connection_id)
+        pending_key = self._get_pending_key(connection_id)
+        
+        # If the sync task is rate limited, mark it as pending.
         if not self.mq.set(rate_limit_key, 1, ex=SYNC_TASK_RATE_LIMIT_SECONDS, nx=True):
-            logger.info('sync task rate limited, skip adding task, connection_id: %s', connection_id)
+            logger.info('sync task rate limited, marking as pending, connection_id: %s', connection_id)
+            # Mark it as pending, the expiration time is longer than the rate limit time, ensure enough time to trigger.
+            self.mq.set(pending_key, 1, ex=PENDING_SYNC_TASK_TTL)
             return
 
         logger.info('add sync task: %s', connection_id)
@@ -38,6 +46,26 @@ class SyncManager:
             'connection_id': connection_id,
         }
         self.mq.lpush('sync_task', json.dumps(msg_content))
+        
+        self.mq.delete(pending_key)
+
+    def check_and_trigger_pending_sync(self, connection_id):
+        """Check and trigger the pending sync task.
+        After the sync task is completed, call this method to check 
+        if there is a pending sync request for this connection.
+        If there is and the rate limit is lifted, trigger a new sync task.
+        """
+        pending_key = self._get_pending_key(connection_id)
+        rate_limit_key = self._get_rate_limit_key(connection_id)
+        
+        # Check if there is a pending sync task.
+        if self.mq.exists(pending_key):
+            # Check if the rate limit is lifted.
+            if not self.mq.exists(rate_limit_key):
+                logger.info('trigger pending sync task for connection: %s', connection_id)
+                self.add_sync_task(connection_id)
+            else:
+                logger.debug('pending sync task exists but still in rate limit period, connection: %s', connection_id)
 
     def add_index_task(self, connection_id):
         msg_content = {

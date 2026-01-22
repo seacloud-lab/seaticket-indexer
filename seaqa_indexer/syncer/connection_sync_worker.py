@@ -11,6 +11,7 @@ from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.syncer.sync_connection import sync_connection
+from seaqa_indexer.syncer.sync_manager import SyncManager
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.constants import ConnectionType
 
@@ -41,6 +42,7 @@ class ConnectionSyncTaskWorker(object):
 
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
+        self.sync_manager = SyncManager()
 
         self.set_signal()
         self.worker_list = []
@@ -130,6 +132,12 @@ class ConnectionSyncTaskWorker(object):
                     logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                 self.mq.delete(lock_key)
                 logger.info("%s Finish sync connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
+                
+                # After the sync task is completed, check and trigger the pending sync task.
+                try:
+                    self.sync_manager.check_and_trigger_pending_sync(connection_id)
+                except Exception as e:
+                    logger.exception('Error checking pending sync task for connection %s: %s', connection_id, e)
             else:
                 logger.warning('another sync task is running, drop this task, connection_id: %s', connection_id)
 
