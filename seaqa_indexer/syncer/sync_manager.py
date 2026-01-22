@@ -1,5 +1,8 @@
-import logging
 import json
+import time
+import logging
+from threading import Thread
+from copy import deepcopy
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
@@ -7,7 +10,6 @@ from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.syncer.utils import SYNC_TASK_RATE_LIMIT_SECONDS, PENDING_SYNC_TASK_TTL
 
 logger = logging.getLogger(__name__)
 
@@ -18,61 +20,21 @@ class ForumInActiveException(Exception):
     pass
 
 
-class SyncManager:
+class SyncManager(Thread):
     def __init__(self):
+        Thread.__init__(self)
+        self.pending_tasks = dict()
+        self.sync_interval = 5 * 60
         self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
 
-    def _get_rate_limit_key(self, connection_id):
-        return f'sync_task_rate_limit:{connection_id}'
-
-    def _get_pending_key(self, connection_id):
-        return f'sync_task_pending:{connection_id}'
-
     def add_sync_task(self, connection_id):
-        rate_limit_key = self._get_rate_limit_key(connection_id)
-        pending_key = self._get_pending_key(connection_id)
-        
-        # If the sync task is rate limited, mark it as pending.
-        if not self.mq.set(rate_limit_key, 1, ex=SYNC_TASK_RATE_LIMIT_SECONDS, nx=True):
-            logger.info('sync task rate limited, marking as pending, connection_id: %s', connection_id)
-            # Mark it as pending, the expiration time is longer than the rate limit time, ensure enough time to trigger.
-            self.mq.set(pending_key, 1, ex=PENDING_SYNC_TASK_TTL)
-            return
-
         logger.info('add sync task: %s', connection_id)
         msg_content = {
             'connection_id': connection_id,
         }
         self.mq.lpush('sync_task', json.dumps(msg_content))
-        
-        self.mq.delete(pending_key)
-
-    def check_and_trigger_pending_sync(self, connection_id):
-        """Check and trigger the pending sync task.
-        After the sync task is completed, call this method to check 
-        if there is a pending sync request for this connection.
-        If there is and the rate limit is lifted, trigger a new sync task.
-        """
-        pending_key = self._get_pending_key(connection_id)
-        rate_limit_key = self._get_rate_limit_key(connection_id)
-        
-        # Check if there is a pending sync task.
-        if self.mq.exists(pending_key):
-            # Check if the rate limit is lifted.
-            if not self.mq.exists(rate_limit_key):
-                logger.info('trigger pending sync task for connection: %s', connection_id)
-                self.add_sync_task(connection_id)
-            else:
-                logger.debug('pending sync task exists but still in rate limit period, connection: %s', connection_id)
-
-    def add_index_task(self, connection_id):
-        msg_content = {
-            'connection_id': connection_id,
-            'type': 'connection',
-        }
-        self.mq.lpush('index_task', json.dumps(msg_content))
 
     def handle_discourse_webhook(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
@@ -91,8 +53,8 @@ class SyncManager:
         topic_id = request_data.get('topic', {}).get('id')
 
         if event_type in ['topic_created', 'topic_recovered', 'topic_edited',
-                'post_created', 'post_edited', 'post_recovered']:
-            self.add_sync_task(connection_id)
+                          'post_created', 'post_edited', 'post_recovered']:
+            self.check_and_sync(connection_id)
         elif event_type == 'topic_destroyed':
             discourse_seadb_api.delete_topic(connection_id, topic_id)
         elif event_type == 'post_destroyed':
@@ -126,4 +88,26 @@ class SyncManager:
                 github_seadb_api.update_issue_sync_and_record_time(connection_id, issue_id)
                 return
 
-        self.add_sync_task(connection_id)
+        self.check_and_sync(connection_id)
+
+    def check_and_sync(self, connection_id):
+        now_time = time.time()
+        last_sync_time = self.pending_tasks.get(connection_id, 0)
+        if (now_time - last_sync_time) >= self.sync_interval:
+            self.pending_tasks[connection_id] = now_time
+            self.add_sync_task(connection_id)
+
+    def run(self):
+        logger.info('sync manager thread started')
+        while True:
+            copied_pending_tasks = deepcopy(self.pending_tasks)
+            now_time = time.time()
+            logger.info('start check pending sync tasks, task count: %s', len(copied_pending_tasks))
+            try:
+                for connection_id, last_sync_time in copied_pending_tasks.items():
+                    if (now_time - last_sync_time) >= self.sync_interval:
+                        self.add_sync_task(connection_id)
+                        self.pending_tasks.pop(connection_id)
+            except Exception as e:
+                logger.error('Error handing sync connection: %s' % e)
+            time.sleep(30)
