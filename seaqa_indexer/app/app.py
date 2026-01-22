@@ -46,6 +46,7 @@ class SeaqaIndexerApp(object):
         self.content_vector_index_worker_starter.start()
         self.kb_index_master.start()
         self.ticket_index_master.start()
+        self.sync_manager.start()
 
         self.deleted_records_cleaner_starter.start()
         self.project_connection_cleaner_starter.start()
