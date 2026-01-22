@@ -14,14 +14,7 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.utils import uuid_str_to_32_chars
-from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.seadb_models.models import (
-    WebCrawlTable,
-    DiscourseTopicsTable,
-    GithubIssuesTable,
-    SeafileTable,
-    ThreadTable
-)
+from seaqa_indexer.handlers import get_handler_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -82,19 +75,12 @@ class IndexManager:
 
     def _clear_ai_processed_time(self, connection_id, connection_type, project_uuid):
 
-        if connection_type == ConnectionType.SITE.value:
-            table_name = WebCrawlTable.gen_table_name(connection_id)
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            table_name = GithubIssuesTable.gen_table_name(connection_id)
-        elif connection_type == ConnectionType.SEAFILE.value:
-            table_name = SeafileTable.gen_table_name(connection_id)
-        elif connection_type == ConnectionType.EMAIL.value:
-            table_name = ThreadTable.gen_table_name(connection_id)
-        else:
+        conn_handler = get_handler_or_none(connection_type)
+        if not conn_handler:
             logger.warning(f'Unsupported connection type: {connection_type}')
             return 0
+        
+        table_name = conn_handler.gen_table_name(connection_id)
 
         page_size = 100
         offset = 0

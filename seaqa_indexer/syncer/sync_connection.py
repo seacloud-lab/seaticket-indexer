@@ -4,27 +4,17 @@ import datetime
 import time
 import os
 
-from urllib.parse import urlparse
-from dateutil.relativedelta import relativedelta
-
-from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
-from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT, REPO_FILE_SIZE_LIMIT, SYNC_FILE_SUFFIXES
+from seaqa_indexer.utils.constants import CrawlStatus, REPO_NAME_CACHE_TIME_OUT, REPO_FILE_SIZE_LIMIT, SYNC_FILE_SUFFIXES
 from seaqa_indexer.utils import decrypt_config, time_to_utc_time, encrypt_config, get_file_suffix, \
     need_update_connection_last_sync_count
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.index.utils import get_content_by_download_link
 from seaqa_indexer.utils.seahub_api import FileNotFoundException
 from seaqa_indexer.index.extract import ExtractorFactory
-from seaqa_indexer.utils.seahub_api import SeahubAPI
-from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
-from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
-from seaqa_indexer.utils.imap_mail import ImapMail
-from seaqa_indexer.crawler.storage import get_storage
-from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
-from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
+from seaqa_indexer.handlers import get_handler_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -63,88 +53,33 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     sync_count = 0
     total_count = 0
     try:
-        if connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            forum_url = config['url']
-            discourse_api_key = config['api_key']
-            discourse_api_username = config['api_username']
-            sync_years = config.get('sync_years', 5)
+        conn_handler = get_handler_or_none(connection_type)
+        if not conn_handler:
+            logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
+            sync_logger.log(f'Unsupported connection type: {connection_type}')
+            connection_status['last_sync_status'] = CrawlStatus.FAILED
+            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+            sync_logger.stop_capture()
+            return
+        
+        sync_result = conn_handler.sync(
+            connection_id, project_uuid, config, old_last_sync_time,
+            connection_status, seaqa_db, sync_logger
+        )
+        
+        if sync_result is None or (isinstance(sync_result, tuple) and None in sync_result[:2]):
 
-            project_uuid = project_connection.project_uuid
-            project_created_at = project_connection.created_at
-            discourse_forum_api = DiscourseForumAPI(forum_url, discourse_api_key, discourse_api_username)
-
-            discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
-            # Calculate sync_earliest_time by subtracting sync_years from project_created_time
-            project_created_time_utc = time_to_utc_time(str(project_created_at))
-            sync_earliest_time = project_created_time_utc - relativedelta(years=sync_years)
-            sync_count, total_count = sync_discourse(connection_id, sync_earliest_time, old_last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db)
-
-        if connection_type == ConnectionType.GITHUB_ISSUE.value:
-            server_url = config.get('repository')
-            token = config.get('access_token')
-            try:
-                path = urlparse(server_url).path
-                parts = path.strip("/").split("/")
-                repo_owner, repo_name = parts[0], parts[1]
-            except Exception as e:
-                logger.warning("github repository is invalid: %s", e)
-                sync_logger.log(f"Github repository is invalid")
-                connection_status['last_sync_status'] = CrawlStatus.FAILED
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                sync_logger.stop_capture()
-                return
-            since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
-            github_api = GitHubAPI(token, repo_owner, repo_name)
-            github_seadb_api = GitHubSeaDBAPI(project_uuid)
-            sync_count, total_count = sync_github_issue(connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api)
-
-        if connection_type == ConnectionType.SEAFILE.value:
-            old_repo_name = config.get('repo_name')
-            server_url = config.get('server_url')
-            api_token = config.get('api_token')
-            since = old_last_sync_time
-            is_first_update = False
-            if not since:
-                since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-                is_first_update = True
-            since = time_to_utc_time(str(since)).isoformat()
-            seahub_api = SeahubAPI(server_url, api_token)
-            repo_info = seahub_api.get_repo_info()
-            repo_id = repo_info.get('repo_id')
-            new_repo_name = repo_info.get('repo_name')
-
-            redis_cache.set(repo_id, json.dumps({server_url: new_repo_name}), REPO_NAME_CACHE_TIME_OUT)
-            config['repo_id'] = repo_id
-            config['repo_name'] = new_repo_name
-            if old_repo_name != new_repo_name:
-                is_update_config = True
-
-            seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
-            sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
-        if connection_type == ConnectionType.EMAIL.value:
-            imap_host = config.get('imap_host')
-            imap_port = config.get('imap_port')
-            email_user = config.get('username')
-            email_password = config.get('password')
-            sync_years = config.get('sync_years', 5)
-            since = old_last_sync_time
-            is_first_update = False
-            if not since:
-                since = datetime.datetime.now(datetime.UTC) - relativedelta(years=sync_years)
-                is_first_update = True
-            since = time_to_utc_time(str(since)).isoformat()
-            email_seadb_api = EmailSeaDBAPI(project_uuid)
-            storage = get_storage()
-            try:
-                imap = ImapMail(imap_host, email_user, email_password, port=imap_port)
-            except Exception as e:
-                logger.error("connection_id %s imap_host: %s, email_user: %s, login error: %s", connection_id, imap_host, email_user, e)
-                sync_logger.log(f"imap account is invalid")
-                connection_status['last_sync_status'] = CrawlStatus.FAILED
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                sync_logger.stop_capture()
-                return
-            sync_count, total_count = sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_update)
+            connection_status['last_sync_status'] = CrawlStatus.FAILED
+            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+            sync_logger.stop_capture()
+            return
+        
+        # Seafile handler returns 4 values: (sync_count, total_count, is_update_config, config)
+        if len(sync_result) == 4:
+            sync_count, total_count, is_update_config, config = sync_result
+        else:
+            # Other handlers return 2 values: (sync_count, total_count)
+            sync_count, total_count = sync_result
     except Exception as e:
         logger.exception('connection: %s, sync failed, error: %s', connection_id, e)
         try:

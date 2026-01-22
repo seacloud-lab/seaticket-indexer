@@ -8,7 +8,8 @@ from urllib.parse import urlparse
 from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX, ConnectionType
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.utils import uuid_str_to_32_chars
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable, gen_table_name_by_connection_type
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
+from seaqa_indexer.handlers import get_handler_or_none, gen_table_name_by_connection_type
 
 
 logger = logging.getLogger(__name__)
@@ -331,60 +332,11 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
         formatted_result['connection_id'] = connection_id
         formatted_result['type'] = connection_type
 
-        if connection_type == ConnectionType.SITE.value:
-            url = record.get('url', '')
-            if source_type == 'chunk':
-                formatted_result['source_type'] = 'chunk'
-                formatted_result['content'] = result.get('content', '')
-            formatted_result['title'] = record.get('title', '')
-            formatted_result['url'] = url
-
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            connection_config = json.loads(connection.config)
-            discourse_forum_url = connection_config.get('url')
-            slug = record.get('slug')
-            topic_id = record.get('topic_id')
-            topic_url = discourse_forum_url.rstrip('/') + '/t/' + slug + '/' + str(topic_id)
-            formatted_result['title'] = record.get('title', '')
-            formatted_result['slug'] = record.get('slug', '')
-            formatted_result['topic_id'] = record.get('topic_id', '')
-            formatted_result['modified_time'] = record.get('modified_time', '')
-            formatted_result['url'] = topic_url
-
-        elif connection_type == ConnectionType.SEAFILE.value:
-            connection_config = json.loads(connection.config)
-            repo_name = connection_config.get('repo_name')
-            repo_id = connection_config.get('repo_id')
-            server_url = connection_config.get('server_url')
-            url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + record.get('path', '').strip(
-                '/') + '/' + record.get('title', '')
-            formatted_result['title'] = record.get('title', '')
-            formatted_result['path'] = record.get('path', '')
-            formatted_result['repo_id'] = repo_id
-            formatted_result['repo_name'] = repo_name
-            formatted_result['server_url'] = server_url
-            formatted_result['modified_time'] = record.get('modified_time', '')
-            formatted_result['url'] = url
-
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            connection_config = json.loads(connection.config)
-            server_url = connection_config.get('repository')
-            url_parsed = urlparse(server_url)
-            base_url = url_parsed.scheme + "://" + url_parsed.netloc
-            parts = url_parsed.path.strip("/").split("/")
-            repo_owner, repo_name = parts[0], parts[1]
-            url = f'{base_url}/{repo_owner}/{repo_name}/issues/' + str(record.get('issue_number', ''))
-            formatted_result['title'] = record.get('title', '')
-            formatted_result['issue_number'] = record.get('issue_number', '')
-            formatted_result['state'] = record.get('state', '')
-            formatted_result['labels'] = record.get('labels')
-            formatted_result['repo_name'] = repo_name
-            formatted_result['repo_owner'] = repo_owner
-            formatted_result['url'] = url
-        elif connection_type == ConnectionType.EMAIL.value:
-            formatted_result['title'] = record.get('title', '')
-            formatted_result['modified_time'] = record.get('modified_time', '')
-        else:
+        conn_handler = get_handler_or_none(connection_type)
+        if not conn_handler:
             logger.warning(f'Unsupported connection type: {connection_type}')
             return
+        type_specific_result = conn_handler.format_vector_search_result(record, connection, result)
+        formatted_result.update(type_specific_result)
+
     return formatted_result

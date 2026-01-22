@@ -27,6 +27,7 @@ from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
+from seaqa_indexer.handlers import get_handler_or_none
 
 
 logger = logging.getLogger(__name__)
@@ -63,17 +64,16 @@ class IndexManager:
                 connection_type = project_connection.type
                 connection_id = project_connection.id
                 index_name = gen_index_name_by_type(connection_id, connection_type)
+
                 connection_id_to_config[str(connection_id)] = json.loads(project_connection.config)
-                if connection_type == ConnectionType.SEAFILE.value:
-                    bulk_search_params.append(self.seafile_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
-                elif connection_type == ConnectionType.SITE.value:
-                    bulk_search_params.append(self.site_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
-                elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                    bulk_search_params.append(self.github_issues_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
-                elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                    bulk_search_params.append(self.discourse_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
-                elif connection_type == ConnectionType.EMAIL.value:
-                    bulk_search_params.append(self.email_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
+                conn_handler = get_handler_or_none(connection_type)
+                if not conn_handler:
+                    logger.warning('Unsupported connection type: %s', connection_type)
+                    continue
+                index_instance = conn_handler.get_index_instance(self.seasearch_api)
+                bulk_search_params.append(conn_handler.get_search_param(
+                    index_instance, index_name, keyword, start, size, time_from, time_to
+                ))
 
         if extra_sources and "knowledge_base" in extra_sources:
             kb_index_name = gen_kb_index_name(project_uuid)
@@ -104,25 +104,15 @@ class IndexManager:
         self.seasearch_api.delete_index_by_name(ticket_summary_index_name)
 
     def delete_index_by_connection(self, connection_id, connection_type):
-        index_name = gen_index_name_by_type(connection_id, connection_type)
         # summary vector index
         summary_index_name = gen_conn_summary_index_name(connection_id, connection_type)
         self.summary_vector_index.delete_index_by_index_name(summary_index_name)
 
-        if connection_type == ConnectionType.SITE.value:
-            # keyword index
-            self.site_index.delete_index_by_index_name(index_name)
-            # content vector index
-            content_index_name = gen_content_vector_index_name(connection_id, connection_type)
-            self.content_vector_index.delete_index_by_index_name(content_index_name)
-        elif connection_type == ConnectionType.SEAFILE.value:
-            self.seafile_index.delete_index_by_index_name(index_name)
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            self.github_issues_index.delete_index_by_index_name(index_name)
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            self.discourse_index.delete_index_by_index_name(index_name)
-        elif connection_type == ConnectionType.EMAIL.value:
-            self.email_index.delete_index_by_index_name(index_name)
+        conn_handler = get_handler_or_none(connection_type)
+        if not conn_handler:
+            logger.warning('Unsupported connection type: %s', connection_type)
+            return
+        conn_handler.delete_index(self, connection_id)
 
     def add_connection_index_task(self, connection_id):
         msg_content = {

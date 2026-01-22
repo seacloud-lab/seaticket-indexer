@@ -434,18 +434,3 @@ class KnowledgeBaseTable(BaseModel):
     @classmethod
     def gen_table_name(cls):
         return 'knowledge_base'
-
-
-def gen_table_name_by_connection_type(connection_type, connection_id):
-    table_name = None
-    if connection_type == ConnectionType.SITE.value:
-        table_name = WebCrawlTable.gen_table_name(connection_id)
-    elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-    elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-        table_name = GithubIssuesTable.gen_table_name(connection_id)
-    elif connection_type == ConnectionType.SEAFILE.value:
-        table_name = SeafileTable.gen_table_name(connection_id)
-    elif connection_type == ConnectionType.EMAIL.value:
-        table_name = ThreadTable.gen_table_name(connection_id)
-    return table_name

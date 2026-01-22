@@ -29,9 +29,10 @@ from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIn
 from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary, \
     gen_kb_summary_index_name, gen_ticket_index_name, gen_content_vector_index_name, \
     gen_ticket_summary_index_name, gen_index_name_by_type, gen_kb_index_name
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable, gen_table_name_by_connection_type
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
+from seaqa_indexer.handlers import get_handler_or_none, gen_table_name_by_connection_type
 
 
 logger = logging.getLogger(__name__)
@@ -63,16 +64,11 @@ def update_connection_index(connection_id, db_session_class):
 
     seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
     try:
-        if connection_type == ConnectionType.SITE.value:
-            update_site_index(connection, seasearch_api, seaqa_db)
-        elif connection_type == ConnectionType.SEAFILE.value:
-            update_seafile_index(connection, seasearch_api, seaqa_db)
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            update_github_issues_index(connection, seasearch_api, seaqa_db)
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            update_discourse_forum_index(connection, seasearch_api, seaqa_db)
-        elif connection_type == ConnectionType.EMAIL.value:
-            update_email_index(connection, seasearch_api, seaqa_db)
+        conn_handler = get_handler_or_none(connection_type)
+        if not conn_handler:
+            logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
+            return
+        conn_handler.update_index(connection, seasearch_api, seaqa_db)
     except Exception as e:
         logger.exception('Connection %s update index failed, error: %s', connection_id, e)
         connection_status['last_index_status'] = IndexStatus.FAILED

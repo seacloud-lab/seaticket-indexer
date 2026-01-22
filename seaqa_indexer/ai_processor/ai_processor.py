@@ -21,6 +21,7 @@ from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSea
 from seaqa_indexer.utils.constants import AIStatus
 from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
 from seaqa_indexer.seadb_models.models import TicketsTable
+from seaqa_indexer.handlers import get_handler_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -53,19 +54,13 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
     seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
 
     try:
-        if connection_type == ConnectionType.SITE.value:
-            ai_processing_count = process_site_ai(seadb_api, storage, connection_id, project_uuid)
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            ai_processing_count = process_discourse_ai(seadb_api, connection_id, project_uuid)
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            ai_processing_count = process_github_issue_ai(seadb_api, connection_id, project_uuid)
-        elif connection_type == ConnectionType.SEAFILE.value:
-            ai_processing_count = process_seafile_ai(seadb_api, connection_id, project_uuid)
-        elif connection_type == ConnectionType.EMAIL.value:
-            ai_processing_count = process_email_ai(seadb_api, connection_id, project_uuid)
-        else:
+        conn_handler = get_handler_or_none(connection_type)
+        if not conn_handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
+        
+        ai_processing_count = conn_handler.process_ai(seadb_api, storage, connection_id, project_uuid)
+        
         logger.info('AI processing completed for connection %s', connection_id)
         ai_status['last_ai_processing_status'] = AIStatus.COMPLETED
         ai_status['last_ai_processing_count'] = ai_processing_count
