@@ -63,7 +63,7 @@ class IndexManager:
                 connection_type = project_connection.type
                 connection_id = project_connection.id
                 index_name = gen_index_name_by_type(connection_id, connection_type)
-                connection_id_to_config[connection_id] = json.loads(project_connection.config)
+                connection_id_to_config[str(connection_id)] = json.loads(project_connection.config)
                 if connection_type == ConnectionType.SEAFILE.value:
                     bulk_search_params.append(self.seafile_index.get_search_param(index_name, keyword, start, size, time_from, time_to))
                 elif connection_type == ConnectionType.SITE.value:
@@ -280,7 +280,7 @@ class IndexManager:
                         project_uuid, result_docs)
 
         return result_docs
-    
+
     def get_vector_search_results(self, project_connections, extra_sources, project_uuid, query_vector, count, time_from=None, time_to=None):
         summary_index_names = []
         content_index_names = []
@@ -340,7 +340,7 @@ class IndexManager:
                 logger.warning('Ticket summary semantic search failed: %s', e)
 
         return all_results
-    
+
     def vector_search(self, project_uuid, connection_ids, extra_sources, query_vector, time_from=None, time_to=None, top_k=10, score_threshold=None):
         project_connections = []
         if connection_ids:
@@ -366,7 +366,7 @@ class IndexManager:
                 formatted_results.append(formatted_result)
 
         return formatted_results
-    
+
     def semantic_search(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
 
         query_vector = generate_embedding(query_text, project_uuid, username=username)
