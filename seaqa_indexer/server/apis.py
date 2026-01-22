@@ -57,7 +57,7 @@ def add_connection_sync_task():
         application.app.web_crawl_manager.add_crawl_site_task(connection_id)
     elif task_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
                        ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
-        application.app.seafile_sync_manager.add_sync_task(connection_id)
+        application.app.sync_manager.add_sync_task(connection_id)
     else:
         return jsonify({'success': False, 'error_msg': f'Unsupported type: {task_type}'}), 400
 
