@@ -16,16 +16,16 @@ from seaqa_indexer.utils import get_python_executable, run
 class SeaqaIndexerApp(object):
     def __init__(self, ):
         self.web_crawl_manager = WebCrawlManager()
-        self.index_manager = IndexManager()
         self.sync_manager = SyncManager()
 
+        self.index_manager = IndexManager()
         self.kb_index_master = KnowledgeBaseIndexMaster()
         self.ticket_index_master = TicketIndexMaster()
 
         self.http_server = HttpServer(self)
-        self.project_connection_cleaner_starter = ProjectConnectionCleanerStarter()
         self.sync_task_publisher = SyncTaskPublisher()
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
+        self.project_connection_cleaner_starter = ProjectConnectionCleanerStarter()
         self.deleted_records_cleaner_starter = DeletedRecordsCleanerStarter()
 
     def serve_forever(self):
@@ -35,9 +35,11 @@ class SeaqaIndexerApp(object):
         self._start_worker('seaqa_indexer.syncer.connection_sync_worker', 'connection sync worker')
         self._start_worker('seaqa_indexer.ai_processor.ai_process_task_worker', 'ai process worker')
         self._start_worker('seaqa_indexer.seasearch.content_vector_index_task_worker', 'content vector index worker')
+
+        self.sync_manager.start()
+        
         self.kb_index_master.start()
         self.ticket_index_master.start()
-        self.sync_manager.start()
 
         self.deleted_records_cleaner_starter.start()
         self.project_connection_cleaner_starter.start()
