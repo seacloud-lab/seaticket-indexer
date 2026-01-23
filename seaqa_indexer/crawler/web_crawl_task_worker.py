@@ -1,10 +1,7 @@
 import os
-import time
 import logging
-import json
 import threading
 import signal
-from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
 
 # Install the correct reactor before importing any twisted modules
 from scrapy.utils.reactor import install_reactor
@@ -15,71 +12,43 @@ from twisted.internet import reactor
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
+from seaqa_indexer.workers.base_task_worker import BaseTaskWorker, run_worker
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.crawl_web import craw_web
-from seaqa_indexer.mq import get_mq
 
 
 logger = logging.getLogger(__name__)
 
 
-class WebCrawlTaskWorker(object):
-    """ The handler for redis message queue
-    """
-
-    def __init__(self):
-        self.db_session_class = init_db_session_class()
-        self.should_stop = threading.Event()
-        self.worker_num = 3
-
-        self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
-        reactor.suggestThreadPoolSize(10)
-        self.set_signal()
-        self.worker_list = []
+class WebCrawlTaskWorker(BaseTaskWorker):
+    """The handler for redis message queue - web crawl tasks"""
 
     @property
-    def tname(self):
-        return threading.current_thread().name
+    def worker_num(self) -> int:
+        return 3
 
-    def clear_worker(self):
-        for th in self.worker_list:
-            th.join()
-        logger.info("All web crawl handler threads has stopped.")
+    def get_queue_name(self) -> str:
+        return 'web_crawl_task'
 
-    def start(self):
-        if not self.mq:
-            return
-        for i in range(int(self.worker_num)):
-            t = threading.Thread(target=self.web_crawl_handler, name='web_crawl_handler_thread_' + str(i), daemon=True)
-            t.start()
+    def get_worker_name(self) -> str:
+        return 'web_crawl_handler'
 
-        threading.Thread(target=reactor.run, name='reactor_thread', daemon=True, kwargs={'installSignalHandlers': False}).start()
+    def init_dependencies(self):
+        self.db_session_class = init_db_session_class()
+        reactor.suggestThreadPoolSize(10)
 
-    def web_crawl_handler(self):
-        logger.info('%s starting web crawl work' % self.tname)
-        try:
-            while not self.should_stop.is_set():
-                try:
-                    res = self.mq.brpop('web_crawl_task', timeout=30)
-                    if res is not None:
-                        key, value = res
-                        try:
-                            data = json.loads(value)
-                        except:
-                            data = None
+    def on_start(self):
+        """start twisted reactor"""
+        threading.Thread(
+            target=reactor.run,
+            name='reactor_thread',
+            daemon=True,
+            kwargs={'installSignalHandlers': False}
+        ).start()
 
-                        if not data:
-                            logger.warning('web_crawl_task: invalid.', res)
-                        else:
-                            connection_id = data.get('site_id')
-                            self.crawl_site(connection_id)
-                except (ResponseError, NoMQAvailable, TimeoutError) as e:
-                    logger.error('The connection to the redis server failed: %s' % e)
-        except Exception as e:
-            logger.error('%s Crawl site Error' % self.tname)
-            logger.error(e, exc_info=True)
-            # prevent case that redis break at program running.
-            time.sleep(0.3)
+    def process_message(self, data: dict):
+        connection_id = data.get('site_id')
+        self.crawl_site(connection_id)
 
     def crawl_site(self, connection_id):
         try:
@@ -98,25 +67,9 @@ class WebCrawlTaskWorker(object):
         signal.signal(signal.SIGTERM, self.signal_term_handler)
 
 
-def start():
-    web_crawl_task_worker = WebCrawlTaskWorker()
-    logger.info("web crawl task worker process initialized.")
-    try:
-        web_crawl_task_worker.start()
-    except Exception as e:
-        logger.exception(e)
-        os._exit(0)
-
-    while True:
-        # if main thread has been quit or join for subthread.
-        # signal callback will never be  call.
-        time.sleep(2)
-
-
 def main():
-    LogConfigurator(config.LOG_LEVEL, config.LOG_FILE)
     os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'seaqa_indexer.crawler.settings')
-    start()
+    run_worker(WebCrawlTaskWorker)
 
 
 if __name__ == "__main__":
