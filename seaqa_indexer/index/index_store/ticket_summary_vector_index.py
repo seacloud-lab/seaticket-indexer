@@ -1,12 +1,13 @@
 import logging
 
-from seaqa_indexer.seasearch.index_store.vector_base_index import VectorBaseIndex
+from seaqa_indexer.index.index_store.vector_base_index import VectorBaseIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
+
 
 logger = logging.getLogger(__name__)
 
 
-class KnowledgeBaseSummaryVectorIndex(VectorBaseIndex):
+class TicketSummaryVectorIndex(VectorBaseIndex):
     mapping = {
         'properties': {
             'project_uuid': {
@@ -42,9 +43,10 @@ class KnowledgeBaseSummaryVectorIndex(VectorBaseIndex):
         def _flush_bulk_if_needed(force=False):
             nonlocal bulk_params, pending_pks
             if bulk_params and (force or len(bulk_params) >= SEASEARCH_BULK_OPERATE_LIMIT):
-                self.delete_indexes_by_pks(index_name, pending_pks)
+                if pending_pks:
+                    self.delete_indexes_by_pks(index_name, pending_pks)
+                    pending_pks = set()
                 self.seasearch_api.bulk(index_name, bulk_params)
-                pending_pks = set()
                 bulk_params = []
 
         while True:
@@ -128,6 +130,6 @@ class KnowledgeBaseSummaryVectorIndex(VectorBaseIndex):
                 'pk': fields.get('pk')[0],
                 'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0),
-                'source_type': 'knowledge_base_summary',
+                'source_type': 'ticket_summary',
             })
         return topk_search_results

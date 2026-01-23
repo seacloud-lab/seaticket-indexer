@@ -8,7 +8,7 @@ from sqlalchemy.sql import text
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.index_manager import IndexManager
+from seaqa_indexer.index.index_manager import IndexManager
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
@@ -28,9 +28,6 @@ class ProjectConnectionCleaner(object):
         self.should_stop = threading.Event()
         self.clear_interval = 24 * 60 * 60
 
-        self.LOCK_TIMEOUT = 1800  # 30 minutes
-        self.locked_keys = set()
-
         self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
         self.storage = get_storage()
         self.seadb_api = SeaDBAPI()
@@ -40,9 +37,6 @@ class ProjectConnectionCleaner(object):
     @property
     def tname(self):
         return threading.current_thread().name
-
-    def _get_index_lock_key(self, connection_id):
-        return 'index_' + str(connection_id)
 
     def start(self):
         if not self.mq:
@@ -166,40 +160,15 @@ class ProjectConnectionCleaner(object):
             connection_id = connection.id
             connection_type = connection.type
 
-            if self.mq.set(self._get_index_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                # get lock
-                logger.info('%s Start deleting connection %s' % (self.tname, connection_id))
-                lock_key = self._get_index_lock_key(connection_id)
-                self.locked_keys.add(lock_key)
-                try:
-                    self.clear_deleted_connection(project_uuid, connection_id, connection_type)
-                except Exception as e:
-                    logger.exception('Fail to clear deleted connection, project_uuid: %s, connection_id: %s, error: %s', project_uuid, connection_id, e)
-                try:
-                    self.locked_keys.remove(lock_key)
-                except KeyError:
-                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
-                self.mq.delete(lock_key)
-                logger.info('Thread %s Delete connection %s completed' % (self.tname, connection_id))
-            else:
-                logger.warning('Delete connection %s pass, because of update index is running.', connection_id)
-
-    def clear(self):
-        if not self.mq:
-            return
-        self.should_stop.set()
-        # if a thread just lock key, wait to add the lock to the list.
-        time.sleep(1)
-        # del redis locked key
-        for key in self.locked_keys:
-            self.mq.delete(key)
-            logger.info("redis lock key %s has been deleted", key)
-        # sys.exit
-        logger.info("Exit project connection cleaner process")
-        os._exit(0)
+            logger.info('%s Start deleting connection %s' % (self.tname, connection_id))
+            try:
+                self.clear_deleted_connection(project_uuid, connection_id, connection_type)
+            except Exception as e:
+                logger.exception('Fail to clear deleted connection, project_uuid: %s, connection_id: %s, error: %s', project_uuid, connection_id, e)
 
     def signal_term_handler(self, signal, frame):
-        self.clear()
+        logger.info("Exit project connection cleaner process")
+        os._exit(0)
 
     def set_signal(self):
         # TODO: look like python will add signal to queue when cpu exec c extension code,

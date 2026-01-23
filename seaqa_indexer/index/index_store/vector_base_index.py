@@ -1,6 +1,6 @@
 import logging
 
-from seaqa_indexer.seasearch.index_store.base_index import BaseIndex
+from seaqa_indexer.index.index_store.base_index import BaseIndex
 from seaqa_indexer.utils import time_to_utc_time
 
 logger = logging.getLogger(__name__)

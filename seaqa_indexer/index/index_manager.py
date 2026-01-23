@@ -4,29 +4,29 @@ from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES, ConnectionType, REPO_NAME_CACHE_TIME_OUT
-from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
+from seaqa_indexer.index.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
-from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
-from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
-from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
-from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
+from seaqa_indexer.index.index_store.site_index import SiteIndex
+from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
+from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
+from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
+from seaqa_indexer.index.index_store.email_index import EmailIndex
 
-from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
-from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVectorIndex
-from seaqa_indexer.seasearch.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
-from seaqa_indexer.seasearch.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
+from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
+from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
+from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
+from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, \
+from seaqa_indexer.index.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, \
     gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name, \
     format_vector_search_result, get_result_related_seadb_records
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.ai_processor.utils import generate_embedding
-from seaqa_indexer.seasearch.index_store.ticket_index import TicketIndex
+from seaqa_indexer.index.index_store.ticket_index import TicketIndex
 
 
 logger = logging.getLogger(__name__)

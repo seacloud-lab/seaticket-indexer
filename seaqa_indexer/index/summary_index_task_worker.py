@@ -14,7 +14,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.seasearch.index_utils import update_tickets_summary_index, update_connection_summary_index, \
+from seaqa_indexer.index.index_utils import update_tickets_summary_index, update_connection_summary_index, \
     update_knowledge_base_summary_index
 
 
@@ -108,21 +108,20 @@ class SummaryIndexTaskWorker(object):
             time.sleep(0.3)
 
     def work_task_handler(self, connection_id):
-        if not self.should_stop.is_set():
-            lock_key = self._get_conn_summary_index_lock_key(connection_id)
-            if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                logger.info('%s start summary index project connection: %s' % (self.tname, connection_id))
-                self.locked_keys.add(lock_key)
-                self.update_ai_index(connection_id)
-                try:
-                    self.locked_keys.remove(lock_key)
-                except KeyError:
-                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
-                self.mq.delete(lock_key)
-                logger.info(
-                    "%s Finish summary index connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
-            else:
-                logger.warning('another summary index task is running, drop this task, connection_id: %s', connection_id)
+        lock_key = self._get_conn_summary_index_lock_key(connection_id)
+        if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
+            logger.info('%s start summary index project connection: %s' % (self.tname, connection_id))
+            self.locked_keys.add(lock_key)
+            self.update_ai_index(connection_id)
+            try:
+                self.locked_keys.remove(lock_key)
+            except KeyError:
+                logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+            self.mq.delete(lock_key)
+            logger.info(
+                "%s Finish summary index connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
+        else:
+            logger.warning('another summary index task is running, drop this task, connection_id: %s', connection_id)
 
     def kb_task_handler(self, project_uuid):
         if not self.should_stop.is_set():
