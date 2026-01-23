@@ -1,19 +1,16 @@
+import logging
+
 from seaqa_indexer.server.http_server import HttpServer
-from seaqa_indexer.workers.web_crawl_worker_starter import WebCrawlWorkerStarter
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 from seaqa_indexer.seasearch.index_manager import IndexManager
-from seaqa_indexer.workers.index_worker_starter import IndexWorkerStarter
-from seaqa_indexer.workers.ai_index_worker_starter import AIIndexWorkerStarter
 from seaqa_indexer.tasks.project_connection_cleaner_starter import ProjectConnectionCleanerStarter
-from seaqa_indexer.workers.connection_sync_starter import ConnectionSyncWorkerStarter
 from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
-from seaqa_indexer.workers.ai_process_worker_starter import AIProcessWorkerStarter
-from seaqa_indexer.workers.content_vector_index_worker_starter import ContentVectorIndexWorkerStarter
 from seaqa_indexer.tasks.deleted_records_cleaner_starter import DeletedRecordsCleanerStarter
 from seaqa_indexer.seasearch.knowledge_base_index_master import KnowledgeBaseIndexMaster
 from seaqa_indexer.seasearch.ticket_index_master import TicketIndexMaster
 from seaqa_indexer.syncer.sync_manager import SyncManager
+from seaqa_indexer.utils import get_python_executable, run
 
 
 class SeaqaIndexerApp(object):
@@ -22,12 +19,6 @@ class SeaqaIndexerApp(object):
         self.index_manager = IndexManager()
         self.sync_manager = SyncManager()
 
-        self.web_crawl_worker_starter = WebCrawlWorkerStarter()
-        self.index_worker_starter = IndexWorkerStarter()
-        self.ai_index_worker_starter = AIIndexWorkerStarter()
-        self.connection_sync_starter = ConnectionSyncWorkerStarter()
-        self.ai_process_worker_starter = AIProcessWorkerStarter()
-        self.content_vector_index_worker_starter = ContentVectorIndexWorkerStarter()
         self.kb_index_master = KnowledgeBaseIndexMaster()
         self.ticket_index_master = TicketIndexMaster()
 
@@ -38,12 +29,12 @@ class SeaqaIndexerApp(object):
         self.deleted_records_cleaner_starter = DeletedRecordsCleanerStarter()
 
     def serve_forever(self):
-        self.web_crawl_worker_starter.start()
-        self.index_worker_starter.start()
-        self.ai_index_worker_starter.start()
-        self.connection_sync_starter.start()
-        self.ai_process_worker_starter.start()
-        self.content_vector_index_worker_starter.start()
+        self._start_worker('seaqa_indexer.crawler.web_crawl_task_worker', 'web crawl worker')
+        self._start_worker('seaqa_indexer.seasearch.index_task_worker', 'index worker')
+        self._start_worker('seaqa_indexer.seasearch.summary_index_task_worker', 'ai index worker')
+        self._start_worker('seaqa_indexer.syncer.connection_sync_worker', 'connection sync worker')
+        self._start_worker('seaqa_indexer.ai_processor.ai_process_task_worker', 'ai process worker')
+        self._start_worker('seaqa_indexer.seasearch.content_vector_index_task_worker', 'content vector index worker')
         self.kb_index_master.start()
         self.ticket_index_master.start()
         self.sync_manager.start()
@@ -53,3 +44,11 @@ class SeaqaIndexerApp(object):
         self.sync_task_publisher.start()
         self.web_crawl_task_publisher.start()
         self.http_server.start()
+
+    def _start_worker(self, module_name, worker_label):
+        try:
+            cmd = [get_python_executable(), '-m', module_name]
+            run(cmd)
+            logging.info('%s is started', worker_label)
+        except Exception as e:
+            logging.exception('error when start %s: %s', worker_label, e)
