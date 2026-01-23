@@ -119,6 +119,7 @@ class LockingTaskWorker(BaseTaskWorker):
 
     def __init__(self):
         self.locked_keys = set()
+        self.locked_keys_lock = threading.Lock()
         super().__init__()
 
     @abstractmethod
@@ -141,14 +142,16 @@ class LockingTaskWorker(BaseTaskWorker):
         lock_key = self.get_lock_key(task_id)
         if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
             logger.info('%s start %s: %s', self.tname, self.get_worker_name(), task_id)
-            self.locked_keys.add(lock_key)
+            with self.locked_keys_lock:
+                self.locked_keys.add(lock_key)
             try:
                 task_func(*args, **kwargs)
             except Exception as e:
                 logger.exception('%s %s failed, error: %s', self.get_worker_name(), task_id, e)
             finally:
                 try:
-                    self.locked_keys.remove(lock_key)
+                    with self.locked_keys_lock:
+                        self.locked_keys.remove(lock_key)
                 except KeyError:
                     logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
                 self.mq.delete(lock_key)
@@ -163,7 +166,8 @@ class LockingTaskWorker(BaseTaskWorker):
         logger.info('%s Starting refresh locks', self.tname)
         while not self.should_stop.is_set():
             try:
-                copy = self.locked_keys.copy()
+                with self.locked_keys_lock:
+                    copy = self.locked_keys.copy()
                 for lock in copy:
                     ttl = self.mq.ttl(lock)
                     new_ttl = ttl + self.REFRESH_INTERVAL
@@ -177,7 +181,9 @@ class LockingTaskWorker(BaseTaskWorker):
 
     def on_clear(self):
         """clean all held locks"""
-        for key in self.locked_keys:
+        with self.locked_keys_lock:
+            keys_to_delete = list(self.locked_keys)
+        for key in keys_to_delete:
             self.mq.delete(key)
             logger.info("redis lock key %s has been deleted", key)
 
