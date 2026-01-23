@@ -8,7 +8,7 @@ from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, Ti
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.seasearch.index_utils import update_connection_index, update_knowledge_base_index, update_ticket_index
+from seaqa_indexer.index.index_utils import update_connection_index, update_knowledge_base_index, update_ticket_index
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 
@@ -90,23 +90,22 @@ class IndexTaskWorker(object):
 
     def connection_task_handler(self, connection_id):
         # Python cannot kill threads, so stop it generate more locked key.
-        if not self.should_stop.is_set():
-            # set key-value if does not exist which will expire 30 minutes later
-            if self.mq.set(self._get_index_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                # get lock
-                logger.info('%s start index project connection: %s' % (self.tname, connection_id))
-                lock_key = self._get_index_lock_key(connection_id)
-                self.locked_keys.add(lock_key)
-                self.update_index(connection_id)
-                try:
-                    self.locked_keys.remove(lock_key)
-                except KeyError:
-                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
-                self.mq.delete(lock_key)
-                logger.info(
-                    "%s Finish index connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
-            else:
-                logger.warning('another index task is running, drop this task, connection_id: %s', connection_id)
+        # set key-value if does not exist which will expire 30 minutes later
+        if self.mq.set(self._get_index_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
+            # get lock
+            logger.info('%s start index project connection: %s' % (self.tname, connection_id))
+            lock_key = self._get_index_lock_key(connection_id)
+            self.locked_keys.add(lock_key)
+            self.update_index(connection_id)
+            try:
+                self.locked_keys.remove(lock_key)
+            except KeyError:
+                logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+            self.mq.delete(lock_key)
+            logger.info(
+                "%s Finish index connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
+        else:
+            logger.warning('another index task is running, drop this task, connection_id: %s', connection_id)
 
     def kb_task_handler(self, project_uuid):
         lock_key = self._get_index_lock_key('kb_' + str(project_uuid))

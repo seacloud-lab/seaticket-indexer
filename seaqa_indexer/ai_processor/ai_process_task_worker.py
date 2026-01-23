@@ -92,21 +92,20 @@ class AIProcessTaskWorker(object):
             time.sleep(0.3)
 
     def work_task_handler(self, connection_id):
-        if not self.should_stop.is_set():
-            if self.mq.set(self._get_ai_process_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                logger.info('%s start AI process project connection: %s' % (self.tname, connection_id))
-                lock_key = self._get_ai_process_lock_key(connection_id)
-                self.locked_keys.add(lock_key)
-                self.process_ai_summary(connection_id)
-                try:
-                    self.locked_keys.remove(lock_key)
-                except KeyError:
-                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
-                self.mq.delete(lock_key)
-                logger.info(
-                    "%s Finish AI process connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
-            else:
-                logger.warning('another ai process task is running, drop this task, connection_id: %s', connection_id)
+        if self.mq.set(self._get_ai_process_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
+            logger.info('%s start AI process project connection: %s' % (self.tname, connection_id))
+            lock_key = self._get_ai_process_lock_key(connection_id)
+            self.locked_keys.add(lock_key)
+            self.process_ai_summary(connection_id)
+            try:
+                self.locked_keys.remove(lock_key)
+            except KeyError:
+                logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
+            self.mq.delete(lock_key)
+            logger.info(
+                "%s Finish AI process connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
+        else:
+            logger.warning('another ai process task is running, drop this task, connection_id: %s', connection_id)
 
     def tickets_task_handler(self, project_uuid):
         if not self.should_stop.is_set():

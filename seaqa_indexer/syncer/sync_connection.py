@@ -12,9 +12,9 @@ from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME
 from seaqa_indexer.utils import decrypt_config, time_to_utc_time, encrypt_config, get_file_suffix, \
     need_update_connection_last_sync_count
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
-from seaqa_indexer.seasearch.utils import get_content_by_download_link
+from seaqa_indexer.index.utils import get_content_by_download_link
 from seaqa_indexer.utils.seahub_api import FileNotFoundException
-from seaqa_indexer.seasearch.extract import ExtractorFactory
+from seaqa_indexer.index.extract import ExtractorFactory
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI

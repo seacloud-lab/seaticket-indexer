@@ -3,8 +3,8 @@ import logging
 
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT, SEASEARCH_BULK_OPERATE_LIMIT
-from seaqa_indexer.seasearch.utils import EmailMessage
-from seaqa_indexer.seasearch.index_store.base_index import BaseIndex
+from seaqa_indexer.index.utils import EmailMessage
+from seaqa_indexer.index.index_store.base_index import BaseIndex
 
 logger = logging.getLogger(__name__)
 

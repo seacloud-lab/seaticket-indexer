@@ -117,7 +117,10 @@ class SeaqaDB(object):
             sql = f"""SELECT id, type FROM `project_connection` 
                      WHERE (JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_sync_status')) in ('crawling', 'pending')
                       OR JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_index_status')) = 'indexing'
-                      OR JSON_UNQUOTE(JSON_EXTRACT(`ai_status`, '$.last_ai_index_status')) = 'indexing')
+                      OR JSON_UNQUOTE(JSON_EXTRACT(`ai_status`, '$.last_ai_index_status')) = 'indexing'
+                      OR JSON_UNQUOTE(JSON_EXTRACT(`ai_status`, '$.last_ai_processing_status')) = 'processing'
+                      OR JSON_UNQUOTE(JSON_EXTRACT(`content_vector_status`, '$.last_content_vector_index_status')) = 'indexing'
+                      )
                      AND deleted=false 
                      AND is_active=true 
                      AND type IN ({need_sync_types_combine_str})"""

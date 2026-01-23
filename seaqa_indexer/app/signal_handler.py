@@ -18,7 +18,7 @@ def kill_connection_sync_task_worker():
 
 def kill_index_task_worker():
     cmd = [
-        'pkill', '-f', 'seaqa_indexer.seasearch.index_task_worker'
+        'pkill', '-f', 'seaqa_indexer.index.index_task_worker'
     ]
     run(cmd)
 
@@ -39,14 +39,14 @@ def kill_ai_processor():
 
 def kill_summary_index_task_worker():
     cmd = [
-        'pkill', '-f', 'seaqa_indexer.seasearch.summary_index_task_worker'
+        'pkill', '-f', 'seaqa_indexer.index.summary_index_task_worker'
     ]
     run(cmd)
 
 
 def kill_content_vector_index_task_worker():
     cmd = [
-        'pkill', '-f', 'seaqa_indexer.seasearch.content_vector_index_task_worker'
+        'pkill', '-f', 'seaqa_indexer.index.content_vector_index_task_worker'
     ]
     run(cmd)
 

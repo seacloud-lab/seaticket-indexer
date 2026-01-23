@@ -10,6 +10,7 @@ from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.utils.constants import ConnectionType
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,15 @@ class ForumNotFoundException(Exception):
 
 class ForumInActiveException(Exception):
     pass
+
+
+NEED_RECOVER_SYNC_TYPES = [
+    ConnectionType.GITHUB_ISSUE.value,
+    ConnectionType.DISCOURSE_FORUM.value,
+    ConnectionType.SEAFILE.value,
+    ConnectionType.EMAIL.value,
+    ConnectionType.SITE.value,
+]
 
 
 class SyncManager(Thread):
@@ -35,6 +45,27 @@ class SyncManager(Thread):
             'connection_id': connection_id,
         }
         self.mq.lpush('sync_task', json.dumps(msg_content))
+
+    def recover_interrupted_tasks(self):
+        logger.info("Start to recover interrupted sync tasks...")
+        try:
+            connections = self.seaqa_db.get_connections_to_recover(NEED_RECOVER_SYNC_TYPES)
+            for connection in connections:
+                connection_id = connection.id
+                connection_type = connection.type
+
+                logger.info(f"Add recovering sync task for connection {connection_id}")
+                if connection_type == ConnectionType.SITE.value:
+                    msg_content = {
+                        'site_id': connection_id,
+                    }
+                    self.mq.lpush('web_crawl_task', json.dumps(msg_content))
+                    continue
+
+                self.add_sync_task(connection_id)
+
+        except Exception as e:
+            logger.exception(f"Error during task recovery: {e}")
 
     def handle_discourse_webhook(self, connection_id, request_data, event_type):
         """Handle complete webhook request processing with connection validation"""
@@ -99,6 +130,7 @@ class SyncManager(Thread):
 
     def run(self):
         logger.info('sync manager thread started')
+        self.recover_interrupted_tasks()
         while True:
             copied_pending_tasks = deepcopy(self.pending_tasks)
             now_time = time.time()

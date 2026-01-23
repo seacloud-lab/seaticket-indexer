@@ -2,7 +2,7 @@ import json
 import logging
 
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.seasearch.index_store.base_index import BaseIndex
+from seaqa_indexer.index.index_store.base_index import BaseIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
 logger = logging.getLogger(__name__)

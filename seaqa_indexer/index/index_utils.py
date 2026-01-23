@@ -6,12 +6,12 @@ from urllib.parse import urlparse
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
-from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
-from seaqa_indexer.seasearch.index_store.seafile_index import SeafileIndex
-from seaqa_indexer.seasearch.index_store.github_issues_index import GitHubIssuesIndex
-from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
-from seaqa_indexer.seasearch.index_store.email_index import EmailIndex
-from seaqa_indexer.seasearch.index_store.knowledge_base_index import KnowledgeBaseIndex
+from seaqa_indexer.index.index_store.site_index import SiteIndex
+from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
+from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
+from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
+from seaqa_indexer.index.index_store.email_index import EmailIndex
+from seaqa_indexer.index.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.utils import time_to_utc_time, decrypt_config, uuid_str_to_32_chars
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -20,19 +20,18 @@ from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
 from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
-from seaqa_indexer.seasearch.index_store.ticket_index import TicketIndex
+from seaqa_indexer.index.index_store.ticket_index import TicketIndex
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seasearch.index_store.content_vector_index import ContentVectorIndex
+from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
 
-from seaqa_indexer.seasearch.index_store.summary_vector_index import SummaryVectorIndex
-from seaqa_indexer.seasearch.utils import gen_conn_summary_index_name, fix_summary, \
+from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
+from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary, \
     gen_kb_summary_index_name, gen_ticket_index_name, gen_content_vector_index_name, \
     gen_ticket_summary_index_name, gen_index_name_by_type, gen_kb_index_name
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable, \
-    gen_table_name_by_connection_type
-from seaqa_indexer.seasearch.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
-from seaqa_indexer.seasearch.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable, gen_table_name_by_connection_type
+from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
+from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
 
 
 logger = logging.getLogger(__name__)
@@ -309,8 +308,6 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
         # Only support SITE type for now
         if connection_type != ConnectionType.SITE.value:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
-            content_vector_status['last_content_vector_index_status'] = IndexStatus.FAILED
-            seaqa_db.update_content_vector_status_and_time(connection_id, json.dumps(content_vector_status))
             return
 
         table_name = gen_table_name_by_connection_type(connection_type, connection_id)

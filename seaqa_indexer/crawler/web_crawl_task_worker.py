@@ -88,6 +88,7 @@ class WebCrawlTaskWorker(object):
             logger.exception('crawl site: %s failed, error: %s', connection_id, e)
 
     def signal_term_handler(self, signal, frame):
+        logger.info("Exit web_crawl task worker process")
         os._exit(0)
 
     def set_signal(self):
