@@ -27,8 +27,9 @@ SYNC_CONNECTION_TYPES = [
 
 
 class SyncTaskPublisher(object):
-    def __init__(self):
+    def __init__(self, sync_manager):
         self._enabled = True
+        self._sync_manager = sync_manager
         self._logfile = LOG_FILE
         self._loglevel = LOG_LEVEL
         self._interval = 1 * 60 * 60
@@ -39,7 +40,7 @@ class SyncTaskPublisher(object):
             logging.warning('Can not start sync task publisher: it is not enabled!')
             return
 
-        SyncTaskPublisherTimer(self._logfile, self._loglevel, self._interval, self._sync_interval).start()
+        SyncTaskPublisherTimer(self._logfile, self._loglevel, self._interval, self._sync_interval, self._sync_manager).start()
         logging.info('sync task publisher is started')
 
     def is_enabled(self):
@@ -47,7 +48,7 @@ class SyncTaskPublisher(object):
 
 
 class SyncTaskPublisherTimer(Thread):
-    def __init__(self, logfile, loglevel, interval, sync_interval):
+    def __init__(self, logfile, loglevel, interval, sync_interval, sync_manager):
         Thread.__init__(self)
         self._logfile = logfile
         self._loglevel = loglevel
@@ -56,6 +57,7 @@ class SyncTaskPublisherTimer(Thread):
         self._sync_interval = sync_interval
         self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
+        self.sync_manager = sync_manager
 
     def get_sync_project_connections_by_page(self, start, limit):
         with self.db_session_class() as session:
@@ -91,15 +93,9 @@ class SyncTaskPublisherTimer(Thread):
             for project_connection in project_connections:
                 connection_id = project_connection.id
                 try:
-                    self.add_sync_task(connection_id)
+                    self.sync_manager.check_and_sync(connection_id)
                 except Exception as e:
                     logger.error('cron publish sync task failed, connection_id: %s, error: %s', connection_id, e)
-
-    def add_sync_task(self, connection_id):
-        msg_content = {
-            'connection_id': connection_id,
-        }
-        self.mq.lpush('sync_task', json.dumps(msg_content))
 
     def run(self):
         while not self.finished.is_set():
