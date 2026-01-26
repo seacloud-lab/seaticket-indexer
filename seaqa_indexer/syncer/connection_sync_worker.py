@@ -27,10 +27,6 @@ class ConnectionSyncTaskWorker(BaseTaskWorker):
         self.db_session_class = init_db_session_class()
         self.seaqa_db = SeaqaDB(self.db_session_class)
 
-    def on_start(self):
-        self.recover_interrupted_tasks()
-        super().on_start()
-
     def process_message(self, data: dict):
         connection_id = data.get('connection_id')
         self.work_task_handler(connection_id)
