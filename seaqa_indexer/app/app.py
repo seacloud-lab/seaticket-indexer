@@ -21,7 +21,7 @@ class SeaqaIndexerApp(object):
         self.ticket_index_master = TicketIndexMaster()
 
         self.http_server = HttpServer(self)
-        self.sync_task_publisher = SyncTaskPublisher()
+        self.sync_task_publisher = SyncTaskPublisher(self.sync_manager)
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
 
     def serve_forever(self):
