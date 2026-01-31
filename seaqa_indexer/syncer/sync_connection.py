@@ -359,7 +359,9 @@ def sync_email(connection_id, project_uuid, connection_status, since, imap, seaq
     since = time_to_utc_time(str(since))
     today = datetime.datetime.now(datetime.timezone.utc).date()
 
-    before_date = since.date()
+    # Due to time zone differences, emails sent on the same day may not be available for retrieval within that time frame.
+    # Therefore, the search scope has been expanded to include a full day.
+    before_date = since.date() - datetime.timedelta(days=1)
 
     while before_date <= today:
         since_date = before_date
