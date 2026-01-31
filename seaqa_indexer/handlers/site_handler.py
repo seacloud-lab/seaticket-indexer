@@ -12,14 +12,14 @@ class SiteHandler(ConnectionHandler):
     table_class = WebCrawlTable
     
     def get_index_instance(self, seasearch_api):
-        from seaqa_indexer.seasearch.index_store.site_index import SiteIndex
+        from seaqa_indexer.index.index_store.site_index import SiteIndex
         return SiteIndex(seasearch_api)
     
     def get_search_param(self, index_instance, index_name, keyword, start, size, time_from, time_to):
         return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
     
     def delete_index(self, index_manager, connection_id):
-        from seaqa_indexer.seasearch.utils import gen_index_name_by_type, gen_content_vector_index_name
+        from seaqa_indexer.index.utils import gen_index_name_by_type, gen_content_vector_index_name
         index_name = gen_index_name_by_type(connection_id, self.connection_type)
         # keyword index
         index_manager.site_index.delete_index_by_index_name(index_name)
@@ -44,7 +44,7 @@ class SiteHandler(ConnectionHandler):
         return process_site_ai(seadb_api, storage, connection_id, project_uuid)
     
     def update_index(self, connection, seasearch_api, seaqa_db):
-        from seaqa_indexer.seasearch.index_utils import update_site_index
+        from seaqa_indexer.index.index_utils import update_site_index
         update_site_index(connection, seasearch_api, seaqa_db)
     
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 

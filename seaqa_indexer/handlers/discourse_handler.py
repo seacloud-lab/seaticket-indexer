@@ -15,14 +15,14 @@ class DiscourseHandler(ConnectionHandler):
     table_class = DiscourseTopicsTable
     
     def get_index_instance(self, seasearch_api):
-        from seaqa_indexer.seasearch.index_store.discourse_index import DiscourseIndex
+        from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
         return DiscourseIndex(seasearch_api)
     
     def get_search_param(self, index_instance, index_name, keyword, start, size, time_from, time_to):
         return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
     
     def delete_index(self, index_manager, connection_id):
-        from seaqa_indexer.seasearch.utils import gen_index_name_by_type
+        from seaqa_indexer.index.utils import gen_index_name_by_type
         index_name = gen_index_name_by_type(connection_id, self.connection_type)
         index_manager.discourse_index.delete_index_by_index_name(index_name)
     
@@ -46,7 +46,7 @@ class DiscourseHandler(ConnectionHandler):
         return process_discourse_ai(seadb_api, connection_id, project_uuid)
     
     def update_index(self, connection, seasearch_api, seaqa_db):
-        from seaqa_indexer.seasearch.index_utils import update_discourse_forum_index
+        from seaqa_indexer.index.index_utils import update_discourse_forum_index
         update_discourse_forum_index(connection, seasearch_api, seaqa_db)
     
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
