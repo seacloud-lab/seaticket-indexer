@@ -3,7 +3,6 @@ from seaqa_indexer.handlers.registry import (
     ConnectionHandlerRegistry,
     get_handler,
     get_handler_or_none,
-    gen_table_name_by_connection_type,
 )
 from seaqa_indexer.handlers.site_handler import SiteHandler
 from seaqa_indexer.handlers.discourse_handler import DiscourseHandler
@@ -23,7 +22,6 @@ __all__ = [
     'ConnectionHandlerRegistry',
     'get_handler',
     'get_handler_or_none',
-    'gen_table_name_by_connection_type',
     'SiteHandler',
     'DiscourseHandler',
     'GithubIssueHandler',

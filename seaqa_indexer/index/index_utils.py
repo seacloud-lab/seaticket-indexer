@@ -32,7 +32,7 @@ from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary, 
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
-from seaqa_indexer.handlers import get_handler_or_none, gen_table_name_by_connection_type
+from seaqa_indexer.handlers import get_handler, get_handler_or_none
 
 
 logger = logging.getLogger(__name__)
@@ -290,7 +290,8 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
 
-        table_name = gen_table_name_by_connection_type(connection_type, connection_id)
+        handler = get_handler(connection_type)
+        table_name = handler.gen_table_name(connection_id)
         content_vector_index = ContentVectorIndex(seasearch_api)
         content_index_name = gen_content_vector_index_name(connection_id, connection_type)
         content_vector_index.create_index_if_missing(content_index_name)
@@ -360,12 +361,13 @@ def update_connection_summary_index(connection_id, seaqa_db, seadb_api, seasearc
     last_ai_indexed_at = connection.ai_indexed_at
 
     try:
-        table_name = gen_table_name_by_connection_type(connection_type, connection_id)
-        if not table_name:
+        handler = get_handler_or_none(connection_type)
+        if not handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             ai_status['last_ai_index_status'] = IndexStatus.FAILED
             seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
             return
+        table_name = handler.gen_table_name(connection_id)
 
         fixed_count = fix_summary(project_uuid, table_name, seadb_api)
         if fixed_count > 0:

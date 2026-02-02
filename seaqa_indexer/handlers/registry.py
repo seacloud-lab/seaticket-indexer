@@ -44,7 +44,3 @@ def get_handler(connection_type: str):
 
 def get_handler_or_none(connection_type: str):
     return ConnectionHandlerRegistry.get_or_none(connection_type)
-
-
-def gen_table_name_by_connection_type(connection_type: str, connection_id) -> str:
-    return ConnectionHandlerRegistry.get_table_name(connection_type, connection_id)

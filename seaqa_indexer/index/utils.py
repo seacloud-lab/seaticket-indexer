@@ -9,7 +9,7 @@ from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX, Conne
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.utils import uuid_str_to_32_chars
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
-from seaqa_indexer.handlers import get_handler_or_none, gen_table_name_by_connection_type
+from seaqa_indexer.handlers import get_handler_or_none
 
 
 logger = logging.getLogger(__name__)
@@ -272,10 +272,11 @@ def get_result_related_seadb_records(project_uuid, all_results, connection_id_to
     connection_pk_to_record = {}  # {connection_id: {pk: record}}
     for connection_id, connection_pks in connection_id_to_pks.items():
         connection = connection_id_to_connection[connection_id]
-        connection_table_name = gen_table_name_by_connection_type(connection.type, connection_id)
-        if not connection_table_name:
-            logger.warning(f'Table name not found for connection {connection_id}')
+        handler = get_handler_or_none(connection.type)
+        if not handler:
+            logger.warning(f'Handler not found for connection {connection_id}')
             continue
+        connection_table_name = handler.gen_table_name(connection_id)
 
         records = query_records_by_pks(connection_table_name, connection_pks)
         for record in records:
