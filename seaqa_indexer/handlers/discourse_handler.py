@@ -1,11 +1,19 @@
 import json
 import datetime
+import logging
+import time
 
 from dateutil.relativedelta import relativedelta
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.handlers.utils import need_update_connection_last_sync_count, time_to_utc_time
+from seaqa_indexer.utils import time_to_utc_time
+from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
+from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
+
+logger = logging.getLogger(__name__)
 
 
 class DiscourseHandler(ConnectionHandler):
@@ -56,11 +64,6 @@ class DiscourseHandler(ConnectionHandler):
     
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
              connection_status, seaqa_db, sync_logger):
-        from seaqa_indexer.utils import time_to_utc_time
-        from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
-        from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
-        from seaqa_indexer.syncer.sync_connection import sync_discourse
-        
         forum_url = config['url']
         discourse_api_key = config['api_key']
         discourse_api_username = config['api_username']
@@ -76,7 +79,7 @@ class DiscourseHandler(ConnectionHandler):
         project_created_time_utc = time_to_utc_time(str(project_created_at))
         sync_earliest_time = project_created_time_utc - relativedelta(years=sync_years)
         
-        sync_count, total_count = sync_discourse(connection_id, sync_earliest_time, old_last_sync_time, 
+        sync_count, total_count = self._sync_discourse(connection_id, sync_earliest_time, old_last_sync_time, 
                              connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db)
         return sync_count, total_count, False, config
     
@@ -131,3 +134,70 @@ class DiscourseHandler(ConnectionHandler):
             'connection_id': connection_id,
         }
         mq.lpush('sync_task', json.dumps(msg_content))
+
+    def _sync_discourse(self, connection_id, sync_earliest_time, last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db):
+        page = 0
+        should_stop = False
+        sync_count = 0
+        _status_last_update_time = datetime.datetime.now()
+        _status_last_update_count = 0
+
+        if last_sync_time:
+            last_sync_time = time_to_utc_time(str(last_sync_time))
+
+        while True:
+            topics = discourse_forum_api.fetch_latest_topics_page(page)
+
+            if not topics:
+                break
+
+            for topic_data in topics:
+                topic_modified_time = time_to_utc_time(topic_data.get('bumped_at'))
+
+                if last_sync_time and topic_modified_time <= last_sync_time and not topic_data.get('pinned'):
+                    should_stop = True
+                    break
+
+                if topic_modified_time <= sync_earliest_time:
+                    if topic_data.get('pinned'):
+                        continue
+                    should_stop = True
+                    break
+
+                topic_id = topic_data.get('id')
+
+                # Check if topic already exists in DB
+                existing_topic = discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id)
+                if existing_topic:
+                    existing_modified_time = time_to_utc_time(str(existing_topic.get('modified_time')))
+                    if topic_modified_time <= existing_modified_time:
+                        logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
+                        continue
+
+                primary_key = existing_topic.get('_pk')
+                if primary_key:
+                    discourse_seadb_api.update_topic(connection_id, primary_key, topic_data)
+                else:
+                    discourse_seadb_api.insert_topic(connection_id, topic_id, topic_data)
+
+                # sync topic replies
+                topic_replies = discourse_forum_api.fetch_topic_replies(topic_id)
+                discourse_seadb_api.update_topic_replies(connection_id, topic_id, topic_replies)
+
+                sync_count += 1
+                should, new_time, new_count = need_update_connection_last_sync_count(
+                    sync_count, _status_last_update_time, _status_last_update_count
+                )
+                if should:
+                    connection_status['last_sync_count'] = sync_count
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                    _status_last_update_time = new_time
+                    _status_last_update_count = new_count
+                time.sleep(1)
+
+            page += 1
+            if should_stop:
+                break
+
+        total_count = discourse_seadb_api.get_topic_count(connection_id)
+        return sync_count, total_count

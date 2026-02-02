@@ -1,11 +1,16 @@
 import json
+import datetime
+import logging
 from urllib.parse import urlparse
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import GithubIssuesTable, GithubIssueCommentsTable
 from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.handlers.utils import need_update_connection_last_sync_count, time_to_utc_time
+from seaqa_indexer.utils.github_issues_api import GitHubAPI
+from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 
-
+logger = logging.getLogger(__name__)
 class GithubIssueHandler(ConnectionHandler):
     """Handler for GITHUB_ISSUE connection type."""
     
@@ -57,12 +62,7 @@ class GithubIssueHandler(ConnectionHandler):
         update_github_issues_index(connection, seasearch_api, seaqa_db)
     
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
-             connection_status, seaqa_db, sync_logger):
-        from seaqa_indexer.utils.constants import CrawlStatus
-        from seaqa_indexer.utils.github_issues_api import GitHubAPI
-        from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
-        from seaqa_indexer.syncer.sync_connection import sync_github_issue
-        
+             connection_status, seaqa_db, sync_logger):        
         server_url = config.get('repository')
         token = config.get('access_token')
         
@@ -78,7 +78,7 @@ class GithubIssueHandler(ConnectionHandler):
         github_api = GitHubAPI(token, repo_owner, repo_name)
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
         
-        sync_count, total_count = sync_github_issue(connection_id, since, connection_status, 
+        sync_count, total_count = self._sync_github_issue(connection_id, since, connection_status, 
                                 github_api, seaqa_db, github_seadb_api)
         return sync_count, total_count, False, config
     
@@ -133,3 +133,60 @@ class GithubIssueHandler(ConnectionHandler):
             'connection_id': connection_id,
         }
         mq.lpush('sync_task', json.dumps(msg_content))
+
+    def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api):
+        page = 1
+        per_page = 100  # max 100
+        sync_count = 0
+        _status_last_update_time = datetime.datetime.now()
+        _status_last_update_count = 0
+
+        issues_labels = github_api.get_issues_labels(page, per_page)
+        github_seadb_api.add_or_update_issue_label_column_options(connection_id, issues_labels)
+
+        while True:
+            issues = github_api.list_issues(since=since, state='all', per_page=per_page, page=page)
+            if not issues:
+                break
+
+            for issue in issues:
+                if 'pull_request' in issue:
+                    continue
+
+                # Check if issue already exists in DB
+                issue_id = issue['id']
+                existed_issue = github_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
+                if existed_issue:
+                    if time_to_utc_time(issue.get('updated_at')) <= time_to_utc_time(str(existed_issue.get('modified_time'))):
+                        logger.debug(f'Issue {issue_id} is up to date, skipping sync.')
+                        continue
+
+                sync_count += 1
+                github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+                should, new_time, new_count = need_update_connection_last_sync_count(
+                    sync_count, _status_last_update_time, _status_last_update_count
+                )
+                if should:
+                    connection_status['last_sync_count'] = sync_count
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                    _status_last_update_time = new_time
+                    _status_last_update_count = new_count
+
+                # sync issue comments
+                comments_page = 1
+                all_comments = []
+                while True:
+                    comments = github_api.get_issue_comments(issue['number'], per_page=per_page, page=comments_page)
+                    all_comments += comments
+                    comments_page += 1
+                    if not comments or len(comments) < per_page:
+                        break
+
+                github_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
+
+            if len(issues) < per_page:
+                break
+            page += 1
+
+        total_count = github_seadb_api.get_github_issues_count(connection_id)
+        return sync_count, total_count

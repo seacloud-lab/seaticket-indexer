@@ -7,6 +7,12 @@ from dateutil.relativedelta import relativedelta
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import EmailTable, ThreadTable
 from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.handlers.utils import need_update_connection_last_sync_count, time_to_utc_time
+from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
+from seaqa_indexer.utils import time_to_utc_time
+from seaqa_indexer.utils.imap_mail import ImapMail
+from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
+from seaqa_indexer.crawler.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +55,7 @@ class EmailHandler(ConnectionHandler):
         update_email_index(connection, seasearch_api, seaqa_db)
     
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
-             connection_status, seaqa_db, sync_logger):
-        from seaqa_indexer.utils import time_to_utc_time
-        from seaqa_indexer.utils.imap_mail import ImapMail
-        from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
-        from seaqa_indexer.syncer.sync_connection import sync_email
-        from seaqa_indexer.crawler.storage import get_storage
-        
+             connection_status, seaqa_db, sync_logger):        
         imap_host = config.get('imap_host')
         imap_port = config.get('imap_port')
         email_user = config.get('username')
@@ -80,7 +80,7 @@ class EmailHandler(ConnectionHandler):
             sync_logger.log(f"imap account is invalid")
             return None, None
         
-        sync_count, total_count = sync_email(connection_id, project_uuid, connection_status, since, 
+        sync_count, total_count = self._sync_email(connection_id, project_uuid, connection_status, since, 
                          imap, seaqa_db, email_seadb_api, storage, is_first_update)
         return sync_count, total_count, False, config
     
@@ -140,3 +140,62 @@ class EmailHandler(ConnectionHandler):
             'connection_id': connection_id,
         }
         mq.lpush('sync_task', json.dumps(msg_content))
+
+    def _sync_email(self, connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_sync):
+        sync_count = 0
+        _status_last_update_time = datetime.datetime.now()
+        _status_last_update_count = 0
+
+        since = time_to_utc_time(str(since))
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+
+        # Due to time zone differences, emails sent on the same day may not be available for retrieval within that time frame.
+        # Therefore, the search scope has been expanded to include a full day.
+        before_date = since.date() - datetime.timedelta(days=1)
+
+        while before_date <= today:
+            since_date = before_date
+            before_date += datetime.timedelta(days=EMAIL_SYNC_INTERVAL_DAYS)
+
+            email_list = imap.search_emails(since_date, before_date)
+            new_email_list = []
+            for email in email_list:
+                if not email:
+                    continue
+                existed_email = {}
+                if not is_first_sync:
+                    message_id = email.get('message_id')
+                    modified_time = email.get('email_date')
+                    existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
+                    if existed_email:
+                        existed_date = time_to_utc_time(str(existed_email.get('modified_time')))
+                        email_thread_id = existed_email.get('thread_id')
+                        if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
+                            logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
+                            continue
+                email_info = {
+                    'message_id': email.get('message_id'),
+                    'reply_to_message_id': email.get('reply_to_message_id'),
+                    'email_date': email.get('email_date'),
+                    'subject': email.get('subject'),
+                    'is_sender': email.get('is_sender'),
+                }
+                new_email_list.append(email_info)
+
+                upload_email_attachment(connection_id, project_uuid, storage, email)
+
+                email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email)
+                should, new_time, new_count = need_update_connection_last_sync_count(
+                    sync_count, _status_last_update_time, _status_last_update_count
+                )
+                if should:
+                    connection_status['last_sync_count'] = sync_count
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                    _status_last_update_time = new_time
+                    _status_last_update_count = new_count
+                sync_count += 1
+            if new_email_list:
+                insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
+
+        total_count = email_seadb_api.get_email_total_count(connection_id)
+        return sync_count, total_count
