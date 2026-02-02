@@ -9,8 +9,8 @@ from seaqa_indexer.index.index_store.site_index import SiteIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.crawler.storage import get_storage
-from seaqa_indexer.handlers.utils import get_since_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
+from seaqa_indexer.utils import get_since_time
 
 logger = logging.getLogger(__name__)
 

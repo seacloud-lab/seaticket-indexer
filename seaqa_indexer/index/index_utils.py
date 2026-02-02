@@ -1,21 +1,13 @@
 import logging
 import json
 import datetime
-from urllib.parse import urlparse
 
-from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
-from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
-from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
-from seaqa_indexer.index.index_store.email_index import EmailIndex
 from seaqa_indexer.index.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.utils import time_to_utc_time, decrypt_config, uuid_str_to_32_chars
+from seaqa_indexer.utils import uuid_str_to_32_chars
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
-from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
-from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
 from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
@@ -28,7 +20,8 @@ from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary, 
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
-from seaqa_indexer.handlers import get_handler, get_handler
+from seaqa_indexer.handlers import get_handler
+from seaqa_indexer.utils import get_since_time
 
 
 logger = logging.getLogger(__name__)

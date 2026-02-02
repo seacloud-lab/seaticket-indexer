@@ -6,14 +6,13 @@ from urllib.parse import urlparse
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import GithubIssuesTable, GithubIssueCommentsTable
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.handlers.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.handlers.utils import get_since_time
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 
 logger = logging.getLogger(__name__)
 class GithubIssueHandler(ConnectionHandler):

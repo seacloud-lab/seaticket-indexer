@@ -6,7 +6,7 @@ import os
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import SeafileTable
 from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT
-from seaqa_indexer.handlers.utils import need_update_connection_last_sync_count, time_to_utc_time, get_file_suffix
+from seaqa_indexer.utils import get_file_suffix
 from seaqa_indexer.index.extract import ExtractorFactory
 from seaqa_indexer.utils.constants import REPO_FILE_SIZE_LIMIT, SYNC_FILE_SUFFIXES
 from seaqa_indexer.index.utils import get_content_by_download_link
@@ -18,7 +18,7 @@ from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.handlers.utils import get_since_time
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 
 logger = logging.getLogger(__name__)
 

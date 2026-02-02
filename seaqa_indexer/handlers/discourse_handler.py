@@ -8,14 +8,13 @@ from dateutil.relativedelta import relativedelta
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.handlers.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.handlers.utils import get_since_time
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 
 logger = logging.getLogger(__name__)
 

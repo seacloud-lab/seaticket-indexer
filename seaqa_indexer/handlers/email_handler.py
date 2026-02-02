@@ -7,7 +7,6 @@ from dateutil.relativedelta import relativedelta
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import EmailTable, ThreadTable
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.handlers.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.imap_mail import ImapMail
@@ -16,7 +15,7 @@ from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.index.index_store.email_index import EmailIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.handlers.utils import get_since_time
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 
 logger = logging.getLogger(__name__)
 
