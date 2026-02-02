@@ -1,4 +1,5 @@
 import json
+import logging
 import datetime
 
 from dateutil.relativedelta import relativedelta
@@ -6,6 +7,8 @@ from dateutil.relativedelta import relativedelta
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import EmailTable, ThreadTable
 from seaqa_indexer.utils.constants import ConnectionType
+
+logger = logging.getLogger(__name__)
 
 
 class EmailHandler(ConnectionHandler):
@@ -47,10 +50,6 @@ class EmailHandler(ConnectionHandler):
         from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
         from seaqa_indexer.syncer.sync_connection import sync_email
         from seaqa_indexer.crawler.storage import get_storage
-        from seaqa_indexer.utils.constants import CrawlStatus
-        import logging
-        
-        logger = logging.getLogger(__name__)
         
         imap_host = config.get('imap_host')
         imap_port = config.get('imap_port')
