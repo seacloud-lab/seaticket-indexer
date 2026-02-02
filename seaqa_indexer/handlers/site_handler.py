@@ -1,9 +1,18 @@
 import json
+import logging
+import datetime
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import WebCrawlTable
 from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.index.index_store.site_index import SiteIndex
+from seaqa_indexer.index.utils import gen_index_name_by_type
+from seaqa_indexer.utils.constants import IndexStatus
+from seaqa_indexer.crawler.storage import get_storage
+from seaqa_indexer.handlers.utils import get_since_time
+from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
+logger = logging.getLogger(__name__)
 
 class SiteHandler(ConnectionHandler):
     """Handler for SITE connection type (web crawling)."""
@@ -45,9 +54,28 @@ class SiteHandler(ConnectionHandler):
         from seaqa_indexer.ai_processor.ai_processor import process_site_ai
         return process_site_ai(seadb_api, storage, connection_id, project_uuid)
     
-    def update_index(self, connection, seasearch_api, seaqa_db):
-        from seaqa_indexer.index.index_utils import update_site_index
-        update_site_index(connection, seasearch_api, seaqa_db)
+    def update_index(self, project_connection, seasearch_api, seaqa_db):
+        connection_status = json.loads(project_connection.status)
+        site_index = SiteIndex(seasearch_api)
+
+        connection_id = project_connection.id
+        project_uuid = project_connection.project_uuid
+        connection_type = project_connection.type
+        old_indexed_at = project_connection.indexed_at
+
+        site_index_name = gen_index_name_by_type(connection_id, connection_type)
+        site_index.create_index_if_missing(site_index_name)
+
+        seadb_api = SeaDBAPI()
+        storage = get_storage()
+
+        since = get_since_time(old_indexed_at)
+
+        index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db, seadb_api, storage, since)
+        connection_status['last_indexed_count'] = index_count
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        indexed_at = datetime.datetime.now(datetime.UTC)
+        seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
     
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
              connection_status, seaqa_db, sync_logger):

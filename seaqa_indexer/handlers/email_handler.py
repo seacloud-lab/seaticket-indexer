@@ -13,6 +13,10 @@ from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.imap_mail import ImapMail
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
+from seaqa_indexer.index.index_store.email_index import EmailIndex
+from seaqa_indexer.index.utils import gen_index_name_by_type
+from seaqa_indexer.utils.constants import IndexStatus
+from seaqa_indexer.handlers.utils import get_since_time
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +54,28 @@ class EmailHandler(ConnectionHandler):
         from seaqa_indexer.ai_processor.ai_processor import process_email_ai
         return process_email_ai(seadb_api, connection_id, project_uuid)
     
-    def update_index(self, connection, seasearch_api, seaqa_db):
-        from seaqa_indexer.index.index_utils import update_email_index
-        update_email_index(connection, seasearch_api, seaqa_db)
+    def update_index(self, project_connection, seasearch_api, seaqa_db):
+        connection_id = project_connection.id
+        connection_type = project_connection.type
+        project_uuid = project_connection.project_uuid
+        old_indexed_at = project_connection.indexed_at
+        connection_status = json.loads(project_connection.status)
+
+        email_seadb_api = EmailSeaDBAPI(project_uuid)
+        email_index = EmailIndex(seasearch_api)
+
+        connection_status['last_index_status'] = IndexStatus.INDEXING
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        index_name = gen_index_name_by_type(connection_id, connection_type)
+        email_index.create_index_if_missing(index_name)
+
+        since = get_since_time(old_indexed_at)
+
+        index_count = email_index.update(index_name, connection_id, connection_status, seaqa_db, email_seadb_api, since)
+        indexed_at = datetime.datetime.now(datetime.UTC)
+        connection_status['last_indexed_count'] = index_count
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
     
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
              connection_status, seaqa_db, sync_logger):        

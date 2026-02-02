@@ -9,6 +9,11 @@ from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.handlers.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
+from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
+from seaqa_indexer.index.utils import gen_index_name_by_type
+from seaqa_indexer.utils.constants import IndexStatus
+from seaqa_indexer.handlers.utils import get_since_time
 
 logger = logging.getLogger(__name__)
 class GithubIssueHandler(ConnectionHandler):
@@ -57,9 +62,34 @@ class GithubIssueHandler(ConnectionHandler):
         from seaqa_indexer.ai_processor.ai_processor import process_github_issue_ai
         return process_github_issue_ai(seadb_api, connection_id, project_uuid)
     
-    def update_index(self, connection, seasearch_api, seaqa_db):
-        from seaqa_indexer.index.index_utils import update_github_issues_index
-        update_github_issues_index(connection, seasearch_api, seaqa_db)
+    def update_index(self, project_connection, seasearch_api, seaqa_db):
+        connection_id = project_connection.id
+        config = decrypt_config(json.loads(project_connection.config))
+        connection_type = project_connection.type
+        server_url = config.get('repository')
+        path = urlparse(server_url).path
+        parts = path.strip("/").split("/")
+        repo_owner, repo_name = parts[0], parts[1]
+        connection_status = json.loads(project_connection.status)
+        old_indexed_at = project_connection.indexed_at
+        project_uuid = project_connection.project_uuid
+        github_seadb_api = GitHubSeaDBAPI(project_uuid)
+        github_issues_index = GitHubIssuesIndex(seasearch_api)
+
+        connection_status['last_index_status'] = IndexStatus.INDEXING
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+
+        issues_index_name = gen_index_name_by_type(connection_id, connection_type)
+        github_issues_index.create_index_if_missing(issues_index_name)
+
+        since = get_since_time(old_indexed_at)
+
+        index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, since)
+        # finish index
+        indexed_at = datetime.datetime.now(datetime.UTC)
+        connection_status['last_indexed_count'] = index_count
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
     
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
              connection_status, seaqa_db, sync_logger):        
