@@ -14,7 +14,7 @@ from seaqa_indexer.index.extract import ExtractorFactory
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
-from seaqa_indexer.handlers import get_handler_or_none
+from seaqa_indexer.handlers import get_handler
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     is_update_config = False
 
     try:
-        conn_handler = get_handler_or_none(connection_type)
+        conn_handler = get_handler(connection_type)
         if not conn_handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             sync_logger.log(f'Unsupported connection type: {connection_type}')

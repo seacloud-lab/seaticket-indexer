@@ -27,7 +27,7 @@ from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
-from seaqa_indexer.handlers import get_handler_or_none
+from seaqa_indexer.handlers import get_handler
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class IndexManager:
                 index_name = gen_index_name_by_type(connection_id, connection_type)
 
                 connection_id_to_config[str(connection_id)] = json.loads(project_connection.config)
-                conn_handler = get_handler_or_none(connection_type)
+                conn_handler = get_handler(connection_type)
                 if not conn_handler:
                     logger.warning('Unsupported connection type: %s', connection_type)
                     continue
@@ -108,7 +108,7 @@ class IndexManager:
         summary_index_name = gen_conn_summary_index_name(connection_id, connection_type)
         self.summary_vector_index.delete_index_by_index_name(summary_index_name)
 
-        conn_handler = get_handler_or_none(connection_type)
+        conn_handler = get_handler(connection_type)
         if not conn_handler:
             logger.warning('Unsupported connection type: %s', connection_type)
             return

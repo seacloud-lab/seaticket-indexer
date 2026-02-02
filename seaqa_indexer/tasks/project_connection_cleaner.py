@@ -13,7 +13,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.handlers import get_handler_or_none
+from seaqa_indexer.handlers import get_handler
 
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ class ProjectConnectionCleaner(object):
         base_metadata = self.seadb_api.get_base_metadata(project_uuid)
         tables = base_metadata.get('tables')
 
-        handler = get_handler_or_none(connection_type)
+        handler = get_handler(connection_type)
         if handler:
             handler.clean_connection_data(self.storage, self.seadb_api, project_uuid, connection_id, tables)
         else:

@@ -14,7 +14,7 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.utils import uuid_str_to_32_chars
-from seaqa_indexer.handlers import get_handler_or_none
+from seaqa_indexer.handlers import get_handler
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class IndexManager:
 
     def _clear_ai_processed_time(self, connection_id, connection_type, project_uuid):
 
-        conn_handler = get_handler_or_none(connection_type)
+        conn_handler = get_handler(connection_type)
         if not conn_handler:
             logger.warning(f'Unsupported connection type: {connection_type}')
             return 0

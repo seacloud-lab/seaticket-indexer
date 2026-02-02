@@ -11,7 +11,7 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.handlers import get_handler_or_none
+from seaqa_indexer.handlers import get_handler
 
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ class DeletedRecordsCleaner(object):
             project_uuid = connection.project_uuid
 
             try:
-                handler = get_handler_or_none(connection_type)
+                handler = get_handler(connection_type)
                 if not handler:
                     logger.debug('Unsupported connection type for cleaning: %s', connection_type)
                     continue

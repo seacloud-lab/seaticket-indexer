@@ -10,7 +10,7 @@ from seaqa_indexer.syncer.sync_manager import ForumNotFoundException, \
     ForumInActiveException
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.handlers import get_handler_or_none
+from seaqa_indexer.handlers import get_handler
 
 
 application = Flask(__name__)
@@ -54,7 +54,7 @@ def add_connection_sync_task():
     connection_id = request.args.get('connection_id')
     task_type = request.args.get('type')
     
-    conn_handler = get_handler_or_none(task_type)
+    conn_handler = get_handler(task_type)
     if conn_handler:
         conn_handler.add_sync_task(application.app, connection_id)
     else:
@@ -75,7 +75,7 @@ def manual_sync_connection():
 
     # Enqueue sync task
     try:
-        conn_handler = get_handler_or_none(connection_type)
+        conn_handler = get_handler(connection_type)
         if conn_handler:
             conn_handler.add_sync_task(application.app, connection_id)
         else:

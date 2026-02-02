@@ -9,7 +9,7 @@ from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX, Conne
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.utils import uuid_str_to_32_chars
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
-from seaqa_indexer.handlers import get_handler_or_none
+from seaqa_indexer.handlers import get_handler
 
 
 logger = logging.getLogger(__name__)
@@ -272,7 +272,7 @@ def get_result_related_seadb_records(project_uuid, all_results, connection_id_to
     connection_pk_to_record = {}  # {connection_id: {pk: record}}
     for connection_id, connection_pks in connection_id_to_pks.items():
         connection = connection_id_to_connection[connection_id]
-        handler = get_handler_or_none(connection.type)
+        handler = get_handler(connection.type)
         if not handler:
             logger.warning(f'Handler not found for connection {connection_id}')
             continue
@@ -333,7 +333,7 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
         formatted_result['connection_id'] = connection_id
         formatted_result['type'] = connection_type
 
-        conn_handler = get_handler_or_none(connection_type)
+        conn_handler = get_handler(connection_type)
         if not conn_handler:
             logger.warning(f'Unsupported connection type: {connection_type}')
             return

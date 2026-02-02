@@ -21,7 +21,7 @@ from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSea
 from seaqa_indexer.utils.constants import AIStatus
 from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
 from seaqa_indexer.seadb_models.models import TicketsTable
-from seaqa_indexer.handlers import get_handler_or_none
+from seaqa_indexer.handlers import get_handler
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
     seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
 
     try:
-        conn_handler = get_handler_or_none(connection_type)
+        conn_handler = get_handler(connection_type)
         if not conn_handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return

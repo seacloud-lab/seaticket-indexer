@@ -32,7 +32,7 @@ from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary, 
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
-from seaqa_indexer.handlers import get_handler, get_handler_or_none
+from seaqa_indexer.handlers import get_handler, get_handler
 
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def update_connection_index(connection_id, db_session_class):
 
     seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
     try:
-        conn_handler = get_handler_or_none(connection_type)
+        conn_handler = get_handler(connection_type)
         if not conn_handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
@@ -361,7 +361,7 @@ def update_connection_summary_index(connection_id, seaqa_db, seadb_api, seasearc
     last_ai_indexed_at = connection.ai_indexed_at
 
     try:
-        handler = get_handler_or_none(connection_type)
+        handler = get_handler(connection_type)
         if not handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             ai_status['last_ai_index_status'] = IndexStatus.FAILED

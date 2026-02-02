@@ -20,27 +20,10 @@ class ConnectionHandlerRegistry:
         logger.debug(f"Registered handler for {handler_class.connection_type}: {handler_class.__name__}")
     
     @classmethod
-    def get(cls, connection_type: str):
-        handler = cls._handlers.get(connection_type)
-        if not handler:
-            raise ValueError(f'Unsupported connection type: {connection_type}')
-        return handler
-    
-    @classmethod
     def get_or_none(cls, connection_type: str):
         return cls._handlers.get(connection_type)
-    
-    @classmethod
-    def get_table_name(cls, connection_type: str, connection_id) -> str:
-        handler = cls.get_or_none(connection_type)
-        if handler:
-            return handler.gen_table_name(connection_id)
-        return ''
+
 
 
 def get_handler(connection_type: str):
-    return ConnectionHandlerRegistry.get(connection_type)
-
-
-def get_handler_or_none(connection_type: str):
     return ConnectionHandlerRegistry.get_or_none(connection_type)
