@@ -39,7 +39,7 @@ class ConnectionHandler(ABC):
     @abstractmethod
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
              connection_status, seaqa_db, sync_logger) -> tuple:
-        """ Returns: tuple: (sync_count, total_count) """
+        """ Returns: tuple: (sync_count, total_count, is_update_config, config) """
         pass
     
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, 

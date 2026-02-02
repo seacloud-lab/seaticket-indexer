@@ -73,8 +73,9 @@ class GithubIssueHandler(ConnectionHandler):
         github_api = GitHubAPI(token, repo_owner, repo_name)
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
         
-        return sync_github_issue(connection_id, since, connection_status, 
+        sync_count, total_count = sync_github_issue(connection_id, since, connection_status, 
                                 github_api, seaqa_db, github_seadb_api)
+        return sync_count, total_count, False, config
     
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, 
                               table_name, cutoff_time):

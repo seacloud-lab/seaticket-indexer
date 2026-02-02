@@ -50,8 +50,6 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     config = decrypt_config(config)
     is_update_config = False
 
-    sync_count = 0
-    total_count = 0
     try:
         conn_handler = get_handler_or_none(connection_type)
         if not conn_handler:
@@ -74,12 +72,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             sync_logger.stop_capture()
             return
         
-        # Seafile handler returns 4 values: (sync_count, total_count, is_update_config, config)
-        if len(sync_result) == 4:
-            sync_count, total_count, is_update_config, config = sync_result
-        else:
-            # Other handlers return 2 values: (sync_count, total_count)
-            sync_count, total_count = sync_result
+        sync_count, total_count, is_update_config, config = sync_result
     except Exception as e:
         logger.exception('connection: %s, sync failed, error: %s', connection_id, e)
         try:

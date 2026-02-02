@@ -35,7 +35,7 @@ class ConnectionHandlerRegistry:
         handler = cls.get_or_none(connection_type)
         if handler:
             return handler.gen_table_name(connection_id)
-        return None
+        return ''
 
 
 def get_handler(connection_type: str):

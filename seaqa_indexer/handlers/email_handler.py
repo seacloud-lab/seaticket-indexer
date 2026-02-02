@@ -76,8 +76,9 @@ class EmailHandler(ConnectionHandler):
             sync_logger.log(f"imap account is invalid")
             return None, None
         
-        return sync_email(connection_id, project_uuid, connection_status, since, 
+        sync_count, total_count = sync_email(connection_id, project_uuid, connection_status, since, 
                          imap, seaqa_db, email_seadb_api, storage, is_first_update)
+        return sync_count, total_count, False, config
     
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, 
                               table_name, cutoff_time):
