@@ -20,17 +20,113 @@ from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSu
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.index.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, \
-    gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name, \
-    format_vector_search_result, get_result_related_seadb_records
+    gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
 from seaqa_indexer.handlers import get_handler
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_result_related_seadb_records(project_uuid, all_results, connection_id_to_connection, seadb_api):
+    def query_records_by_pks(table_name, pks):
+        pks_str = ','.join(map(str, pks))
+        sql = f"SELECT * FROM `{table_name}` WHERE _pk IN ({pks_str})"
+        res = seadb_api.query_rows(project_uuid, sql)
+        return res.get('results', [])
+
+    connection_id_to_pks = {}  # {connection_id: [pk1, pk2]}
+    kb_pks = set()
+    ticket_pks = set()
+
+    for result in all_results:
+        if result.get('source_type') == 'knowledge_base_summary':
+            kb_pks.add(result.get('pk'))
+        elif result.get('source_type') == 'ticket_summary':
+            ticket_pks.add(result.get('pk'))
+        else:
+            connection_id = int(result.get('connection_id'))
+            if connection_id not in connection_id_to_pks:
+                connection_id_to_pks[connection_id] = []
+            connection_id_to_pks[connection_id].append(result.get('pk'))
+
+    connection_pk_to_record = {}  # {connection_id: {pk: record}}
+    for connection_id, connection_pks in connection_id_to_pks.items():
+        connection = connection_id_to_connection[connection_id]
+        handler = get_handler(connection.type)
+        if not handler:
+            logger.warning(f'Handler not found for connection {connection_id}')
+            continue
+        connection_table_name = handler.gen_table_name(connection_id)
+
+        records = query_records_by_pks(connection_table_name, connection_pks)
+        for record in records:
+            if connection_id not in connection_pk_to_record:
+                connection_pk_to_record[connection_id] = {}
+            connection_pk_to_record[connection_id][record.get('_pk')] = record
+
+    kb_pk_to_record = {}
+    if kb_pks:
+        kb_table_name = KnowledgeBaseTable.gen_table_name()
+        records = query_records_by_pks(kb_table_name, kb_pks)
+        kb_pk_to_record = {record.get('_pk'): record for record in records}
+
+    ticket_pk_to_record = {}
+    if ticket_pks:
+        ticket_table_name = TicketsTable.gen_table_name()
+        records = query_records_by_pks(ticket_table_name, ticket_pks)
+        ticket_pk_to_record = {record.get('_pk'): record for record in records}
+    return connection_pk_to_record, kb_pk_to_record, ticket_pk_to_record
+
+
+def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_record, ticket_pk_to_record, connection_pk_to_record):
+    pk = result.get('pk')
+    source_type = result.get('source_type')
+    score = result.get('score')
+    ai_summary = result.get('ai_summary', '')
+
+    formatted_result = {
+        '_id': pk,
+        'score': score,
+        'content': ai_summary,
+        'source_type': source_type,
+    }
+
+    if source_type == 'knowledge_base_summary':
+        record = kb_pk_to_record.get(int(pk))
+        formatted_result['type'] = 'knowledge_base'
+        formatted_result['title'] = record.get('title', '')
+        formatted_result['modified_time'] = record.get('modified_time', '')
+
+    elif source_type == 'ticket_summary':
+        record = ticket_pk_to_record.get(int(pk))
+        formatted_result['type'] = 'ticket'
+        formatted_result['title'] = record.get('title', '')
+        formatted_result['modified_time'] = record.get('modified_time', '')
+
+    else:
+        # format connection vector search result
+        connection_id = result.get('connection_id')
+        connection = connection_id_to_connection.get(int(connection_id))
+        record = connection_pk_to_record.get(int(connection_id), {}).get(int(pk))
+        connection_type = connection.type
+
+        formatted_result['connection_id'] = connection_id
+        formatted_result['type'] = connection_type
+
+        conn_handler = get_handler(connection_type)
+        if not conn_handler:
+            logger.warning(f'Unsupported connection type: {connection_type}')
+            return
+        type_specific_result = conn_handler.format_vector_search_result(record, connection, result)
+        formatted_result.update(type_specific_result)
+
+    return formatted_result
 
 
 class IndexManager:

@@ -16,7 +16,7 @@ from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIn
 from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary, \
     gen_kb_summary_index_name, gen_ticket_index_name, gen_content_vector_index_name, \
-    gen_ticket_summary_index_name, gen_index_name_by_type, gen_kb_index_name
+    gen_ticket_summary_index_name, gen_kb_index_name
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
