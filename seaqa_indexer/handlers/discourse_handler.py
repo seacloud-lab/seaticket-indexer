@@ -12,8 +12,13 @@ class DiscourseHandler(ConnectionHandler):
     """Handler for DISCOURSE_FORUM connection type."""
     
     connection_type = ConnectionType.DISCOURSE_FORUM.value
-    table_class = DiscourseTopicsTable
-    
+
+    def gen_table_name(self, connection_id):
+        return DiscourseTopicsTable.gen_table_name(connection_id)
+
+    def gen_replies_table_name(self, connection_id):
+        return DiscourseRepliesTable.gen_table_name(connection_id)
+
     def get_index_instance(self, seasearch_api):
         from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
         return DiscourseIndex(seasearch_api)
@@ -75,11 +80,11 @@ class DiscourseHandler(ConnectionHandler):
                              connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db)
         return sync_count, total_count, False, config
     
-    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, 
-                              table_name, cutoff_time):
+    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
         """Clean deleted discourse topic records and their replies."""
         page_size = 1000
-        replies_table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        table_name = self.gen_table_name(connection_id)
+        replies_table_name = self.gen_replies_table_name(connection_id)
         total_deleted = 0
 
         while True:
@@ -112,8 +117,8 @@ class DiscourseHandler(ConnectionHandler):
                               connection_id, tables):
         """Clean discourse connection data including topics and replies tables."""
         if tables:
-            topics_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-            replies_table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+            topics_table_name = self.gen_table_name(connection_id)
+            replies_table_name = self.gen_replies_table_name(connection_id)
             for table in tables:
                 if table['name'] in (topics_table_name, replies_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])

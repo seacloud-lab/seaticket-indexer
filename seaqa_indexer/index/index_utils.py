@@ -291,6 +291,9 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
             return
 
         handler = get_handler(connection_type)
+        if not handler:
+            logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
+            return
         table_name = handler.gen_table_name(connection_id)
         content_vector_index = ContentVectorIndex(seasearch_api)
         content_index_name = gen_content_vector_index_name(connection_id, connection_type)

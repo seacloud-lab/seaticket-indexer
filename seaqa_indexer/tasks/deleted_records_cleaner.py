@@ -77,7 +77,7 @@ class DeletedRecordsCleaner(object):
                 cutoff_time = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=self.delete_after_days)).isoformat()
 
                 total_deleted = handler.clean_deleted_records(
-                    self.seadb_api, project_uuid, connection_id, table_name, cutoff_time
+                    self.seadb_api, project_uuid, connection_id, cutoff_time
                 )
                 logger.info('Deleted %d records from connection %s table %s', 
                             total_deleted, connection_id, table_name)

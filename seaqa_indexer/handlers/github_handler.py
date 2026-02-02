@@ -10,7 +10,12 @@ class GithubIssueHandler(ConnectionHandler):
     """Handler for GITHUB_ISSUE connection type."""
     
     connection_type = ConnectionType.GITHUB_ISSUE.value
-    table_class = GithubIssuesTable
+
+    def gen_table_name(self, connection_id):
+        return GithubIssuesTable.gen_table_name(connection_id)
+
+    def gen_comments_table_name(self, connection_id):
+        return GithubIssueCommentsTable.gen_table_name(connection_id)
     
     def get_index_instance(self, seasearch_api):
         from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
@@ -77,11 +82,11 @@ class GithubIssueHandler(ConnectionHandler):
                                 github_api, seaqa_db, github_seadb_api)
         return sync_count, total_count, False, config
     
-    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, 
-                              table_name, cutoff_time):
+    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
         """Clean deleted github issue records and their comments."""
         page_size = 1000
-        comments_table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
+        table_name = self.gen_table_name(connection_id)
+        comments_table_name = self.gen_comments_table_name(connection_id)
         total_deleted = 0
 
         while True:
@@ -114,8 +119,8 @@ class GithubIssueHandler(ConnectionHandler):
                               connection_id, tables):
         """Clean github issue connection data including issues and comments tables."""
         if tables:
-            issues_table_name = GithubIssuesTable.gen_table_name(connection_id)
-            comments_table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
+            issues_table_name = self.gen_table_name(connection_id)
+            comments_table_name = self.gen_comments_table_name(connection_id)
             for table in tables:
                 if table['name'] in (issues_table_name, comments_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])

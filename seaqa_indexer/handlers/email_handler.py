@@ -15,7 +15,12 @@ class EmailHandler(ConnectionHandler):
     """Handler for EMAIL connection type."""
     
     connection_type = ConnectionType.EMAIL.value
-    table_class = ThreadTable
+
+    def gen_table_name(self, connection_id) -> str:
+        return ThreadTable.gen_table_name(connection_id)
+    
+    def gen_email_table_name(self, connection_id) -> str:
+        return EmailTable.gen_table_name(connection_id)
     
     def get_index_instance(self, seasearch_api):
         from seaqa_indexer.index.index_store.email_index import EmailIndex
@@ -79,11 +84,11 @@ class EmailHandler(ConnectionHandler):
                          imap, seaqa_db, email_seadb_api, storage, is_first_update)
         return sync_count, total_count, False, config
     
-    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, 
-                              table_name, cutoff_time):
+    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
         """Clean deleted email thread records and their emails."""
         page_size = 1000
-        email_table_name = EmailTable.gen_table_name(connection_id)
+        table_name = self.gen_table_name(connection_id)
+        email_table_name = self.gen_email_table_name(connection_id)
         total_deleted = 0
 
         while True:

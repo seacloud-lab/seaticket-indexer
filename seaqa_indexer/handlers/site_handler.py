@@ -9,7 +9,9 @@ class SiteHandler(ConnectionHandler):
     """Handler for SITE connection type (web crawling)."""
     
     connection_type = ConnectionType.SITE.value
-    table_class = WebCrawlTable
+
+    def gen_table_name(self, connection_id):
+        return WebCrawlTable.gen_table_name(connection_id)
     
     def get_index_instance(self, seasearch_api):
         from seaqa_indexer.index.index_store.site_index import SiteIndex
@@ -61,7 +63,7 @@ class SiteHandler(ConnectionHandler):
         # Delete seadb table
         if tables:
             for table in tables:
-                if table['name'] == WebCrawlTable.gen_table_name(connection_id):
+                if table['name'] == self.gen_table_name(connection_id):
                     seadb_api.delete_table(project_uuid, table['id'])
     
     def add_sync_task(self, app, connection_id):

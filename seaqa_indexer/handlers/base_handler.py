@@ -6,11 +6,9 @@ class ConnectionHandler(ABC):
     table_class = None
     index_class = None
     
-    @classmethod
-    def gen_table_name(cls, connection_id) -> str:
-        if cls.table_class is None:
-            raise NotImplementedError(f"table_class not defined for {cls.__name__}")
-        return cls.table_class.gen_table_name(connection_id)
+    @abstractmethod
+    def gen_table_name(self, connection_id) -> str:
+        pass
     
     @abstractmethod
     def get_index_instance(self, seasearch_api):
@@ -42,10 +40,10 @@ class ConnectionHandler(ABC):
         """ Returns: tuple: (sync_count, total_count, is_update_config, config) """
         pass
     
-    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, 
-                              table_name, cutoff_time) -> int:
+    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time) -> int:
         page_size = 1000
         total_deleted = 0
+        table_name = self.gen_table_name(connection_id)
 
         while True:
             sql = f"""

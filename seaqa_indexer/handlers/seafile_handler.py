@@ -10,7 +10,9 @@ class SeafileHandler(ConnectionHandler):
     """Handler for SEAFILE connection type."""
     
     connection_type = ConnectionType.SEAFILE.value
-    table_class = SeafileTable
+
+    def gen_table_name(self, connection_id):
+        return SeafileTable.gen_table_name(connection_id)
     
     def get_index_instance(self, seasearch_api):
         from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
@@ -92,7 +94,7 @@ class SeafileHandler(ConnectionHandler):
                               connection_id, tables):
         """Clean seafile connection data."""
         if tables:
-            table_name = SeafileTable.gen_table_name(connection_id)
+            table_name = self.gen_table_name(connection_id)
             for table in tables:
                 if table['name'] == table_name:
                     seadb_api.delete_table(project_uuid, table['id'])
