@@ -466,3 +466,24 @@ class KnowledgeBaseTable(BaseModel):
     @classmethod
     def gen_table_name(cls):
         return 'knowledge_base'
+
+
+class NotionTable(BaseModel):
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    creator = MappedColumn('creator', PropertyTypes.TEXT)
+    last_modifier = MappedColumn('last_modifier', PropertyTypes.TEXT)
+    parent_page_id = MappedColumn('parent_page_dir', PropertyTypes.TEXT)
+    sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
+    page_id = MappedColumn('page_id', PropertyTypes.TEXT)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
+    ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
+    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.NOTION.value + '_' + str(connection_id)

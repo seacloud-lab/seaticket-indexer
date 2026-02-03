@@ -154,7 +154,7 @@ class IndexManager:
 
         if not hits:
             return result_docs
-        
+
         all_source_types = ConnectionType.to_list() + ['knowledge_base', 'ticket']
         for hit in hits:
             index_name = hit.get('_index')
@@ -170,7 +170,7 @@ class IndexManager:
                 if index_name.startswith(source_type):
                     s_type = source_type
                     break
-            
+
             if not s_type:
                 continue
 
