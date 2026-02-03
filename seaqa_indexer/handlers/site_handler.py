@@ -6,7 +6,7 @@ from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import WebCrawlTable
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.index.index_store.site_index import SiteIndex
-from seaqa_indexer.index.utils import gen_index_name_by_type
+from seaqa_indexer.index.utils import gen_index_name_by_type, gen_content_vector_index_name
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
@@ -34,7 +34,6 @@ class SiteHandler(ConnectionHandler):
         return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
     
     def delete_index(self, index_manager, connection_id):
-        from seaqa_indexer.index.utils import gen_index_name_by_type, gen_content_vector_index_name
         index_name = gen_index_name_by_type(connection_id, self.connection_type)
         # keyword index
         index_manager.site_index.delete_index_by_index_name(index_name)

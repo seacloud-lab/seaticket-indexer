@@ -16,7 +16,6 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
-from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.ai_processor.utils import generate_summary
 
 logger = logging.getLogger(__name__)

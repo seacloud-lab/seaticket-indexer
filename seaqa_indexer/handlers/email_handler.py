@@ -42,7 +42,6 @@ class EmailHandler(ConnectionHandler):
         return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
     
     def delete_index(self, index_manager, connection_id):
-        from seaqa_indexer.index.utils import gen_index_name_by_type
         index_name = gen_index_name_by_type(connection_id, self.connection_type)
         index_manager.email_index.delete_index_by_index_name(index_name)
     

@@ -16,11 +16,11 @@ from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
-from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
+from seaqa_indexer.index.utils import gen_index_name_by_type
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,6 @@ class SeafileHandler(ConnectionHandler):
         return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
     
     def delete_index(self, index_manager, connection_id):
-        from seaqa_indexer.index.utils import gen_index_name_by_type
         index_name = gen_index_name_by_type(connection_id, self.connection_type)
         index_manager.seafile_index.delete_index_by_index_name(index_name)
     
