@@ -12,6 +12,8 @@ from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils import get_since_time
 from seaqa_indexer.index.index_store.site_index import SiteIndex
+from seaqa_indexer.ai_processor.utils import generate_summary
+from seaqa_indexer.crawler.utils import url_to_filename
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +21,8 @@ class SiteHandler(ConnectionHandler):
     """Handler for SITE connection type (web crawling)."""
     
     connection_type = ConnectionType.SITE.value
-
+    BATCH_SIZE = 50
+    
     def gen_table_name(self, connection_id):
         return WebCrawlTable.gen_table_name(connection_id)
     
@@ -52,8 +55,44 @@ class SiteHandler(ConnectionHandler):
         return formatted
     
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
-        from seaqa_indexer.ai_processor.ai_processor import process_site_ai
-        return process_site_ai(seadb_api, storage, connection_id, project_uuid)
+        page_size = 100
+        updates = []
+        ai_processing_count = 0
+        table_name = self.gen_table_name(connection_id)
+        while True:
+            sql = f"""
+                SELECT _pk, url FROM `{table_name}`
+                WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
+                LIMIT {page_size}
+            """
+            result = seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+            if not rows:
+                break
+
+            for row in rows:
+                pk = row.get('_pk')
+                url = row.get('url')
+                filename = url_to_filename(url)
+                file_json = storage.read_json(connection_id, project_uuid, filename)
+                content = file_json.get('content', '')
+                summary, vector = generate_summary(content, ConnectionType.SITE.value, project_uuid)
+                updates.append({
+                    "pk": pk,
+                    "row": {
+                        "ai_summary": summary,
+                        "ai_summary_vector": vector,
+                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                    }
+                })
+                ai_processing_count += 1
+                if len(updates) >= self.BATCH_SIZE:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
+            if updates:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
+        return ai_processing_count
     
     def update_index(self, project_connection, seasearch_api, seaqa_db):
         connection_status = json.loads(project_connection.status)

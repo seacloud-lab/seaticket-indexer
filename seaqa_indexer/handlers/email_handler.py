@@ -17,6 +17,7 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 from seaqa_indexer.index.index_store.email_index import EmailIndex
+from seaqa_indexer.ai_processor.utils import generate_summary
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class EmailHandler(ConnectionHandler):
     """Handler for EMAIL connection type."""
     
     connection_type = ConnectionType.EMAIL.value
+    BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id) -> str:
         return ThreadTable.gen_table_name(connection_id)
@@ -51,8 +53,39 @@ class EmailHandler(ConnectionHandler):
         }
     
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
-        from seaqa_indexer.ai_processor.ai_processor import process_email_ai
-        return process_email_ai(seadb_api, connection_id, project_uuid)
+        page_size = 100
+        updates = []
+        table_name = self.gen_table_name(connection_id)
+        email_seadb_api = EmailSeaDBAPI(project_uuid)
+
+        ai_processing_count = 0
+        while True:
+            rows = email_seadb_api.get_need_ai_emails_by_page(connection_id, page_size)
+            if not rows:
+                break
+            for row in rows:
+                pk = row.get('_pk')
+                title = row.get('title', '')
+                result = email_seadb_api.get_first_email(connection_id, pk)
+                content = result.get('content', '')
+
+                full_content = f"Title: {title}\n\nBody: {content}\n"
+                summary, vector = generate_summary(full_content, ConnectionType.EMAIL.value, project_uuid)
+                updates.append({
+                    "pk": pk,
+                    "row": {
+                        "ai_summary": summary,
+                        "ai_summary_vector": vector,
+                        "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                    }
+                })
+                ai_processing_count += 1
+                if len(updates) >= self.BATCH_SIZE:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
+            if updates:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+        return ai_processing_count
     
     def update_index(self, project_connection, seasearch_api, seaqa_db):
         connection_id = project_connection.id
