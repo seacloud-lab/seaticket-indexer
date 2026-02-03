@@ -166,9 +166,8 @@ class IndexManager:
                 if not conn_handler:
                     logger.warning('Unsupported connection type: %s', connection_type)
                     continue
-                index_instance = conn_handler.get_index_instance(self.seasearch_api)
                 bulk_search_params.append(conn_handler.get_search_param(
-                    index_instance, index_name, keyword, start, size, time_from, time_to
+                    self.seasearch_api, index_name, keyword, start, size, time_from, time_to
                 ))
 
         if extra_sources and "knowledge_base" in extra_sources:

@@ -11,6 +11,7 @@ from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils import get_since_time
+from seaqa_indexer.index.index_store.site_index import SiteIndex
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,10 @@ class SiteHandler(ConnectionHandler):
         return WebCrawlTable.gen_table_name(connection_id)
     
     def get_index_instance(self, seasearch_api):
-        from seaqa_indexer.index.index_store.site_index import SiteIndex
         return SiteIndex(seasearch_api)
     
-    def get_search_param(self, index_instance, index_name, keyword, start, size, time_from, time_to):
+    def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
+        index_instance = self.get_index_instance(seasearch_api)
         return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
     
     def delete_index(self, index_manager, connection_id):
