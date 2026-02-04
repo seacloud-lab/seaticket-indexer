@@ -1,7 +1,6 @@
 import time
 import requests
 
-
 NOTION_VERSION = "2025-09-03"
 
 class NotionAPI:
@@ -11,6 +10,7 @@ class NotionAPI:
         self.headers = self._gen_headers()
         self.base_url = 'https://api.notion.com/v1'
         self._user_cache = {}
+        self.session = requests.Session()
 
 
     def _gen_headers(self):
@@ -25,38 +25,29 @@ class NotionAPI:
 
     def fetch_page(self, page_id):
         url = f"{self.base_url}/pages/{page_id}"
-        resp = requests.get(url, headers=self.headers)
+        resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
         resp.raise_for_status()
         return resp.json()
 
-
-    def search_pages(self, since, per_page, page):
+    def search_pages(self, per_page, start_cursor=None):
         pages = []
-        cursor = None
 
-        while True:
-            url = f"{self.base_url}/search"
-            payload = {
-                "page_size": 100,
-                "filter": {"property": "object", "value": "page"},
-                "sort": {"direction": "descending", "timestamp": "last_edited_time"},
-            }
-            if cursor:
-                payload["start_cursor"] = cursor
+        url = f"{self.base_url}/search"
+        payload = {
+            "page_size": per_page,
+            "filter": {"property": "object", "value": "page"},
+            "sort": {"direction": "descending", "timestamp": "last_edited_time"},
+        }
+        if start_cursor:
+            payload["start_cursor"] = start_cursor
 
-            resp = requests.post(url, headers=self.headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            pages.extend(data.get('results') or [])
+        resp = self.session.post(url, headers=self.headers, json=payload, timeout=self.timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get('results') or []
+        pages.extend(results)
 
-            if not data.get('has_more'):
-                break
-            cursor = data.get('next_cursor')
-            if not cursor:
-                break
-            time.sleep(0.34)
-
-        return pages
+        return pages, data.get('next_cursor'), bool(data.get('has_more'))
 
 
     def fetch_blocks(self, block_id):
@@ -69,7 +60,7 @@ class NotionAPI:
             if cursor:
                 params["start_cursor"] = cursor
 
-            resp = requests.get(url, headers=self.headers, params=params)
+            resp = self.session.get(url, headers=self.headers, params=params, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
 
@@ -97,7 +88,7 @@ class NotionAPI:
         return ""
 
 
-    def fetch_full_page(self, page_id, since=None, state=None, per_page=None, page=None):
+    def fetch_full_page(self, page_id):
         blocks = self.fetch_blocks(page_id)
         if not blocks:
             return {}
@@ -108,8 +99,12 @@ class NotionAPI:
         creator = self.get_user_info(created_by)
         last_modifier = self.get_user_info(last_edited_by)
 
+        parent = page.get("parent") or {}
+        parent_page_id = parent.get("page_id") if parent.get("type") == "page_id" else None
+
         return {
             "page_id": page["id"],
+            "parent_page_id": parent_page_id,
             "title": self.extract_page_title(page),
             'created_time': page['created_time'],
             "last_modified_time": page['last_edited_time'],
@@ -121,24 +116,12 @@ class NotionAPI:
 
 
     def get_user_info(self, user_id):
-        if not user_id:
-            return None
-
-        if user_id in self._user_cache:
-            return self._user_cache[user_id]
-
         url = f"{self.base_url}/users/{user_id}"
         try:
-            resp = requests.get(url, headers=self.headers)
-            if resp.status_code == 404:
-                # Notion system/bot users can appear here; treat as non-fatal.
-                self._user_cache[user_id] = None
-                return None
+            resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
             name = data.get('name')
-            self._user_cache[user_id] = name
-            return name
         except Exception:
-            self._user_cache[user_id] = None
-            return None
+            name = None
+        return name

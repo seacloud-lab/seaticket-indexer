@@ -33,6 +33,8 @@ class NotionSeaDBAPI:
             NotionTable.created_time.name: time_to_utc_time(notion_page.get('created_time')).isoformat(),
             NotionTable.modified_time.name: time_to_utc_time(notion_page.get('last_modified_time')).isoformat(),
             NotionTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            NotionTable.creator.name: notion_page.get('creator'),
+            NotionTable.last_modifier.name: notion_page.get('last_modifier'),
             NotionTable.page_id.name: notion_page.get('page_id'),
             NotionTable.parent_page_id.name: notion_page.get('parent_page_id'),
         }

@@ -34,347 +34,357 @@ HEADER_LABEL = [
     'header6',
 ]
 
+class _NotionMarkdownRenderer:
+    def __init__(self, indent_size=2):
+        self.indent_size = indent_size
+        self._heading_levels = {'heading_1': 1, 'heading_2': 2, 'heading_3': 3}
+        self._renderers = {
+            'column_list': self._render_container,
+            'column': self._render_container,
+            'paragraph': self._render_paragraph,
+            'heading_1': self._render_heading,
+            'heading_2': self._render_heading,
+            'heading_3': self._render_heading,
+            'bulleted_list_item': self._render_bulleted_list_item,
+            'numbered_list_item': self._render_numbered_list_item,
+            'to_do': self._render_to_do,
+            'toggle': self._render_toggle,
+            'quote': self._render_quote,
+            'code': self._render_code,
+            'divider': self._render_divider,
+            'callout': self._render_callout,
+            'image': self._render_image,
+            'bookmark': self._render_url_block,
+            'embed': self._render_url_block,
+            'link_preview': self._render_url_block,
+            'file': self._render_media_link,
+            'pdf': self._render_media_link,
+            'video': self._render_media_link,
+            'audio': self._render_media_link,
+            'child_page': self._render_child_page,
+            'table': self._render_table,
+        }
 
-def _notion_escape_md(text):
-    if not text:
-        return ''
-    return text.replace('\\', '\\\\')
-
-
-def _notion_apply_annotations(text, annotations):
-    if text is None:
-        return ''
-
-    if annotations.get('code'):
-        text = f"`{text}`"
-    if annotations.get('bold'):
-        text = f"**{text}**"
-    if annotations.get('italic'):
-        text = f"_{text}_"
-    if annotations.get('strikethrough'):
-        text = f"~~{text}~~"
-    return text
-
-
-def _notion_rich_text_to_md(rich_text):
-    if not rich_text:
-        return ''
-
-    parts = []
-    for rt in rich_text:
-        plain = rt.get('plain_text')
-        if plain is None:
-            if rt.get('type') == 'text':
-                plain = (rt.get('text') or {}).get('content', '')
-            else:
-                plain = ''
-
-        text = _notion_escape_md(plain)
-        text = _notion_apply_annotations(text, rt.get('annotations') or {})
-
-        href = rt.get('href')
-        if not href and rt.get('type') == 'text':
-            href = (rt.get('text') or {}).get('link', {}) or None
-            if isinstance(href, dict):
-                href = href.get('url')
-
-        if href:
-            text = f"[{text}]({href})"
-
-        parts.append(text)
-    return ''.join(parts)
-
-
-def _notion_get_block_rich_text(block):
-    block_type = block.get('type')
-    if not block_type:
-        return []
-    data = block.get(block_type) or {}
-    rich_text = data.get('rich_text')
-    if isinstance(rich_text, list):
-        return rich_text
-    return []
-
-
-def _notion_extract_file_url(file_obj):
-    if not file_obj:
-        return ''
-    if file_obj.get('type') == 'external':
-        return (file_obj.get('external') or {}).get('url', '')
-    if file_obj.get('type') == 'file':
-        return (file_obj.get('file') or {}).get('url', '')
-    return file_obj.get('url', '')
-
-
-def _notion_render_table(block, indent):
-    table = block.get('table') or {}
-    children = block.get('children') or []
-    has_column_header = bool(table.get('has_column_header'))
-    has_row_header = bool(table.get('has_row_header'))
-
-    rows = []
-    for row in children:
-        if row.get('type') != 'table_row':
-            continue
-        row_data = row.get('table_row') or {}
-        cells = row_data.get('cells') or []
-        rendered_cells = []
-        for cell_rich_text in cells:
-            rendered_cells.append(_notion_rich_text_to_md(cell_rich_text).replace('\n', ' '))
-        rows.append(rendered_cells)
-
-    if not rows:
-        return []
-
-    max_cols = max((len(r) for r in rows), default=0)
-    if max_cols == 0:
-        return []
-
-    def pad(r):
-        return [(r[i] if i < len(r) and r[i] else ' ') for i in range(max_cols)]
-
-    rows = [pad(r) for r in rows]
-
-    ###table title处理
-
-    def _normalize_blank(s):
-        if s is None:
+    def _escape_md(self, text):
+        if not text:
             return ''
-        # Notion sometimes uses non-breaking spaces or zero-width chars in “empty” cells.
-        return str(s).replace('\u00a0', ' ').replace('\u200b', '').replace('\ufeff', '')
+        return text.replace('\\', '\\\\')
 
-    def is_blank_row(r):
-        for c in r:
-            if _normalize_blank(c).strip():
-                return False
-        return True
+    def _apply_annotations(self, text, annotations):
+        if text is None:
+            return ''
+        if annotations.get('code'):
+            text = f"`{text}`"
+        if annotations.get('bold'):
+            text = f"**{text}**"
+        if annotations.get('italic'):
+            text = f"_{text}_"
+        if annotations.get('strikethrough'):
+            text = f"~~{text}~~"
+        return text
 
-    # Trim leading/trailing blank rows (Notion tables may contain extra empty rows)
-    while rows and is_blank_row(rows[0]):
-        rows.pop(0)
-    while rows and is_blank_row(rows[-1]):
-        rows.pop()
+    def _rich_text_to_md(self, rich_text):
+        if not rich_text:
+            return ''
+        parts = []
+        for rt in rich_text:
+            plain = rt.get('plain_text')
+            if plain is None:
+                if rt.get('type') == 'text':
+                    plain = (rt.get('text') or {}).get('content', '')
+                else:
+                    plain = ''
+            text = self._escape_md(plain)
+            text = self._apply_annotations(text, rt.get('annotations') or {})
+            href = rt.get('href')
+            if not href and rt.get('type') == 'text':
+                href = (rt.get('text') or {}).get('link', {}) or None
+                if isinstance(href, dict):
+                    href = href.get('url')
+            if href:
+                text = f"[{text}]({href})"
+            parts.append(text)
+        return ''.join(parts)
 
-    if not rows:
+    def _get_block_rich_text(self, block):
+        block_type = block.get('type')
+        if not block_type:
+            return []
+        data = block.get(block_type)
+        if not isinstance(data, dict):
+            return []
+        rich_text = data.get('rich_text')
+        if isinstance(rich_text, list):
+            return rich_text
         return []
 
-    header_row: List[str]
-    start_idx: int
-    if has_column_header:
-        # Sometimes Notion returns an empty first row even when has_column_header is true.
-        header_idx = 0
-        while header_idx < len(rows) and is_blank_row(rows[header_idx]):
-            header_idx += 1
-        if header_idx >= len(rows):
+    def _get_block_text(self, block):
+        return self._rich_text_to_md(self._get_block_rich_text(block))
+
+    def _render_line_with_children(self, line, children, indent, child_indent=None):
+        if not children:
+            return [line] if line else []
+        rendered_children = self.render_blocks(
+            children,
+            indent=indent + 1 if child_indent is None else child_indent,
+        )
+        if line:
+            return [line] + rendered_children
+        return rendered_children
+
+    def _prefix_lines(self, lines, prefix):
+        return [prefix + line if line.strip() else line for line in lines]
+
+    def _render_blockquote_lines(self, text, indent):
+        prefix = self._prefix(indent) + '> '
+        base_lines = [l for l in (text.split('\n') if text else ['']) if l.strip()]
+        return self._prefix_lines(base_lines, prefix)
+
+    def _extract_file_url(self, file_obj):
+        if not file_obj:
+            return ''
+        if file_obj.get('type') == 'external':
+            return (file_obj.get('external') or {}).get('url', '')
+        if file_obj.get('type') == 'file':
+            return (file_obj.get('file') or {}).get('url', '')
+        return file_obj.get('url', '')
+
+    def _render_table_block(self, block, indent):
+        table = block.get('table') or {}
+        children = block.get('children') or []
+        has_row_header = bool(table.get('has_row_header'))
+
+        rows = [
+            [
+                self._rich_text_to_md(cell).replace('\n', ' ')
+                for cell in (row.get('table_row') or {}).get('cells') or []
+            ]
+            for row in children
+            if row.get('type') == 'table_row'
+        ]
+        if not rows:
             return []
-        header_row = rows[header_idx]
-        start_idx = header_idx + 1
-    else:
-        # Heuristic: treat the first non-blank row as header when Notion doesn't mark it.
+
+        max_cols = max((len(r) for r in rows), default=0)
+        if max_cols == 0:
+            return []
+
+        def pad_row(r):
+            return [(r[i] if i < len(r) and r[i] else ' ') for i in range(max_cols)]
+
+        rows = [pad_row(r) for r in rows]
+
         header_row = rows[0]
         start_idx = 1
 
-    ####table header处理结束
+        prefix = self._prefix(indent)
+        lines = [
+            prefix + '| ' + ' | '.join(header_row) + ' |',
+            prefix + '| ' + ' | '.join(['---'] * max_cols) + ' |',
+        ]
 
-    prefix = ' ' * (indent * 2)
-    lines = []
-    lines.append(prefix + '| ' + ' | '.join(header_row) + ' |')
-    lines.append(prefix + '| ' + ' | '.join(['---'] * max_cols) + ' |')
+        for r in rows[start_idx:]:
+            if has_row_header and r:
+                r = [f"**{r[0]}**"] + r[1:]
+            lines.append(prefix + '| ' + ' | '.join(r) + ' |')
+        return lines
 
-    for r in rows[start_idx:]:
-        if has_row_header and r:
-            r = [f"**{r[0]}**"] + r[1:]
-        lines.append(prefix + '| ' + ' | '.join(r) + ' |')
-    return lines
+    def render_page(self, full_page, include_title=True):
+        title = (full_page or {}).get('title') or ''
+        blocks = (full_page or {}).get('blocks') or []
 
+        out_lines = []
+        if include_title and title:
+            out_lines.append('# ' + self._escape_md(title))
+            out_lines.append('')
 
-def _notion_render_block(block, indent, list_number = None):
-    block_type = block.get('type')
-    if not block_type:
-        return []
+        out_lines.extend(self.render_blocks(blocks, indent=0))
+        return '\n'.join(out_lines).strip() + '\n'
 
-    prefix = ' ' * (indent * 2)
+    def render_blocks(self, blocks, indent=0):
+        lines = []
+        lines_append = lines.append
+        lines_extend = lines.extend
+        i = 0
+        while i < len(blocks):
+            block = blocks[i]
+            t = block.get('type')
 
-    if block_type == 'column_list':
+            if t in ('numbered_list_item', 'bulleted_list_item'):
+                group_lines, i = self._render_list_group(blocks, indent, i, t)
+                lines_extend(group_lines)
+                continue
+
+            lines_extend(self.render_block(block, indent=indent))
+            lines_append('')
+            i += 1
+
+        while lines and lines[-1] == '':
+            lines.pop()
+        return lines
+
+    def render_block(self, block, indent, list_number=None):
+        block_type = block.get('type')
+        if not block_type:
+            return []
+
+        renderer = self._renderers.get(block_type, self._render_default)
+        if block_type == 'numbered_list_item':
+            return renderer(block, indent, list_number)
+        return renderer(block, indent)
+
+    def _prefix(self, indent):
+        return ' ' * (indent * self.indent_size)
+
+    def _render_container(self, block, indent):
         children = block.get('children') or []
         if not children:
             return []
-        return _notion_render_blocks(children, indent=indent)
+        return self.render_blocks(children, indent=indent)
 
-    if block_type == 'column':
-        children = block.get('children') or []
-        if not children:
-            return []
-        return _notion_render_blocks(children, indent=indent)
+    def _render_paragraph(self, block, indent):
+        text = self._get_block_text(block)
+        line = self._prefix(indent) + text if text else ''
+        return self._render_line_with_children(line, block.get('children') or [], indent, child_indent=indent)
 
-    if block_type == 'paragraph':
-        text = _notion_rich_text_to_md((block.get('paragraph') or {}).get('rich_text'))
-        children = block.get('children') or []
-        if children:
-            rendered_children = _notion_render_blocks(children, indent=indent)
-            if text:
-                return [prefix + text] + rendered_children
-            return rendered_children
-        return [prefix + text] if text else []
+    def _render_heading(self, block, indent):
+        block_type = block.get('type')
+        level = self._heading_levels[block_type]
+        text = self._get_block_text(block)
+        return [self._prefix(indent) + ('#' * level) + ' ' + text]
 
-    if block_type in ('heading_1', 'heading_2', 'heading_3'):
-        level = {'heading_1': 1, 'heading_2': 2, 'heading_3': 3}[block_type]
-        text = _notion_rich_text_to_md((block.get(block_type) or {}).get('rich_text'))
-        return [prefix + ('#' * level) + ' ' + text]
+    def _render_bulleted_list_item(self, block, indent):
+        text = self._get_block_text(block)
+        line = self._prefix(indent) + '- ' + text
+        return self._render_line_with_children(line, block.get('children') or [], indent)
 
-    if block_type == 'bulleted_list_item':
-        text = _notion_rich_text_to_md((block.get('bulleted_list_item') or {}).get('rich_text'))
-        line = prefix + '- ' + text
-        children = block.get('children') or []
-        if children:
-            return [line] + _notion_render_blocks(children, indent=indent + 1)
-        return [line]
-
-    if block_type == 'numbered_list_item':
-        text = _notion_rich_text_to_md((block.get('numbered_list_item') or {}).get('rich_text'))
+    def _render_numbered_list_item(self, block, indent, list_number):
+        text = self._get_block_text(block)
         number = list_number if list_number is not None else 1
-        line = prefix + f"{number}. " + text
-        children = block.get('children') or []
-        if children:
-            return [line] + _notion_render_blocks(children, indent=indent + 1)
-        return [line]
+        line = self._prefix(indent) + f"{number}. " + text
+        return self._render_line_with_children(line, block.get('children') or [], indent)
 
-    if block_type == 'to_do':
+    def _render_to_do(self, block, indent):
         todo = block.get('to_do') or {}
-        text = _notion_rich_text_to_md(todo.get('rich_text'))
+        text = self._get_block_text(block)
         checked = bool(todo.get('checked'))
         mark = 'x' if checked else ' '
-        line = prefix + f"- [{mark}] " + text
-        children = block.get('children') or []
-        if children:
-            return [line] + _notion_render_blocks(children, indent=indent + 1)
-        return [line]
+        line = self._prefix(indent) + f"- [{mark}] " + text
+        return self._render_line_with_children(line, block.get('children') or [], indent)
 
-    if block_type == 'toggle':
-        toggle = block.get('toggle') or {}
-        text = _notion_rich_text_to_md(toggle.get('rich_text'))
-        line = prefix + '<details>'
-        summary = prefix + f"<summary>{text}</summary>"
+    def _render_toggle(self, block, indent):
+        text = self._get_block_text(block)
+        line = self._prefix(indent) + '<details>'
+        summary = self._prefix(indent) + f"<summary>{text}</summary>"
         children = block.get('children') or []
-        rendered_children = _notion_render_blocks(children, indent=indent + 1) if children else []
-        end = prefix + '</details>'
+        rendered_children = self.render_blocks(children, indent=indent + 1) if children else []
+        end = self._prefix(indent) + '</details>'
         return [line, summary] + rendered_children + [end]
 
-    if block_type == 'quote':
-        text = _notion_rich_text_to_md((block.get('quote') or {}).get('rich_text'))
-        lines = [(prefix + '> ' + l) for l in (text.split('\n') if text else ['']) if l.strip()]
+    def _render_quote(self, block, indent):
+        text = self._get_block_text(block)
+        prefix = self._prefix(indent)
+        lines = self._render_blockquote_lines(text, indent)
         children = block.get('children') or []
         if children:
-            child_lines = _notion_render_blocks(children, indent=indent)
-            child_lines = [(prefix + '> ' + l) if l.strip() else l for l in child_lines]
+            child_lines = self.render_blocks(children, indent=indent)
+            child_lines = self._prefix_lines(child_lines, prefix + '> ')
             return lines + child_lines
         return lines
 
-    if block_type == 'code':
+    def _render_code(self, block, indent):
         code = block.get('code') or {}
         lang = code.get('language') or ''
-        text = _notion_rich_text_to_md(code.get('rich_text'))
+        text = self._get_block_text(block)
+        prefix = self._prefix(indent)
         return [prefix + f"```{lang}", text, prefix + "```"]
 
-    if block_type == 'divider':
-        return [prefix + '---']
+    def _render_divider(self, block, indent):
+        return [self._prefix(indent) + '---']
 
-    if block_type == 'callout':
+    def _render_callout(self, block, indent):
         callout = block.get('callout') or {}
         icon = callout.get('icon') or {}
         icon_text = ''
         if icon.get('type') == 'emoji':
             icon_text = icon.get('emoji', '')
-        text = _notion_rich_text_to_md(callout.get('rich_text'))
+        text = self._get_block_text(block)
         head = (icon_text + ' ' if icon_text else '') + text
+        prefix = self._prefix(indent)
         line = prefix + '> ' + head if head else (prefix + '>')
         children = block.get('children') or []
-        rendered_children = _notion_render_blocks(children, indent=indent) if children else []
-        rendered_children = [(prefix + '> ' + l) if l.strip() else l for l in rendered_children]
+        rendered_children = self.render_blocks(children, indent=indent) if children else []
+        rendered_children = self._prefix_lines(rendered_children, prefix + '> ')
         return [line] + rendered_children
 
-    if block_type == 'image':
+    def _render_image(self, block, indent):
         img = block.get('image') or {}
-        url = _notion_extract_file_url(img)
-        caption = _notion_rich_text_to_md(img.get('caption'))
+        url = self._extract_file_url(img)
+        caption = self._rich_text_to_md(img.get('caption'))
         alt = caption or 'image'
         if url:
-            return [prefix + f"![{alt}]({url})"]
+            return [self._prefix(indent) + f"![{alt}]({url})"]
         return []
 
-    if block_type in ('bookmark', 'embed', 'link_preview'):
-        data = block.get(block_type) or {}
+    def _render_url_block(self, block, indent):
+        block_type = block.get('type')
+        data = block.get(block_type)
+        if not isinstance(data, dict):
+            return []
         url = data.get('url') or ''
         if url:
-            return [prefix + url]
+            return [self._prefix(indent) + url]
         return []
 
-    if block_type in ('file', 'pdf', 'video', 'audio'):
-        data = block.get(block_type) or {}
-        url = _notion_extract_file_url(data)
-        caption = _notion_rich_text_to_md(data.get('caption'))
+    def _render_media_link(self, block, indent):
+        block_type = block.get('type')
+        data = block.get(block_type)
+        if not isinstance(data, dict):
+            return []
+        url = self._extract_file_url(data)
+        caption = self._rich_text_to_md(data.get('caption'))
         label = caption or block_type
         if url:
-            return [prefix + f"[{label}]({url})"]
+            return [self._prefix(indent) + f"[{label}]({url})"]
         return []
 
-    if block_type == 'child_page':
+    def _render_child_page(self, block, indent):
         title = (block.get('child_page') or {}).get('title', '')
         if title:
-            return [prefix + '## ' + _notion_escape_md(title)]
+            return [self._prefix(indent) + '## ' + self._escape_md(title)]
         return []
 
-    if block_type == 'table':
-        return _notion_render_table(block, indent)
+    def _render_table(self, block, indent):
+        return self._render_table_block(block, indent)
 
-    text = _notion_rich_text_to_md(_notion_get_block_rich_text(block))
-    return [prefix + text] if text else []
+    def _render_default(self, block, indent):
+        text = self._rich_text_to_md(self._get_block_rich_text(block))
+        if text:
+            return [self._prefix(indent) + text]
+        return []
 
-
-def _notion_render_blocks(blocks, indent = 0):
-    lines = []
-    i = 0
-    while i < len(blocks):
-        block = blocks[i]
-        t = block.get('type')
-
-        if t == 'numbered_list_item':
+    def _render_list_group(self, blocks, indent, start_index, block_type):
+        lines = []
+        i = start_index
+        if block_type == 'numbered_list_item':
             n = 1
-            while i < len(blocks) and blocks[i].get('type') == 'numbered_list_item':
-                lines.extend(_notion_render_block(blocks[i], indent=indent, list_number=n))
+            while i < len(blocks) and blocks[i].get('type') == block_type:
+                lines.extend(self.render_block(blocks[i], indent=indent, list_number=n))
                 n += 1
                 i += 1
-            lines.append('')
-            continue
-
-        if t == 'bulleted_list_item':
-            while i < len(blocks) and blocks[i].get('type') == 'bulleted_list_item':
-                lines.extend(_notion_render_block(blocks[i], indent=indent))
+        else:
+            while i < len(blocks) and blocks[i].get('type') == block_type:
+                lines.extend(self.render_block(blocks[i], indent=indent))
                 i += 1
-            lines.append('')
-            continue
-
-        rendered = _notion_render_block(block, indent=indent)
-        lines.extend(rendered)
         lines.append('')
-        i += 1
-
-    while lines and lines[-1] == '':
-        lines.pop()
-    return lines
+        return lines, i
 
 
-def notion_page_to_markdown(full_page, include_title = True):
-    title = (full_page or {}).get('title') or ''
-    blocks = (full_page or {}).get('blocks') or []
+_NOTION_RENDERER = _NotionMarkdownRenderer()
 
-    out_lines = []
-    if include_title and title:
-        out_lines.append('# ' + _notion_escape_md(title))
-        out_lines.append('')
 
-    out_lines.extend(_notion_render_blocks(blocks, indent=0))
-    return '\n'.join(out_lines).strip() + '\n'
+def notion_page_to_markdown(full_page, include_title=True):
+    return _NOTION_RENDERER.render_page(full_page, include_title=include_title)
 
 
 def _handle_text_style(json_data_text, return_null=False):
