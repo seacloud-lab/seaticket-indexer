@@ -13,10 +13,6 @@ logger = logging.getLogger(__name__)
 class ConnectionSyncTaskWorker(BaseTaskWorker):
     """The handler for redis message queue - sync tasks"""
 
-    @property
-    def worker_num(self) -> int:
-        return 3
-
     def get_queue_name(self) -> str:
         return 'sync_task'
 

@@ -19,10 +19,6 @@ logger = logging.getLogger(__name__)
 class SummaryIndexTaskWorker(LockingTaskWorker):
     """Worker for processing AI summary vector indexing tasks"""
 
-    @property
-    def worker_num(self) -> int:
-        return 2
-
     def get_queue_name(self) -> str:
         return 'summary_index_task'
 

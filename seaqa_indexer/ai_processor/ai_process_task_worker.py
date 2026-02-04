@@ -17,11 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class AIProcessTaskWorker(LockingTaskWorker):
-
-    @property
-    def worker_num(self) -> int:
-        return 2
-
     def get_queue_name(self) -> str:
         return 'ai_process_task'
 

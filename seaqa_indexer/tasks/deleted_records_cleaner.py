@@ -1,4 +1,4 @@
-import os
+import sys
 import time
 import logging
 import threading
@@ -86,7 +86,7 @@ class DeletedRecordsCleaner(object):
     def clear(self):
         self.should_stop.set()
         logger.info("Exit deleted records cleaner process")
-        os._exit(0)
+        sys.exit(0)
 
     def signal_term_handler(self, signal, frame):
         self.clear()
@@ -103,7 +103,7 @@ def start():
     except Exception as e:
         logger.exception(e)
         deleted_records_cleaner.clear()
-        os._exit(0)
+        sys.exit(1)
 
     while True:
         time.sleep(2)

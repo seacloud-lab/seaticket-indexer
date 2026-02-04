@@ -1,4 +1,4 @@
-import os
+import sys
 import time
 import logging
 import json
@@ -25,7 +25,7 @@ class BaseTaskWorker(ABC):
 
     @property
     def worker_num(self) -> int:
-        return 2
+        return 3
 
     @property
     def tname(self):
@@ -96,11 +96,11 @@ class BaseTaskWorker(ABC):
             return
         self.should_stop.set()
         time.sleep(1)
-        self.on_clear()
+        self.clear_lock()
         logger.info("Exit %s process", self.get_worker_name())
-        os._exit(0)
+        sys.exit(0)
 
-    def on_clear(self):
+    def clear_lock(self):
         """additional cleanup operations"""
         pass
 
@@ -108,6 +108,9 @@ class BaseTaskWorker(ABC):
         self.clear()
 
     def set_signal(self):
+        # TODO: look like python will add signal to queue when cpu exec c extension code,
+        # and will call signal callback method after cpu exec python code
+        # ref: https://docs.python.org/2/library/signal.html
         signal.signal(signal.SIGTERM, self.signal_term_handler)
 
 
@@ -132,7 +135,7 @@ class LockingTaskWorker(BaseTaskWorker):
 
     def execute_with_lock(self, task_id, task_func, *args, **kwargs):
         """execute task with distributed lock
-        
+
         Args:
             task_id: task identifier, used to generate lock key
             task_func: task function to execute
@@ -158,8 +161,7 @@ class LockingTaskWorker(BaseTaskWorker):
             logger.info('%s Finish %s: %s, delete redis lock %s',
                         self.tname, self.get_worker_name(), task_id, lock_key)
         else:
-            logger.warning('another %s task is running, drop this task: %s',
-                           self.get_worker_name(), task_id)
+            logger.warning('another %s task is running, drop this task: %s', self.get_worker_name(), task_id)
 
     def refresh_lock(self):
         """periodically refresh the expiration time of the lock"""
@@ -179,7 +181,7 @@ class LockingTaskWorker(BaseTaskWorker):
                 logger.exception(e)
                 time.sleep(1)
 
-    def on_clear(self):
+    def clear_lock(self):
         """clean all held locks"""
         with self.locked_keys_lock:
             keys_to_delete = list(self.locked_keys)
@@ -190,7 +192,7 @@ class LockingTaskWorker(BaseTaskWorker):
 
 def run_worker(worker_class, log_level=None, log_file=None):
     """generic worker startup function
-    
+
     Args:
         worker_class: Worker class
         log_level: log level, default is config.LOG_LEVEL
@@ -204,7 +206,7 @@ def run_worker(worker_class, log_level=None, log_file=None):
     except Exception as e:
         logger.exception(e)
         worker.clear()
-        os._exit(0)
+        sys.exit(1)
 
     while True:
         time.sleep(2)

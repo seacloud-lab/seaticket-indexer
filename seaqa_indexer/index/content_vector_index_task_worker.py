@@ -16,10 +16,6 @@ logger = logging.getLogger(__name__)
 class ContentVectorIndexTaskWorker(BaseTaskWorker):
     """Worker for processing content vector indexing tasks"""
 
-    @property
-    def worker_num(self) -> int:
-        return 3
-
     def get_queue_name(self) -> str:
         return 'content_vector_index_task'
 
