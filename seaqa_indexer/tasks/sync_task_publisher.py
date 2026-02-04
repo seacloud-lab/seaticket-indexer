@@ -33,7 +33,7 @@ class SyncTaskPublisher(object):
         self._logfile = LOG_FILE
         self._loglevel = LOG_LEVEL
         self._interval = 1 * 60 * 60
-        self._sync_interval = 24 * 60 * 60
+        self._sync_interval = 1 * 60 * 60
 
     def start(self):
         if not self.is_enabled():
