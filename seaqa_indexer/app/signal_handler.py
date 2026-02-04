@@ -1,5 +1,5 @@
 import signal
-import sys
+import os
 
 from seaqa_indexer.utils import run
 
@@ -66,7 +66,7 @@ def signal_term_handler(signal, frame):
     kill_summary_index_task_worker()
     kill_content_vector_index_task_worker()
     kill_deleted_records_cleaner()
-    sys.exit(0)
+    os._exit(0)
 
 
 def set_signal():
