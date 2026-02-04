@@ -104,11 +104,10 @@ class ProjectConnectionCleaner(object):
         # delete connection index
         self.index_manager.delete_index_by_connection(connection_id, connection_type)
 
-        base_metadata = self.seadb_api.get_base_metadata(project_uuid)
-        tables = base_metadata.get('tables')
-
         handler = get_handler(connection_type)
         if handler:
+            base_metadata = self.seadb_api.get_base_metadata(project_uuid)
+            tables = base_metadata.get('tables')
             handler.clean_connection_data(self.storage, self.seadb_api, project_uuid, connection_id, tables)
         else:
             logger.warning('No handler found for connection type: %s', connection_type)
@@ -160,7 +159,6 @@ def start():
         project_connection_cleaner.start()
     except Exception as e:
         logger.exception(e)
-        project_connection_cleaner.clear()
         os._exit(0)
 
     while True:

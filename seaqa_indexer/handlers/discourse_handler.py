@@ -8,10 +8,8 @@ from dateutil.relativedelta import relativedelta
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
-from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
@@ -23,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class DiscourseHandler(ConnectionHandler):
     """Handler for DISCOURSE_FORUM connection type."""
-    
+
     connection_type = ConnectionType.DISCOURSE_FORUM.value
     BATCH_SIZE = 50
 
@@ -33,24 +31,25 @@ class DiscourseHandler(ConnectionHandler):
     def gen_replies_table_name(self, connection_id):
         return DiscourseRepliesTable.gen_table_name(connection_id)
 
-    def get_index_instance(self, seasearch_api):
-        return DiscourseIndex(seasearch_api)
-    
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
-        index_instance = self.get_index_instance(seasearch_api)
-        return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
-    
-    def delete_index(self, index_manager, connection_id):
+        discourse_index = DiscourseIndex(seasearch_api)
+        return discourse_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
+
+    def delete_index_by_connection_id(self, seasearch_api, connection_id):
         index_name = gen_index_name_by_type(connection_id, self.connection_type)
-        index_manager.discourse_index.delete_index_by_index_name(index_name)
-    
+        discourse_index = DiscourseIndex(seasearch_api)
+        discourse_index.delete_index_by_index_name(index_name)
+
+        # summary vector index
+        self.delete_summary_vector_index_by_connection_id(seasearch_api, connection_id)
+
     def format_vector_search_result(self, record, connection, result):
         connection_config = json.loads(connection.config)
         discourse_forum_url = connection_config.get('url')
         slug = record.get('slug')
         topic_id = record.get('topic_id')
         topic_url = discourse_forum_url.rstrip('/') + '/t/' + slug + '/' + str(topic_id)
-        
+
         return {
             'title': record.get('title', ''),
             'slug': record.get('slug', ''),
@@ -58,7 +57,7 @@ class DiscourseHandler(ConnectionHandler):
             'modified_time': record.get('modified_time', ''),
             'url': topic_url,
         }
-    
+
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
         updates = []
@@ -94,7 +93,7 @@ class DiscourseHandler(ConnectionHandler):
             if updates:
                 seadb_api.update_rows(project_uuid, table_name, updates)
         return ai_processing_count
-    
+
     def update_index(self, project_connection, seasearch_api, seaqa_db):
         connection_id = project_connection.id
         connection_type = project_connection.type
@@ -117,28 +116,28 @@ class DiscourseHandler(ConnectionHandler):
         connection_status['last_indexed_count'] = index_count
         connection_status['last_index_status'] = IndexStatus.COMPLETED
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
-    
-    def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
+
+    def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
         forum_url = config['url']
         discourse_api_key = config['api_key']
         discourse_api_username = config['api_username']
         sync_years = config.get('sync_years', 5)
-        
+
         project_connection = seaqa_db.get_project_connection_by_id(connection_id)
         project_created_at = project_connection.created_at
-        
+
         discourse_forum_api = DiscourseForumAPI(forum_url, discourse_api_key, discourse_api_username)
         discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
-        
+
         # Calculate sync_earliest_time by subtracting sync_years from project_created_time
         project_created_time_utc = time_to_utc_time(str(project_created_at))
         sync_earliest_time = project_created_time_utc - relativedelta(years=sync_years)
-        
-        sync_count, total_count = self._sync_discourse(connection_id, sync_earliest_time, old_last_sync_time, 
+
+        sync_count, total_count = self._sync_discourse(connection_id, sync_earliest_time, old_last_sync_time,
                              connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db)
         return sync_count, total_count, False, config
-    
+
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
         """Clean deleted discourse topic records and their replies."""
         page_size = 1000
@@ -171,8 +170,8 @@ class DiscourseHandler(ConnectionHandler):
                 break
 
         return total_deleted
-    
-    def clean_connection_data(self, storage, seadb_api, project_uuid, 
+
+    def clean_connection_data(self, storage, seadb_api, project_uuid,
                               connection_id, tables):
         """Clean discourse connection data including topics and replies tables."""
         if tables:
@@ -181,15 +180,6 @@ class DiscourseHandler(ConnectionHandler):
             for table in tables:
                 if table['name'] in (topics_table_name, replies_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])
-    
-    def add_sync_task(self, app, connection_id):
-        app.sync_manager.add_sync_task(connection_id)
-    
-    def add_recovering_sync_task(self, mq, connection_id):
-        msg_content = {
-            'connection_id': connection_id,
-        }
-        mq.lpush('sync_task', json.dumps(msg_content))
 
     def _sync_discourse(self, connection_id, sync_earliest_time, last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db):
         page = 0

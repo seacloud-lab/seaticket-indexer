@@ -79,8 +79,7 @@ class DeletedRecordsCleaner(object):
                 total_deleted = handler.clean_deleted_records(
                     self.seadb_api, project_uuid, connection_id, cutoff_time
                 )
-                logger.info('Deleted %d records from connection %s table %s', 
-                            total_deleted, connection_id, table_name)
+                logger.info('Deleted %d records from connection %s table %s',  total_deleted, connection_id, table_name)
             except Exception as e:
                 logger.exception('Failed to clean deleted records for connection %s: %s', connection_id, e)
 

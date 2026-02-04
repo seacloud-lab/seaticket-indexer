@@ -39,7 +39,6 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
-    is_update_config = False
 
     try:
         conn_handler = get_handler(connection_type)
@@ -50,20 +49,18 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             sync_logger.stop_capture()
             return
-        
-        sync_result = conn_handler.sync(
+
+        sync_count, total_count, is_update_config, config = conn_handler.sync(
             connection_id, project_uuid, config, old_last_sync_time,
             connection_status, seaqa_db, sync_logger
         )
-        
-        if sync_result is None or (isinstance(sync_result, tuple) and None in sync_result[:2]):
 
+        if sync_count is None:
             connection_status['last_sync_status'] = CrawlStatus.FAILED
             seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             sync_logger.stop_capture()
             return
-        
-        sync_count, total_count, is_update_config, config = sync_result
+
     except Exception as e:
         logger.exception('connection: %s, sync failed, error: %s', connection_id, e)
         try:

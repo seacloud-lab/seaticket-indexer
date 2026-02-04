@@ -15,7 +15,6 @@ from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils import decrypt_config
-from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
@@ -26,24 +25,25 @@ logger = logging.getLogger(__name__)
 
 class SeafileHandler(ConnectionHandler):
     """Handler for SEAFILE connection type."""
-    
+
     connection_type = ConnectionType.SEAFILE.value
     BATCH_SIZE = 50
-    
+
     def gen_table_name(self, connection_id):
         return SeafileTable.gen_table_name(connection_id)
-    
-    def get_index_instance(self, seasearch_api):
-        return SeafileIndex(seasearch_api)
-    
+
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
-        index_instance = self.get_index_instance(seasearch_api)
-        return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
-    
-    def delete_index(self, index_manager, connection_id):
+        seafile_index = SeafileIndex(seasearch_api)
+        return seafile_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
+
+    def delete_index_by_connection_id(self, seasearch_api, connection_id):
         index_name = gen_index_name_by_type(connection_id, self.connection_type)
-        index_manager.seafile_index.delete_index_by_index_name(index_name)
-    
+        seafile_index = SeafileIndex(seasearch_api)
+        seafile_index.delete_index_by_index_name(index_name)
+
+        # summary vector index
+        self.delete_summary_vector_index_by_connection_id(seasearch_api, connection_id)
+
     def format_vector_search_result(self, record, connection, result):
         connection_config = json.loads(connection.config)
         repo_name = connection_config.get('repo_name')
@@ -51,7 +51,7 @@ class SeafileHandler(ConnectionHandler):
         server_url = connection_config.get('server_url')
         url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + record.get('path', '').strip(
             '/') + '/' + record.get('title', '')
-        
+
         return {
             'title': record.get('title', ''),
             'path': record.get('path', ''),
@@ -61,7 +61,7 @@ class SeafileHandler(ConnectionHandler):
             'modified_time': record.get('modified_time', ''),
             'url': url,
         }
-    
+
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
         updates = []
@@ -97,7 +97,7 @@ class SeafileHandler(ConnectionHandler):
             if updates:
                 seadb_api.update_rows(project_uuid, table_name, updates)
         return ai_processing_count
-    
+
     def update_index(self, project_connection, seasearch_api, seaqa_db):
         connection_id = project_connection.id
         project_uuid = project_connection.project_uuid
@@ -122,40 +122,40 @@ class SeafileHandler(ConnectionHandler):
         connection_status['last_index_status'] = IndexStatus.COMPLETED
         new_indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status))
-    
-    def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
-             connection_status, seaqa_db, sync_logger):        
+
+    def sync(self, connection_id, project_uuid, config, old_last_sync_time,
+             connection_status, seaqa_db, sync_logger):
         old_repo_name = config.get('repo_name')
         server_url = config.get('server_url')
         api_token = config.get('api_token')
         since = old_last_sync_time
         is_first_update = False
-        
+
         if not since:
             since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
             is_first_update = True
         since = time_to_utc_time(str(since)).isoformat()
-        
+
         seahub_api = SeahubAPI(server_url, api_token)
         repo_info = seahub_api.get_repo_info()
         repo_id = repo_info.get('repo_id')
         new_repo_name = repo_info.get('repo_name')
-        
+
         redis_cache.set(repo_id, json.dumps({server_url: new_repo_name}), REPO_NAME_CACHE_TIME_OUT)
         config['repo_id'] = repo_id
         config['repo_name'] = new_repo_name
+        is_update_config = False
         if old_repo_name != new_repo_name:
             is_update_config = True
-        
+
         seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
-        sync_count, total_count = self._sync_seafile(connection_id, repo_id, connection_status, since, 
-                                               seahub_api, seaqa_db, seafile_seadb_api, 
-                                               is_first_update, sync_logger)
-        
+        sync_count, total_count = self._sync_seafile(connection_id, repo_id, connection_status, since, seahub_api,
+                                                     seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
+
         # Return config update flag along with sync results
         return sync_count, total_count, is_update_config, config
-    
-    def clean_connection_data(self, storage, seadb_api, project_uuid, 
+
+    def clean_connection_data(self, storage, seadb_api, project_uuid,
                               connection_id, tables):
         """Clean seafile connection data."""
         if tables:
@@ -163,15 +163,6 @@ class SeafileHandler(ConnectionHandler):
             for table in tables:
                 if table['name'] == table_name:
                     seadb_api.delete_table(project_uuid, table['id'])
-    
-    def add_sync_task(self, app, connection_id):
-        app.sync_manager.add_sync_task(connection_id)
-    
-    def add_recovering_sync_task(self, mq, connection_id):
-        msg_content = {
-            'connection_id': connection_id,
-        }
-        mq.lpush('sync_task', json.dumps(msg_content))
 
     def _sync_seafile(self, connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger):
         page = 1

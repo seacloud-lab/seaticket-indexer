@@ -6,11 +6,6 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES, ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.index.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-from seaqa_indexer.index.index_store.site_index import SiteIndex
-from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
-from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
-from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
-from seaqa_indexer.index.index_store.email_index import EmailIndex
 
 from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
@@ -133,11 +128,6 @@ class IndexManager:
     def __init__(self):
         self.db_session_class = init_db_session_class()
         self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
-        self.site_index = SiteIndex(self.seasearch_api)
-        self.seafile_index = SeafileIndex(self.seasearch_api)
-        self.github_issues_index = GitHubIssuesIndex(self.seasearch_api)
-        self.discourse_index = DiscourseIndex(self.seasearch_api)
-        self.email_index = EmailIndex(self.seasearch_api)
         self.knowledge_base_index = KnowledgeBaseIndex(self.seasearch_api)
         self.ticket_index = TicketIndex(self.seasearch_api)
 
@@ -199,15 +189,11 @@ class IndexManager:
         self.seasearch_api.delete_index_by_name(ticket_summary_index_name)
 
     def delete_index_by_connection(self, connection_id, connection_type):
-        # summary vector index
-        summary_index_name = gen_conn_summary_index_name(connection_id, connection_type)
-        self.summary_vector_index.delete_index_by_index_name(summary_index_name)
-
         conn_handler = get_handler(connection_type)
         if not conn_handler:
             logger.warning('Unsupported connection type: %s', connection_type)
             return
-        conn_handler.delete_index(self, connection_id)
+        conn_handler.delete_index_by_connection_id(self.seasearch_api, connection_id)
 
     def add_connection_index_task(self, connection_id):
         msg_content = {

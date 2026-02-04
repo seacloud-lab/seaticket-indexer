@@ -9,7 +9,6 @@ from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.github_issues_api import GitHubAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils import decrypt_config
-from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
@@ -17,9 +16,11 @@ from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesInde
 from seaqa_indexer.ai_processor.utils import generate_summary
 
 logger = logging.getLogger(__name__)
+
+
 class GithubIssueHandler(ConnectionHandler):
     """Handler for GITHUB_ISSUE connection type."""
-    
+
     connection_type = ConnectionType.GITHUB_ISSUE.value
     BATCH_SIZE = 50
 
@@ -28,18 +29,19 @@ class GithubIssueHandler(ConnectionHandler):
 
     def gen_comments_table_name(self, connection_id):
         return GithubIssueCommentsTable.gen_table_name(connection_id)
-    
-    def get_index_instance(self, seasearch_api):
-        return GitHubIssuesIndex(seasearch_api)
-    
+
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
-        index_instance = self.get_index_instance(seasearch_api)
-        return index_instance.get_search_param(index_name, keyword, start, size, time_from, time_to)
-    
-    def delete_index(self, index_manager, connection_id):
+        github_issue_index = GitHubIssuesIndex(seasearch_api)
+        return github_issue_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
+
+    def delete_index_by_connection_id(self, seasearch_api, connection_id):
         index_name = gen_index_name_by_type(connection_id, self.connection_type)
-        index_manager.github_issues_index.delete_index_by_index_name(index_name)
-    
+        github_issues_index = GitHubIssuesIndex(seasearch_api)
+        github_issues_index.delete_index_by_index_name(index_name)
+
+        # summary vector index
+        self.delete_summary_vector_index_by_connection_id(seasearch_api, connection_id)
+
     def format_vector_search_result(self, record, connection, result):
         connection_config = json.loads(connection.config)
         server_url = connection_config.get('repository')
@@ -48,7 +50,7 @@ class GithubIssueHandler(ConnectionHandler):
         parts = url_parsed.path.strip("/").split("/")
         repo_owner, repo_name = parts[0], parts[1]
         url = f'{base_url}/{repo_owner}/{repo_name}/issues/' + str(record.get('issue_number', ''))
-        
+
         return {
             'title': record.get('title', ''),
             'issue_number': record.get('issue_number', ''),
@@ -58,7 +60,7 @@ class GithubIssueHandler(ConnectionHandler):
             'repo_owner': repo_owner,
             'url': url,
         }
-    
+
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
         updates = []
@@ -92,7 +94,7 @@ class GithubIssueHandler(ConnectionHandler):
             if updates:
                 seadb_api.update_rows(project_uuid, table_name, updates)
         return ai_processing_count
-    
+
     def update_index(self, project_connection, seasearch_api, seaqa_db):
         connection_id = project_connection.id
         config = decrypt_config(json.loads(project_connection.config))
@@ -121,28 +123,28 @@ class GithubIssueHandler(ConnectionHandler):
         connection_status['last_indexed_count'] = index_count
         connection_status['last_index_status'] = IndexStatus.COMPLETED
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
-    
-    def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
-             connection_status, seaqa_db, sync_logger):        
+
+    def sync(self, connection_id, project_uuid, config, old_last_sync_time,
+             connection_status, seaqa_db, sync_logger):
         server_url = config.get('repository')
         token = config.get('access_token')
-        
+
         try:
             path = urlparse(server_url).path
             parts = path.strip("/").split("/")
             repo_owner, repo_name = parts[0], parts[1]
         except Exception as e:
             sync_logger.log(f"Github repository is invalid")
-            return None, None
-        
+            return None, None, None, None
+
         since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
         github_api = GitHubAPI(token, repo_owner, repo_name)
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
-        
-        sync_count, total_count = self._sync_github_issue(connection_id, since, connection_status, 
+
+        sync_count, total_count = self._sync_github_issue(connection_id, since, connection_status,
                                 github_api, seaqa_db, github_seadb_api)
         return sync_count, total_count, False, config
-    
+
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
         """Clean deleted github issue records and their comments."""
         page_size = 1000
@@ -175,8 +177,8 @@ class GithubIssueHandler(ConnectionHandler):
                 break
 
         return total_deleted
-    
-    def clean_connection_data(self, storage, seadb_api, project_uuid, 
+
+    def clean_connection_data(self, storage, seadb_api, project_uuid,
                               connection_id, tables):
         """Clean github issue connection data including issues and comments tables."""
         if tables:
@@ -185,15 +187,6 @@ class GithubIssueHandler(ConnectionHandler):
             for table in tables:
                 if table['name'] in (issues_table_name, comments_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])
-    
-    def add_sync_task(self, app, connection_id):
-        app.sync_manager.add_sync_task(connection_id)
-    
-    def add_recovering_sync_task(self, mq, connection_id):
-        msg_content = {
-            'connection_id': connection_id,
-        }
-        mq.lpush('sync_task', json.dumps(msg_content))
 
     def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api):
         page = 1

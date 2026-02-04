@@ -8,9 +8,9 @@ from seaqa_indexer import config
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.syncer.sync_manager import ForumNotFoundException, \
     ForumInActiveException
+from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.handlers import get_handler
 
 
 application = Flask(__name__)
@@ -52,13 +52,15 @@ def auth_required(func):
 @auth_required
 def add_connection_sync_task():
     connection_id = request.args.get('connection_id')
-    task_type = request.args.get('type')
-    
-    conn_handler = get_handler(task_type)
-    if conn_handler:
-        conn_handler.add_sync_task(application.app, connection_id)
+    connection_type = request.args.get('type')
+
+    if connection_type == ConnectionType.SITE.value:
+        application.app.web_crawl_manager.add_crawl_site_task(connection_id)
+    elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
+                       ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
+        application.app.sync_manager.check_and_sync(connection_id)
     else:
-        return jsonify({'success': False, 'error_msg': f'Unsupported type: {task_type}'}), 400
+        return jsonify({'success': False, 'error_msg': f'Unsupported type: {connection_type}'}), 400
 
     return jsonify({'success': True}), 200
 
@@ -75,9 +77,11 @@ def manual_sync_connection():
 
     # Enqueue sync task
     try:
-        conn_handler = get_handler(connection_type)
-        if conn_handler:
-            conn_handler.add_sync_task(application.app, connection_id)
+        if connection_type == ConnectionType.SITE.value:
+            application.app.web_crawl_manager.add_crawl_site_task(connection_id)
+        elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
+                                 ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
+            application.app.sync_manager.check_and_sync(connection_id)
         else:
             return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
     except Exception as e:

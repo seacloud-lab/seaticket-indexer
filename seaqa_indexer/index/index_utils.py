@@ -11,11 +11,7 @@ from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
 from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
-from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
-
-from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
-from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary, \
-    gen_kb_summary_index_name, gen_ticket_index_name, gen_content_vector_index_name, \
+from seaqa_indexer.index.utils import fix_summary, gen_kb_summary_index_name, gen_ticket_index_name,\
     gen_ticket_summary_index_name, gen_kb_index_name
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
@@ -149,35 +145,8 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
         if not handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
-        table_name = handler.gen_table_name(connection_id)
-        content_vector_index = ContentVectorIndex(seasearch_api)
-        content_index_name = gen_content_vector_index_name(connection_id, connection_type)
-        content_vector_index.create_index_if_missing(content_index_name)
-
-        since = get_since_time(last_content_vector_indexed_at)
-
-        index_count = content_vector_index.update(
-            table_name,
-            content_index_name,
-            connection_id,
-            project_uuid,
-            content_vector_status,
-            seaqa_db,
-            seadb_api,
-            storage,
-            since
-        )
-
-        content_vector_status['last_content_vector_indexed_count'] = index_count
-        content_vector_status['last_content_vector_index_status'] = IndexStatus.COMPLETED
-        content_vector_indexed_at = datetime.datetime.now(datetime.UTC)
-        seaqa_db.update_content_vector_status_and_time(
-            connection_id,
-            json.dumps(content_vector_status),
-            content_vector_indexed_at
-        )
-
-        logger.info('Finish content vector indexing for connection %s, indexed %d chunks', connection_id, index_count)
+        handler.update_content_vector_index(project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api,
+                                            storage, seasearch_api, last_content_vector_indexed_at)
     except Exception as e:
         logger.exception('Connection %s update content vector index failed, error: %s', connection_id, e)
         content_vector_status['last_content_vector_index_status'] = IndexStatus.FAILED
@@ -222,38 +191,9 @@ def update_connection_summary_index(connection_id, seaqa_db, seadb_api, seasearc
         handler = get_handler(connection_type)
         if not handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
-            ai_status['last_ai_index_status'] = IndexStatus.FAILED
-            seaqa_db.update_ai_status_and_time(connection_id, json.dumps(ai_status))
             return
-        table_name = handler.gen_table_name(connection_id)
 
-        fixed_count = fix_summary(project_uuid, table_name, seadb_api)
-        if fixed_count > 0:
-            logger.info('Fixed %d missing embeddings for connection %s before indexing', fixed_count, connection_id)
-
-        summary_vector_index = SummaryVectorIndex(seasearch_api)
-        ai_index_name = gen_conn_summary_index_name(connection_id, connection_type)
-        summary_vector_index.create_index_if_missing(ai_index_name)
-
-        since = get_since_time(last_ai_indexed_at)
-
-        index_count = summary_vector_index.update(
-            table_name,
-            ai_index_name,
-            connection_id,
-            project_uuid,
-            ai_status,
-            seaqa_db,
-            seadb_api,
-            since,
-        )
-
-        ai_status['last_ai_indexed_count'] = index_count
-        ai_status['last_ai_index_status'] = IndexStatus.COMPLETED
-        ai_indexed_at = datetime.datetime.now(datetime.UTC)
-        seaqa_db.update_ai_indexed_at_and_status(connection_id, ai_indexed_at, json.dumps(ai_status))
-
-        logger.info('Finish summary vector indexing for connection %s, indexed %d documents', connection_id, index_count)
+        handler.update_summary_index(project_uuid, connection_id, seadb_api, ai_status, seaqa_db, seasearch_api, last_ai_indexed_at)
     except Exception as e:
         logger.exception('Connection %s update AI index failed, error: %s', connection_id, e)
         ai_status['last_ai_index_status'] = IndexStatus.FAILED

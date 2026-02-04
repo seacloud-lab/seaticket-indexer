@@ -1,45 +1,85 @@
+import logging
+import json
+import datetime
+
 from abc import ABC, abstractmethod
+from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
+from seaqa_indexer.utils import get_since_time
+from seaqa_indexer.utils.constants import IndexStatus
+from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionHandler(ABC):
     connection_type: str = None
-    table_class = None
-    index_class = None
-    
+
     @abstractmethod
     def gen_table_name(self, connection_id) -> str:
         pass
-    
-    @abstractmethod
-    def get_index_instance(self, seasearch_api):
-        pass
-    
+
     @abstractmethod
     def get_search_param(self, index_instance, index_name, keyword, start, size, time_from, time_to) -> dict:
         pass
-    
+
+    def delete_summary_vector_index_by_connection_id(self, seasearch_api, connection_id):
+        summary_vector_index_name = gen_conn_summary_index_name(connection_id, self.connection_type)
+        summary_vector_index = SummaryVectorIndex(seasearch_api)
+        summary_vector_index.delete_index_by_index_name(summary_vector_index_name)
+
     @abstractmethod
-    def delete_index(self, index_manager, connection_id) -> None:
+    def delete_index_by_connection_id(self, seasearch_api, connection_id):
         pass
-    
+
     @abstractmethod
     def format_vector_search_result(self, record, connection, result) -> dict:
         pass
-    
+
     @abstractmethod
     def process_ai(self, seadb_api, storage, connection_id, project_uuid) -> int:
         pass
-    
+
     @abstractmethod
     def update_index(self, connection, seasearch_api, seaqa_db) -> None:
         pass
-    
+
+    def update_summary_index(self, project_uuid, connection_id, seadb_api, ai_status, seaqa_db, seasearch_api, last_ai_indexed_at):
+        table_name = self.gen_table_name(connection_id)
+
+        fixed_count = fix_summary(project_uuid, table_name, seadb_api)
+        if fixed_count > 0:
+            logger.info('Fixed %d missing embeddings for connection %s before indexing', fixed_count, connection_id)
+
+        summary_vector_index = SummaryVectorIndex(seasearch_api)
+        ai_index_name = gen_conn_summary_index_name(connection_id, self.connection_type)
+        summary_vector_index.create_index_if_missing(ai_index_name)
+
+        since = get_since_time(last_ai_indexed_at)
+
+        index_count = summary_vector_index.update(
+            table_name,
+            ai_index_name,
+            connection_id,
+            project_uuid,
+            ai_status,
+            seaqa_db,
+            seadb_api,
+            since,
+        )
+
+        ai_status['last_ai_indexed_count'] = index_count
+        ai_status['last_ai_index_status'] = IndexStatus.COMPLETED
+        ai_indexed_at = datetime.datetime.now(datetime.UTC)
+        seaqa_db.update_ai_indexed_at_and_status(connection_id, ai_indexed_at, json.dumps(ai_status))
+        logger.info('Finish summary vector indexing for connection %s, indexed %d documents', connection_id,
+                    index_count)
+
     @abstractmethod
-    def sync(self, connection_id, project_uuid, config, old_last_sync_time, 
+    def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger) -> tuple:
         """ Returns: tuple: (sync_count, total_count, is_update_config, config) """
         pass
-    
+
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time) -> int:
         page_size = 1000
         total_deleted = 0
@@ -64,17 +104,9 @@ class ConnectionHandler(ABC):
                 break
 
         return total_deleted
-    
+
     @abstractmethod
-    def clean_connection_data(self, storage, seadb_api, project_uuid, 
+    def clean_connection_data(self, storage, seadb_api, project_uuid,
                               connection_id, tables) -> None:
         """Clean all SeaDB tables and storage associated with a deleted connection."""
-        pass
-    
-    @abstractmethod
-    def add_sync_task(self, app, connection_id) -> None:
-        pass
-    
-    @abstractmethod
-    def add_recovering_sync_task(self, mq, connection_id) -> None:
         pass
