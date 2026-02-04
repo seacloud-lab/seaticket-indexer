@@ -2,13 +2,10 @@ import requests
 import logging
 import datetime
 import re
-import json
-from urllib.parse import urlparse
 
-from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX, ConnectionType
+from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.utils import uuid_str_to_32_chars
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 
 
 logger = logging.getLogger(__name__)

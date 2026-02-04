@@ -7,7 +7,6 @@ from threading import Thread, Event
 
 from seaqa_indexer.config import LOG_FILE, LOG_LEVEL
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
