@@ -13,9 +13,7 @@ from seaqa_indexer.mq import get_mq
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.seadb_models.models import WebCrawlTable, GithubIssuesTable, GithubIssueCommentsTable, \
-    DiscourseTopicsTable, DiscourseRepliesTable, SeafileTable, EmailTable, ThreadTable
+from seaqa_indexer.handlers import get_handler
 
 
 logger = logging.getLogger(__name__)
@@ -106,36 +104,13 @@ class ProjectConnectionCleaner(object):
         # delete connection index
         self.index_manager.delete_index_by_connection(connection_id, connection_type)
 
-        base_metadata = self.seadb_api.get_base_metadata(project_uuid)
-        tables = base_metadata.get('tables')
-
-        if connection_type == ConnectionType.SITE.value:
-            self.storage.delete_site(connection_id, project_uuid)
-            if tables:
-                for table in tables:
-                    if table['name'] == WebCrawlTable.gen_table_name(connection_id):
-                        self.seadb_api.delete_table(project_uuid, table['id'])
-        elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-            if tables:
-                for table in tables:
-                    if table['name'] == GithubIssuesTable.gen_table_name(connection_id) or table['name'] == GithubIssueCommentsTable.gen_table_name(connection_id):
-                        self.seadb_api.delete_table(project_uuid, table['id'])
-        elif connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            if tables:
-                for table in tables:
-                    if table['name'] == DiscourseTopicsTable.gen_table_name(connection_id) or table['name'] == DiscourseRepliesTable.gen_table_name(connection_id):
-                        self.seadb_api.delete_table(project_uuid, table['id'])
-        elif connection_type == ConnectionType.SEAFILE.value:
-            if tables:
-                for table in tables:
-                    if table['name'] == SeafileTable.gen_table_name(connection_id):
-                        self.seadb_api.delete_table(project_uuid, table['id'])
-        elif connection_type == ConnectionType.EMAIL.value:
-            self.storage.delete_site(connection_id, project_uuid)
-            if tables:
-                for table in tables:
-                    if table['name'] == EmailTable.gen_table_name(connection_id) or table['name'] == ThreadTable.gen_table_name(connection_id):
-                        self.seadb_api.delete_table(project_uuid, table['id'])
+        handler = get_handler(connection_type)
+        if handler:
+            base_metadata = self.seadb_api.get_base_metadata(project_uuid)
+            tables = base_metadata.get('tables')
+            handler.clean_connection_data(self.storage, self.seadb_api, project_uuid, connection_id, tables)
+        else:
+            logger.warning('No handler found for connection type: %s', connection_type)
 
         # delete db record
         self.delete_deleted_connection(connection_id)
@@ -184,7 +159,6 @@ def start():
         project_connection_cleaner.start()
     except Exception as e:
         logger.exception(e)
-        project_connection_cleaner.clear()
         os._exit(0)
 
     while True:

@@ -52,14 +52,15 @@ def auth_required(func):
 @auth_required
 def add_connection_sync_task():
     connection_id = request.args.get('connection_id')
-    task_type = request.args.get('type')
-    if task_type == ConnectionType.SITE.value:
+    connection_type = request.args.get('type')
+
+    if connection_type == ConnectionType.SITE.value:
         application.app.web_crawl_manager.add_crawl_site_task(connection_id)
-    elif task_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
+    elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
                        ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
-        application.app.sync_manager.add_sync_task(connection_id)
+        application.app.sync_manager.check_and_sync(connection_id)
     else:
-        return jsonify({'success': False, 'error_msg': f'Unsupported type: {task_type}'}), 400
+        return jsonify({'success': False, 'error_msg': f'Unsupported type: {connection_type}'}), 400
 
     return jsonify({'success': True}), 200
 
@@ -80,7 +81,7 @@ def manual_sync_connection():
             application.app.web_crawl_manager.add_crawl_site_task(connection_id)
         elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
                                  ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
-            application.app.sync_manager.add_sync_task(connection_id)
+            application.app.sync_manager.check_and_sync(connection_id)
         else:
             return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
     except Exception as e:

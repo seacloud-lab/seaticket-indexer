@@ -1,30 +1,11 @@
 import logging
 import json
 import datetime
-import time
-import os
 
-from urllib.parse import urlparse
-from dateutil.relativedelta import relativedelta
-
-from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
-from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType, REPO_NAME_CACHE_TIME_OUT, REPO_FILE_SIZE_LIMIT, SYNC_FILE_SUFFIXES
-from seaqa_indexer.utils import decrypt_config, time_to_utc_time, encrypt_config, get_file_suffix, \
-    need_update_connection_last_sync_count
-from seaqa_indexer.utils.github_issues_api import GitHubAPI
-from seaqa_indexer.index.utils import get_content_by_download_link
-from seaqa_indexer.utils.seahub_api import FileNotFoundException
-from seaqa_indexer.index.extract import ExtractorFactory
-from seaqa_indexer.utils.seahub_api import SeahubAPI
-from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
-from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
-from seaqa_indexer.app.event_redis import redis_cache
+from seaqa_indexer.utils.constants import CrawlStatus
+from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
-from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
-from seaqa_indexer.utils.imap_mail import ImapMail
-from seaqa_indexer.crawler.storage import get_storage
-from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
-from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
+from seaqa_indexer.handlers import get_handler
 
 logger = logging.getLogger(__name__)
 
@@ -58,93 +39,28 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
-    is_update_config = False
 
-    sync_count = 0
-    total_count = 0
     try:
-        if connection_type == ConnectionType.DISCOURSE_FORUM.value:
-            forum_url = config['url']
-            discourse_api_key = config['api_key']
-            discourse_api_username = config['api_username']
-            sync_years = config.get('sync_years', 5)
+        conn_handler = get_handler(connection_type)
+        if not conn_handler:
+            logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
+            sync_logger.log(f'Unsupported connection type: {connection_type}')
+            connection_status['last_sync_status'] = CrawlStatus.FAILED
+            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+            sync_logger.stop_capture()
+            return
 
-            project_uuid = project_connection.project_uuid
-            project_created_at = project_connection.created_at
-            discourse_forum_api = DiscourseForumAPI(forum_url, discourse_api_key, discourse_api_username)
+        sync_count, total_count, is_update_config, config = conn_handler.sync(
+            connection_id, project_uuid, config, old_last_sync_time,
+            connection_status, seaqa_db, sync_logger
+        )
 
-            discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
-            # Calculate sync_earliest_time by subtracting sync_years from project_created_time
-            project_created_time_utc = time_to_utc_time(str(project_created_at))
-            sync_earliest_time = project_created_time_utc - relativedelta(years=sync_years)
-            sync_count, total_count = sync_discourse(connection_id, sync_earliest_time, old_last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db)
+        if sync_count is None:
+            connection_status['last_sync_status'] = CrawlStatus.FAILED
+            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+            sync_logger.stop_capture()
+            return
 
-        if connection_type == ConnectionType.GITHUB_ISSUE.value:
-            server_url = config.get('repository')
-            token = config.get('access_token')
-            try:
-                path = urlparse(server_url).path
-                parts = path.strip("/").split("/")
-                repo_owner, repo_name = parts[0], parts[1]
-            except Exception as e:
-                logger.warning("github repository is invalid: %s", e)
-                sync_logger.log(f"Github repository is invalid")
-                connection_status['last_sync_status'] = CrawlStatus.FAILED
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                sync_logger.stop_capture()
-                return
-            since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
-            github_api = GitHubAPI(token, repo_owner, repo_name)
-            github_seadb_api = GitHubSeaDBAPI(project_uuid)
-            sync_count, total_count = sync_github_issue(connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api)
-
-        if connection_type == ConnectionType.SEAFILE.value:
-            old_repo_name = config.get('repo_name')
-            server_url = config.get('server_url')
-            api_token = config.get('api_token')
-            since = old_last_sync_time
-            is_first_update = False
-            if not since:
-                since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-                is_first_update = True
-            since = time_to_utc_time(str(since)).isoformat()
-            seahub_api = SeahubAPI(server_url, api_token)
-            repo_info = seahub_api.get_repo_info()
-            repo_id = repo_info.get('repo_id')
-            new_repo_name = repo_info.get('repo_name')
-
-            redis_cache.set(repo_id, json.dumps({server_url: new_repo_name}), REPO_NAME_CACHE_TIME_OUT)
-            config['repo_id'] = repo_id
-            config['repo_name'] = new_repo_name
-            if old_repo_name != new_repo_name:
-                is_update_config = True
-
-            seafile_seadb_api = SeafileSeaDBAPI(project_uuid)
-            sync_count, total_count = sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger)
-        if connection_type == ConnectionType.EMAIL.value:
-            imap_host = config.get('imap_host')
-            imap_port = config.get('imap_port')
-            email_user = config.get('username')
-            email_password = config.get('password')
-            sync_years = config.get('sync_years', 5)
-            since = old_last_sync_time
-            is_first_update = False
-            if not since:
-                since = datetime.datetime.now(datetime.UTC) - relativedelta(years=sync_years)
-                is_first_update = True
-            since = time_to_utc_time(str(since)).isoformat()
-            email_seadb_api = EmailSeaDBAPI(project_uuid)
-            storage = get_storage()
-            try:
-                imap = ImapMail(imap_host, email_user, email_password, port=imap_port)
-            except Exception as e:
-                logger.error("connection_id %s imap_host: %s, email_user: %s, login error: %s", connection_id, imap_host, email_user, e)
-                sync_logger.log(f"imap account is invalid")
-                connection_status['last_sync_status'] = CrawlStatus.FAILED
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                sync_logger.stop_capture()
-                return
-            sync_count, total_count = sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_update)
     except Exception as e:
         logger.exception('connection: %s, sync failed, error: %s', connection_id, e)
         try:
@@ -202,278 +118,3 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     }
     mq.lpush('index_task', json.dumps(msg_content))
     mq.lpush('ai_process_task', json.dumps(msg_content))
-
-
-def sync_github_issue(connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api):
-    page = 1
-    per_page = 100  # max 100
-    sync_count = 0
-    _status_last_update_time = datetime.datetime.now()
-    _status_last_update_count = 0
-
-    issues_labels = github_api.get_issues_labels(page, per_page)
-    github_seadb_api.add_or_update_issue_label_column_options(connection_id, issues_labels)
-
-    while True:
-        issues = github_api.list_issues(since=since, state='all', per_page=per_page, page=page)
-        if not issues:
-            break
-
-        for issue in issues:
-            if 'pull_request' in issue:
-                continue
-
-            # Check if issue already exists in DB
-            issue_id = issue['id']
-            existed_issue = github_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
-            if existed_issue:
-                if time_to_utc_time(issue.get('updated_at')) <= time_to_utc_time(str(existed_issue.get('modified_time'))):
-                    logger.debug(f'Issue {issue_id} is up to date, skipping sync.')
-                    continue
-
-            sync_count += 1
-            github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
-            should, new_time, new_count = need_update_connection_last_sync_count(
-                sync_count, _status_last_update_time, _status_last_update_count
-            )
-            if should:
-                connection_status['last_sync_count'] = sync_count
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                _status_last_update_time = new_time
-                _status_last_update_count = new_count
-
-            # sync issue comments
-            comments_page = 1
-            all_comments = []
-            while True:
-                comments = github_api.get_issue_comments(issue['number'], per_page=per_page, page=comments_page)
-                all_comments += comments
-                comments_page += 1
-                if not comments or len(comments) < per_page:
-                    break
-
-            github_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
-
-        if len(issues) < per_page:
-            break
-        page += 1
-
-    total_count = github_seadb_api.get_github_issues_count(connection_id)
-    return sync_count, total_count
-
-
-def sync_seafile(connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger):
-    page = 1
-    per_page = 1000
-    sync_count = 0
-    _status_last_update_time = datetime.datetime.now()
-    _status_last_update_count = 0
-    # sync updated files
-    while True:
-        resp = seahub_api.get_recently_changed_files(since, page, per_page)
-        page += 1
-        recently_changed_files = resp.get('files', [])
-        if not recently_changed_files:
-            break
-
-        for file in recently_changed_files:
-            parent_dir = file.get('_parent_dir')
-            dirent_name = file.get('_name')
-            modified_time = file.get('_file_mtime')
-            size = file.get('_size')
-
-            file_suffix = get_file_suffix(dirent_name)
-            if file_suffix not in SYNC_FILE_SUFFIXES:
-                continue
-
-            existed_file = seafile_seadb_api.get_file_by_path(connection_id, parent_dir, dirent_name)
-            if existed_file:
-                if time_to_utc_time(modified_time) <= time_to_utc_time(str(existed_file.get('modified_time'))):
-                    logger.debug(f'connection_id %s parent_dir %s filename: %s is up to date, skipping sync.', connection_id, parent_dir, dirent_name)
-                    continue
-
-            content = ''
-            if size < REPO_FILE_SIZE_LIMIT:
-                file_path = os.path.join(parent_dir, dirent_name)
-                extractor = ExtractorFactory.get_extractor(dirent_name)
-                if extractor:
-                    try:
-                        download_link = seahub_api.get_download_link(os.path.join(parent_dir, dirent_name))
-                    except FileNotFoundException:
-                        logger.warning('connection: %s, repo_id: %s, parent_dir: %s, name: %s file not found',
-                                       connection_id, repo_id, parent_dir, dirent_name)
-                        sync_logger.log(f'File not found: {parent_dir}/{dirent_name}')
-                        continue
-                    content = get_content_by_download_link(download_link)
-                    content = extractor.extract(connection_id, repo_id, content, file_path)
-            file_info = {
-                'path': parent_dir,
-                'filename': dirent_name,
-                'modified_time': modified_time,
-                'size': size,
-                'content': content if content else '',
-            }
-            seafile_seadb_api.save_or_update_file_to_db(connection_id, file_info, existed_file)
-            should, new_time, new_count = need_update_connection_last_sync_count(
-                sync_count, _status_last_update_time, _status_last_update_count
-            )
-            if should:
-                connection_status['last_sync_count'] = sync_count
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                _status_last_update_time = new_time
-                _status_last_update_count = new_count
-            sync_count += 1
-
-    # sync deleted files
-    page = 1
-    per_page = 1000
-    while True:
-        if is_first_update:
-            break
-        resp = seahub_api.get_recently_deleted_files(since, page, per_page)
-        page += 1
-        recently_deleted_files = resp.get('files', [])
-        if not recently_deleted_files:
-            break
-
-        for file in recently_deleted_files:
-            file_suffix = get_file_suffix(file.get('obj_name'))
-            if file_suffix not in SYNC_FILE_SUFFIXES:
-                continue
-            path = '/' + file.get('path').strip('/')
-            file_info = {
-                'path': path,
-                'filename': file.get('obj_name'),
-            }
-            seafile_seadb_api.mark_file_as_deleted(connection_id, file_info)
-
-    total_count = seafile_seadb_api.get_file_total_count(connection_id)
-    return sync_count, total_count
-
-
-def sync_email(connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_sync):
-    sync_count = 0
-    _status_last_update_time = datetime.datetime.now()
-    _status_last_update_count = 0
-
-    since = time_to_utc_time(str(since))
-    today = datetime.datetime.now(datetime.timezone.utc).date()
-
-    # Due to time zone differences, emails sent on the same day may not be available for retrieval within that time frame.
-    # Therefore, the search scope has been expanded to include a full day.
-    before_date = since.date() - datetime.timedelta(days=1)
-
-    while before_date <= today:
-        since_date = before_date
-        before_date += datetime.timedelta(days=EMAIL_SYNC_INTERVAL_DAYS)
-
-        email_list = imap.search_emails(since_date, before_date)
-        new_email_list = []
-        for email in email_list:
-            if not email:
-                continue
-            existed_email = {}
-            if not is_first_sync:
-                message_id = email.get('message_id')
-                modified_time = email.get('email_date')
-                existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
-                if existed_email:
-                    existed_date = time_to_utc_time(str(existed_email.get('modified_time')))
-                    email_thread_id = existed_email.get('thread_id')
-                    if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
-                        logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
-                        continue
-            email_info = {
-                'message_id': email.get('message_id'),
-                'reply_to_message_id': email.get('reply_to_message_id'),
-                'email_date': email.get('email_date'),
-                'subject': email.get('subject'),
-                'is_sender': email.get('is_sender'),
-            }
-            new_email_list.append(email_info)
-
-            upload_email_attachment(connection_id, project_uuid, storage, email)
-
-            email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email)
-            should, new_time, new_count = need_update_connection_last_sync_count(
-                sync_count, _status_last_update_time, _status_last_update_count
-            )
-            if should:
-                connection_status['last_sync_count'] = sync_count
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                _status_last_update_time = new_time
-                _status_last_update_count = new_count
-            sync_count += 1
-        if new_email_list:
-            insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
-
-    total_count = email_seadb_api.get_email_total_count(connection_id)
-    return sync_count, total_count
-
-
-def sync_discourse(connection_id, sync_earliest_time, last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db):
-    page = 0
-    should_stop = False
-    sync_count = 0
-    _status_last_update_time = datetime.datetime.now()
-    _status_last_update_count = 0
-
-    if last_sync_time:
-        last_sync_time = time_to_utc_time(str(last_sync_time))
-
-    while True:
-        topics = discourse_forum_api.fetch_latest_topics_page(page)
-
-        if not topics:
-            break
-
-        for topic_data in topics:
-            topic_modified_time = time_to_utc_time(topic_data.get('bumped_at'))
-
-            if last_sync_time and topic_modified_time <= last_sync_time and not topic_data.get('pinned'):
-                should_stop = True
-                break
-
-            if topic_modified_time <= sync_earliest_time:
-                if topic_data.get('pinned'):
-                    continue
-                should_stop = True
-                break
-
-            topic_id = topic_data.get('id')
-
-            # Check if topic already exists in DB
-            existing_topic = discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id)
-            if existing_topic:
-                existing_modified_time = time_to_utc_time(str(existing_topic.get('modified_time')))
-                if topic_modified_time <= existing_modified_time:
-                    logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
-                    continue
-
-            primary_key = existing_topic.get('_pk')
-            if primary_key:
-                discourse_seadb_api.update_topic(connection_id, primary_key, topic_data)
-            else:
-                discourse_seadb_api.insert_topic(connection_id, topic_id, topic_data)
-
-            # sync topic replies
-            topic_replies = discourse_forum_api.fetch_topic_replies(topic_id)
-            discourse_seadb_api.update_topic_replies(connection_id, topic_id, topic_replies)
-
-            sync_count += 1
-            should, new_time, new_count = need_update_connection_last_sync_count(
-                sync_count, _status_last_update_time, _status_last_update_count
-            )
-            if should:
-                connection_status['last_sync_count'] = sync_count
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                _status_last_update_time = new_time
-                _status_last_update_count = new_count
-            time.sleep(1)
-
-        page += 1
-        if should_stop:
-            break
-
-    total_count = discourse_seadb_api.get_topic_count(connection_id)
-    return sync_count, total_count

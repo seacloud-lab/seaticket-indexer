@@ -11,23 +11,10 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
-from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.seadb_models.models import (
-    WebCrawlTable, GithubIssuesTable, GithubIssueCommentsTable,
-    DiscourseTopicsTable, DiscourseRepliesTable, SeafileTable, EmailTable, ThreadTable
-)
+from seaqa_indexer.handlers import get_handler
 
 
 logger = logging.getLogger(__name__)
-
-
-CONNECTION_TYPE_TO_TABLE = {
-    ConnectionType.SITE.value: WebCrawlTable,
-    ConnectionType.GITHUB_ISSUE.value: GithubIssuesTable,
-    ConnectionType.DISCOURSE_FORUM.value: DiscourseTopicsTable,
-    ConnectionType.SEAFILE.value: SeafileTable,
-    ConnectionType.EMAIL.value: ThreadTable,
-}
 
 
 class DeletedRecordsCleaner(object):
@@ -81,147 +68,20 @@ class DeletedRecordsCleaner(object):
             project_uuid = connection.project_uuid
 
             try:
-                table_class = CONNECTION_TYPE_TO_TABLE.get(connection_type)
-                if not table_class:
+                handler = get_handler(connection_type)
+                if not handler:
                     logger.debug('Unsupported connection type for cleaning: %s', connection_type)
                     continue
 
-                table_name = table_class.gen_table_name(connection_id)
+                table_name = handler.gen_table_name(connection_id)
                 cutoff_time = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=self.delete_after_days)).isoformat()
 
-                if connection_type == ConnectionType.DISCOURSE_FORUM.value:
-                    self._clean_deleted_discourse_records(project_uuid, connection_id, table_name, cutoff_time)
-                elif connection_type == ConnectionType.GITHUB_ISSUE.value:
-                    self._clean_deleted_github_records(project_uuid, connection_id, table_name, cutoff_time)
-                elif connection_type == ConnectionType.EMAIL.value:
-                    self._clean_deleted_email_records(project_uuid, connection_id, table_name, cutoff_time)
-                else:
-                    self._clean_deleted_records(project_uuid, connection_id, table_name, cutoff_time)
+                total_deleted = handler.clean_deleted_records(
+                    self.seadb_api, project_uuid, connection_id, cutoff_time
+                )
+                logger.info('Deleted %d records from connection %s table %s',  total_deleted, connection_id, table_name)
             except Exception as e:
                 logger.exception('Failed to clean deleted records for connection %s: %s', connection_id, e)
-
-    def _clean_deleted_records(self, project_uuid, connection_id, table_name, cutoff_time):
-        """Query and delete records in batches."""
-        page_size = 1000
-        total_deleted = 0
-
-        while True:
-            sql = f"""
-                SELECT _pk FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            deleted_pks = [row.get('_pk') for row in rows]
-            self.seadb_api.delete_rows(project_uuid, table_name, deleted_pks)
-            total_deleted += len(deleted_pks)
-
-            if len(rows) < page_size:
-                break
-
-        logger.info('Deleted %d records from connection %s table %s', total_deleted, connection_id, table_name)
-
-    def _clean_deleted_discourse_records(self, project_uuid, connection_id, table_name, cutoff_time):
-        """Query and delete discourse topic records and their replies in batches."""
-        page_size = 1000
-        replies_table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        total_deleted = 0
-
-        while True:
-            sql = f"""
-                SELECT _pk, topic_id FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            deleted_pks = [row.get('_pk') for row in rows]
-            deleted_topic_ids = [row.get('topic_id') for row in rows]
-
-            self.seadb_api.delete_rows(project_uuid, table_name, deleted_pks)
-            for topic_id in deleted_topic_ids:
-                delete_sql = f"DELETE FROM `{replies_table_name}` WHERE topic_id = {topic_id}"
-                self.seadb_api.query_rows(project_uuid, delete_sql)
-
-            total_deleted += len(deleted_pks)
-
-            if len(rows) < page_size:
-                break
-
-        logger.info('Deleted %d discourse records from connection %s', total_deleted, connection_id)
-
-    def _clean_deleted_github_records(self, project_uuid, connection_id, table_name, cutoff_time):
-        """Query and delete github issue records and their comments in batches."""
-        page_size = 1000
-        comments_table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
-        total_deleted = 0
-
-        while True:
-            sql = f"""
-                SELECT _pk, issue_id FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            deleted_pks = [row.get('_pk') for row in rows]
-            deleted_issue_ids = [row.get('issue_id') for row in rows]
-
-            self.seadb_api.delete_rows(project_uuid, table_name, deleted_pks)
-            for issue_id in deleted_issue_ids:
-                delete_sql = f"DELETE FROM `{comments_table_name}` WHERE issue_id = {issue_id}"
-                self.seadb_api.query_rows(project_uuid, delete_sql)
-
-            total_deleted += len(deleted_pks)
-
-            if len(rows) < page_size:
-                break
-
-        logger.info('Deleted %d github issue records from connection %s', total_deleted, connection_id)
-
-    def _clean_deleted_email_records(self, project_uuid, connection_id, table_name, cutoff_time):
-        """Query and delete email thread records and their emails in batches."""
-        page_size = 1000
-        email_table_name = EmailTable.gen_table_name(connection_id)
-        total_deleted = 0
-
-        while True:
-            sql = f"""
-                SELECT _pk FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
-                LIMIT {page_size}
-            """
-            result = self.seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            deleted_pks = [row.get('_pk') for row in rows]
-
-            # Delete from thread table
-            self.seadb_api.delete_rows(project_uuid, table_name, deleted_pks)
-
-            # Delete related emails
-            for thread_id in deleted_pks:
-                delete_sql = f"DELETE FROM `{email_table_name}` WHERE thread_id = {thread_id}"
-                self.seadb_api.query_rows(project_uuid, delete_sql)
-
-            total_deleted += len(deleted_pks)
-
-            if len(rows) < page_size:
-                break
-
-        logger.info('Deleted %d email thread records from connection %s', total_deleted, connection_id)
 
     def clear(self):
         self.should_stop.set()
