@@ -1,4 +1,4 @@
-import os
+import sys
 import time
 import logging
 import threading
@@ -143,7 +143,7 @@ class ProjectConnectionCleaner(object):
 
     def signal_term_handler(self, signal, frame):
         logger.info("Exit project connection cleaner process")
-        os._exit(0)
+        sys.exit(0)
 
     def set_signal(self):
         # TODO: look like python will add signal to queue when cpu exec c extension code,
@@ -159,7 +159,7 @@ def start():
         project_connection_cleaner.start()
     except Exception as e:
         logger.exception(e)
-        os._exit(0)
+        sys.exit(1)
 
     while True:
         # if main thread has been quit or join for subthread.

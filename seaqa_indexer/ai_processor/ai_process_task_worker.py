@@ -1,127 +1,69 @@
-import os
-import time
-import logging
 import json
-import threading
-import signal
-from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
+import logging
 
-from seaqa_indexer import config
-from seaqa_indexer.app.log import LogConfigurator
-from seaqa_indexer.mq import get_mq
+from seaqa_indexer.workers.base_task_worker import LockingTaskWorker, run_worker
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.ai_processor.ai_processor import generate_summaries_and_vectors, process_knowledge_base_ai
+from seaqa_indexer.ai_processor.ai_processor import (
+    generate_summaries_and_vectors,
+    process_knowledge_base_ai,
+    process_ticket_ai
+)
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.ai_processor.ai_processor import process_ticket_ai
+
 
 logger = logging.getLogger(__name__)
 
 
-class AIProcessTaskWorker(object):
+class AIProcessTaskWorker(LockingTaskWorker):
+    def get_queue_name(self) -> str:
+        return 'ai_process_task'
 
-    def __init__(self):
-        self.should_stop = threading.Event()
-        self.worker_num = 2
+    def get_worker_name(self) -> str:
+        return 'ai_process_task_worker'
 
-        self.LOCK_TIMEOUT = 1800
-        self.REFRESH_INTERVAL = 600
-        self.locked_keys = set()
+    def get_lock_key(self, task_id) -> str:
+        return f'ai_process_{task_id}'
 
-        self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
+    def init_dependencies(self):
         self.storage = get_storage()
         self.seadb_api = SeaDBAPI()
         self.db_session_class = init_db_session_class()
         self.seaqa_db = SeaqaDB(self.db_session_class)
 
-        self.set_signal()
-        self.worker_list = []
-
-    @property
-    def tname(self):
-        return threading.current_thread().name
-
-    def _get_ai_process_lock_key(self, id):
-        return 'ai_process_' + str(id)
-
-    def clear_worker(self):
-        for th in self.worker_list:
-            th.join()
-        logger.info("All AI process task threads has stopped.")
-
-    def start(self):
-        if not self.mq:
-            return
-        for i in range(int(self.worker_num)):
-            t = threading.Thread(target=self.ai_process_task_worker, name='ai_process_task_worker_thread_' + str(i), daemon=True)
-            t.start()
-
-        threading.Thread(target=self.refresh_lock, name='refresh_thread', daemon=True).start()
-
-    def ai_process_task_worker(self):
-        logger.info('%s starting AI process task worker' % self.tname)
-        try:
-            while not self.should_stop.is_set():
-                try:
-                    res = self.mq.brpop('ai_process_task', timeout=30)
-                    if res is not None:
-                        key, value = res
-                        try:
-                            data = json.loads(value)
-                        except:
-                            data = None
-                        if not data:
-                            logger.warning('ai_process_task: invalid.', res)
-                        else:
-                            task_type = data.get('type')
-                            if task_type == 'knowledge_base':
-                                project_uuid = data.get('project_uuid')
-                                self.kb_task_handler(project_uuid)
-                            elif task_type == 'ticket':
-                                project_uuid = data.get('project_uuid')
-                                self.tickets_task_handler(project_uuid)
-                            else:
-                                connection_id = data.get('connection_id')
-                                self.work_task_handler(connection_id)
-                except (ResponseError, NoMQAvailable, TimeoutError) as e:
-                    logger.error('The connection to the redis server failed: %s' % e)
-        except Exception as e:
-            logger.error('%s AI process project connection Error' % self.tname)
-            logger.error(e, exc_info=True)
-            time.sleep(0.3)
+    def process_message(self, data: dict):
+        task_type = data.get('type')
+        if task_type == 'knowledge_base':
+            project_uuid = data.get('project_uuid')
+            self.kb_task_handler(project_uuid)
+        elif task_type == 'ticket':
+            project_uuid = data.get('project_uuid')
+            self.tickets_task_handler(project_uuid)
+        else:
+            connection_id = data.get('connection_id')
+            self.work_task_handler(connection_id)
 
     def work_task_handler(self, connection_id):
-        if self.mq.set(self._get_ai_process_lock_key(connection_id), time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-            logger.info('%s start AI process project connection: %s' % (self.tname, connection_id))
-            lock_key = self._get_ai_process_lock_key(connection_id)
-            self.locked_keys.add(lock_key)
-            self.process_ai_summary(connection_id)
-            try:
-                self.locked_keys.remove(lock_key)
-            except KeyError:
-                logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
-            self.mq.delete(lock_key)
-            logger.info(
-                "%s Finish AI process connection: %s, delete redis lock %s" % (self.tname, connection_id, lock_key))
-        else:
-            logger.warning('another ai process task is running, drop this task, connection_id: %s', connection_id)
+        self.execute_with_lock(
+            connection_id,
+            self.process_ai_summary,
+            connection_id
+        )
 
     def tickets_task_handler(self, project_uuid):
-        if not self.should_stop.is_set():
-            lock_key = self._get_ai_process_lock_key('ticket_' + str(project_uuid))
-            if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                logger.info('%s start AI process tickets: %s' % (self.tname, project_uuid))
-                self.locked_keys.add(lock_key)
-                self.process_tickets_ai_summary(project_uuid)
-                try:
-                    self.locked_keys.remove(lock_key)
-                except KeyError:
-                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
-                self.mq.delete(lock_key)
-                logger.info("%s Finish AI process tickets: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
-            else:
-                logger.warning('another ticket ai process task is running, drop this task, project_uuid: %s', project_uuid)
+        self.execute_with_lock(
+            f'ticket_{project_uuid}',
+            self.process_tickets_ai_summary,
+            project_uuid
+        )
+
+    def kb_task_handler(self, project_uuid):
+        self.execute_with_lock(
+            f'kb_{project_uuid}',
+            self.process_kb_ai_summary,
+            project_uuid
+        )
 
     def process_tickets_ai_summary(self, project_uuid):
         try:
@@ -141,21 +83,6 @@ class AIProcessTaskWorker(object):
         except Exception as e:
             logger.exception('AI process connection: %s failed, error: %s', connection_id, e)
 
-    def kb_task_handler(self, project_uuid):
-        if not self.should_stop.is_set():
-            lock_key = self._get_ai_process_lock_key('kb_' + str(project_uuid))
-            if self.mq.set(lock_key, time.time(), ex=self.LOCK_TIMEOUT, nx=True):
-                logger.info('%s start AI process knowledge base of project: %s' % (self.tname, project_uuid))
-                self.locked_keys.add(lock_key)
-                self.process_kb_ai_summary(project_uuid)
-                try:
-                    self.locked_keys.remove(lock_key)
-                except KeyError:
-                    logger.error("%s is already removed. SHOULD NOT HAPPEN!" % lock_key)
-                self.mq.delete(lock_key)
-                logger.info("%s Finish AI process knowledge base of project: %s, delete redis lock %s" % (self.tname, project_uuid, lock_key))
-            else:
-                logger.warning('another kb ai process task is running, drop this task, project_uuid: %s', project_uuid)
 
     def process_kb_ai_summary(self, project_uuid):
         try:
@@ -168,58 +95,9 @@ class AIProcessTaskWorker(object):
         except Exception as e:
             logger.exception('AI process knowledge base of project: %s failed, error: %s', project_uuid, e)
 
-    def refresh_lock(self):
-        logger.info('%s Starting refresh locks', self.tname)
-        while not self.should_stop.is_set():
-            try:
-                copy = self.locked_keys.copy()
-
-                for lock in copy:
-                    ttl = self.mq.ttl(lock)
-                    new_ttl = ttl + self.REFRESH_INTERVAL
-                    self.mq.expire(lock, new_ttl)
-                    logger.debug('%s Refresh lock [%s] timeout from %s to %s' %
-                                 (self.tname, lock, ttl, new_ttl))
-                time.sleep(self.REFRESH_INTERVAL)
-            except Exception as e:
-                logger.exception(e)
-                time.sleep(1)
-
-    def clear(self):
-        if not self.mq:
-            return
-        self.should_stop.set()
-        time.sleep(1)
-        for key in self.locked_keys:
-            self.mq.delete(key)
-            logger.info("redis lock key %s has been deleted", key)
-        logger.info("Exit AI process worker process")
-        os._exit(0)
-
-    def signal_term_handler(self, signal, frame):
-        self.clear()
-
-    def set_signal(self):
-        signal.signal(signal.SIGTERM, self.signal_term_handler)
-
-
-def start():
-    ai_process_task_worker = AIProcessTaskWorker()
-    logger.info("AI process task worker process initialized.")
-    try:
-        ai_process_task_worker.start()
-    except Exception as e:
-        logger.exception(e)
-        ai_process_task_worker.clear()
-        os._exit(0)
-
-    while True:
-        time.sleep(2)
-
 
 def main():
-    LogConfigurator(config.LOG_LEVEL, config.LOG_FILE)
-    start()
+    run_worker(AIProcessTaskWorker)
 
 
 if __name__ == "__main__":
