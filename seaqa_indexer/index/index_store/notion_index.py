@@ -31,9 +31,6 @@ class NotionIndex(BaseIndex):
             'modified_time': {
                 'type': 'date',
             },
-            'page_id': {
-                'type': 'text',
-            }
         }
     }
 
@@ -48,7 +45,7 @@ class NotionIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'title', 'content', 'modified_time', 'page_id'],
+            '_source': ['connection_id', 'title', 'content', 'modified_time'],
             'sort': [
                 '_score'
             ],
@@ -82,20 +79,20 @@ class NotionIndex(BaseIndex):
                 break
 
             for notion_page in pages:
-                page_id = notion_page.get('page_id')
                 pk = notion_page.get('_pk')
                 key = str(pk)
                 if notion_page.get('deleted') or notion_page.get('outdated'):
                     need_cleared_pages_index_set.add(key)
                 else:
                     content = notion_page.get('content') or ''
+                    if len(content) > INDEX_CONTENT_LIMIT:
+                        content = content[:INDEX_CONTENT_LIMIT]
 
                     doc = {
                         'connection_id': str(connection_id),
                         'title': notion_page.get('title'),
                         'content': content,
                         'modified_time': notion_page.get('modified_time'),
-                        'page_id': notion_page.get('page_id'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)

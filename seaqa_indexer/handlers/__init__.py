@@ -1,4 +1,5 @@
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
+from seaqa_indexer.handlers.notion_handler import NotionHandler
 from seaqa_indexer.handlers.registry import (
     ConnectionHandlerRegistry,
     get_handler,
@@ -14,6 +15,7 @@ ConnectionHandlerRegistry.register(DiscourseHandler)
 ConnectionHandlerRegistry.register(GithubIssueHandler)
 ConnectionHandlerRegistry.register(SeafileHandler)
 ConnectionHandlerRegistry.register(EmailHandler)
+ConnectionHandlerRegistry.register(NotionHandler)
 
 
 __all__ = [

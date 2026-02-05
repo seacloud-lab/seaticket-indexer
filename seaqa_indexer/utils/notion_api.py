@@ -73,7 +73,6 @@ class NotionAPI:
             if not cursor:
                 break
 
-            #avoid the api rate limit psc
             time.sleep(0.34)
 
         return blocks
