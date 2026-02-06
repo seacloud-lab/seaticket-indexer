@@ -47,7 +47,6 @@ class EmailHandler(ConnectionHandler):
     def format_vector_search_result(self, record, connection, result):
         return {
             'title': record.get('title', ''),
-            'modified_time': record.get('modified_time', ''),
         }
 
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):

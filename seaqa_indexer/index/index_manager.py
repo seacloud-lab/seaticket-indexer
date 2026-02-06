@@ -113,6 +113,7 @@ def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_re
 
         formatted_result['connection_id'] = connection_id
         formatted_result['type'] = connection_type
+        formatted_result['modified_time'] = record.get('modified_time')
 
         conn_handler = get_handler(connection_type)
         if not conn_handler:
@@ -269,7 +270,7 @@ class IndexManager:
                     'content': source['content'],
                     'score': score,
                     '_id': _id,
-                    'type': 'site',
+                    'type': ConnectionType.SEAFILE.value,
                 }
                 result_docs.append(r)
             # TODO other index type
@@ -280,7 +281,7 @@ class IndexManager:
                     'content': source['content'],
                     'score': score,
                     '_id': _id,
-                    'type': 'email',
+                    'type': ConnectionType.EMAIL.value,
                 }
                 result_docs.append(r)
             elif index_name.startswith(ConnectionType.GITHUB_ISSUE.value):
@@ -303,7 +304,7 @@ class IndexManager:
                     'score': score,
                     'url': url,
                     '_id': _id,
-                    'type': 'github_issue',
+                    'type': ConnectionType.GITHUB_ISSUE.value,
                 }
 
                 result_docs.append(r)
@@ -323,7 +324,7 @@ class IndexManager:
                     'modified_time': source['modified_time'],
                     'url': topic_url,
                     '_id': _id,
-                    'type': 'discourse_forum',
+                    'type': ConnectionType.DISCOURSE_FORUM.value,
                 }
                 result_docs.append(r)
             elif index_name.startswith("knowledge_base_"):

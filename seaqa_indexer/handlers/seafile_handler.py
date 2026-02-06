@@ -58,7 +58,6 @@ class SeafileHandler(ConnectionHandler):
             'repo_id': repo_id,
             'repo_name': repo_name,
             'server_url': server_url,
-            'modified_time': record.get('modified_time', ''),
             'url': url,
         }
 

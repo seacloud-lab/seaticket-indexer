@@ -54,7 +54,6 @@ class DiscourseHandler(ConnectionHandler):
             'title': record.get('title', ''),
             'slug': record.get('slug', ''),
             'topic_id': record.get('topic_id', ''),
-            'modified_time': record.get('modified_time', ''),
             'url': topic_url,
         }
 
