@@ -11,6 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 class ImapMail(object):
+
+    _EMAIL_TYPE_MAP = {
+        'imap.fastmail.com': 'fastmail',
+    }
+
     def __init__(self, serveraddress, user, passwd, port=None, timeout=None, ssl_context=ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)):
         self.serveraddress = serveraddress
         self.user = user
@@ -20,6 +25,10 @@ class ImapMail(object):
         self.ssl_context = ssl_context
         self.server = None
         self.login()
+
+    @property
+    def email_type(self):
+        return self._EMAIL_TYPE_MAP.get(self.serveraddress)
 
     def client(self):
         self.server = IMAPClient(self.serveraddress, self.port, timeout=self.timeout, ssl_context=self.ssl_context)
@@ -195,7 +204,10 @@ class ImapMail(object):
 
             offset = 100
             for i in range(0, len(email_ids), offset):
-                emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]'])
+                if self.email_type == 'fastmail':
+                    emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]', 'EMAILID', 'THREADID'])
+                else:
+                    emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]'])
                 is_sender = False
                 if email_folder == sent_box:
                     is_sender = True
@@ -203,6 +215,9 @@ class ImapMail(object):
                 for uid, message_data in emails.items():
                     mail_body = message_data[b'BODY[]']
                     email_dict = self.gen_email_dict(mail_body, is_sender)
+                    if self.email_type == 'fastmail':
+                        email_dict['email_id'] = message_data.get(b'EMAILID')[0].decode()
+                        email_dict['origin_thread_id'] = message_data.get(b'THREADID')[0].decode()
                     yield email_dict
 
     def close(self):
