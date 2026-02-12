@@ -396,6 +396,8 @@ class EmailTable(BaseModel):
     sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     thread_id = MappedColumn('thread_id', PropertyTypes.INT)
+    email_id = MappedColumn('email_id', PropertyTypes.TEXT)
+    origin_thread_id = MappedColumn('origin_thread_id', PropertyTypes.TEXT)
 
     @classmethod
     def gen_table_name(cls, connection_id):

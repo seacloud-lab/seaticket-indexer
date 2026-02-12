@@ -23,6 +23,8 @@ class EmailSeaDBAPI:
             'modified_time': time_to_utc_time(email['email_date']).isoformat(),
             'reply_to_message_id': email['reply_to_message_id'],
             'is_sender': email['is_sender'],
+            'email_id': email.get('email_id'),
+            'origin_thread_id': email.get('origin_thread_id'),
             'sync_time': datetime.datetime.now(datetime.UTC).isoformat(),
             'record_modified_time': datetime.datetime.now(datetime.UTC).isoformat(),
             'deleted': False,
@@ -130,7 +132,7 @@ class EmailSeaDBAPI:
 
     def get_email_by_message_id(self, connection_id, message_id):
         table_name = EmailTable.gen_table_name(connection_id)
-        sql = f"SELECT _pk, modified_time FROM `{table_name}` WHERE message_id='{message_id}'"
+        sql = f"SELECT _pk, modified_time, thread_id FROM `{table_name}` WHERE message_id='{message_id}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         result = res.get('results', [])
         return result[0] if result else {}
