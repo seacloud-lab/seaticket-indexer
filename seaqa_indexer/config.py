@@ -85,10 +85,10 @@ MYSQL_DB_NAME = configs.get('SEAQA_MYSQL_SEAQA_DB_NAME', 'sea_qa')
 MYSQL_UNIX_SOCKET = os.getenv('WEB_CRAWLER_MYSQL_UNIX_SOCKET', '')
 
 # SeaDB Configuration
-SEADB_INNER_SERVER_URL = configs.get('SEADB_INNER_SERVER_URL', '')
+SEADB_SERVER_URL = configs.get('SEADB_SERVER_URL', 'http://seadb:8888')
 
 # SeaQA AI
-SEAQA_AI_INNER_SERVER_URL = configs.get('SEAQA_AI_INNER_SERVER_URL', '')
+SEAQA_AI_INNER_SERVER_URL = configs.get('SEAQA_AI_INNER_SERVER_URL', 'http://seaqa-ai:8887')
 
 # index setting
 LANG = configs.get('LANG', 'chinese')
