@@ -35,6 +35,9 @@ class ListTypes:
     vector = {
         "list_type": "float32",
     }
+    int = {
+        "list_type": "int64",
+    }
 
 class SelectTypes:
     ticket_status = {
@@ -408,6 +411,7 @@ class ThreadTable(BaseModel):
     unread = MappedColumn('unread', PropertyTypes.BOOL)
     sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    tags = MappedColumn('tags', PropertyTypes.LIST, ListTypes.int)
     outdated = MappedColumn('outdated', PropertyTypes.BOOL)
     record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
     ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
