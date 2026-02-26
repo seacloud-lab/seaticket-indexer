@@ -36,7 +36,7 @@ class ConnectionHandler(ABC):
         pass
 
     @abstractmethod
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid) -> int:
+    def process_ai(self, seadb_api, storage, seaqa_db, connection_id, project_uuid) -> int:
         pass
 
     @abstractmethod

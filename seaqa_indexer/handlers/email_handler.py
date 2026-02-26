@@ -49,11 +49,14 @@ class EmailHandler(ConnectionHandler):
             'title': record.get('title', ''),
         }
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, storage, seaqa_db, connection_id, project_uuid):
         page_size = 100
         updates = []
         table_name = self.gen_table_name(connection_id)
         email_seadb_api = EmailSeaDBAPI(project_uuid)
+        project = seaqa_db.get_ai_summary_output_language(project_uuid)
+        settings = json.loads(project.settings)
+        lang = settings.get('lang')
 
         ai_processing_count = 0
         while True:
@@ -67,7 +70,7 @@ class EmailHandler(ConnectionHandler):
                 content = result.get('content', '')
 
                 full_content = f"Title: {title}\n\nBody: {content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.EMAIL.value, project_uuid)
+                summary, vector = generate_summary(full_content, ConnectionType.EMAIL.value, project_uuid, lang)
                 updates.append({
                     "pk": pk,
                     "row": {

@@ -193,3 +193,9 @@ class SeaqaDB(object):
                      AND pc.deleted = false
                      AND pc.last_sync_time >= DATE_SUB(NOW(), INTERVAL :days DAY)"""
             return session.execute(text(sql), {'days': days}).fetchall()
+
+    def get_ai_summary_output_language(self, project_uuid):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = "SELECT settings FROM projects WHERE uuid=:project_uuid AND deleted=false"
+            return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()

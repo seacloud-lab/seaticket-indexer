@@ -48,7 +48,7 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
         
-        ai_processing_count = conn_handler.process_ai(seadb_api, storage, connection_id, project_uuid)
+        ai_processing_count = conn_handler.process_ai(seadb_api, storage, seaqa_db, connection_id, project_uuid)
         
         logger.info('AI processing completed for connection %s', connection_id)
         ai_status['last_ai_processing_status'] = AIStatus.COMPLETED
