@@ -66,8 +66,8 @@ class SeafileHandler(ConnectionHandler):
         updates = []
         table_name = self.gen_table_name(connection_id)
         seafile_api = SeafileSeaDBAPI(project_uuid)
-        project = seaqa_db.get_ai_summary_output_language(project_uuid)
-        settings = json.loads(project.settings)
+        project_settings = seaqa_db.get_project_settings_by_project_uuid(project_uuid)
+        settings = json.loads(project_settings.settings)
         lang = settings.get('lang')
 
         ai_processing_count = 0
