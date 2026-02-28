@@ -67,7 +67,7 @@ class GithubIssueHandler(ConnectionHandler):
         table_name = self.gen_table_name(connection_id)
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
         project_settings = seaqa_db.get_project_settings_by_project_uuid(project_uuid)
-        settings = json.loads(project_settings.settings)
+        settings = json.loads(project_settings) if project_settings else {}
         lang = settings.get('lang')
 
         ai_processing_count = 0

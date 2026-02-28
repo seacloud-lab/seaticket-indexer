@@ -60,7 +60,7 @@ class SiteHandler(ConnectionHandler):
         ai_processing_count = 0
         table_name = self.gen_table_name(connection_id)
         project_settings = seaqa_db.get_project_settings_by_project_uuid(project_uuid)
-        settings = json.loads(project_settings.settings)
+        settings = json.loads(project_settings) if project_settings else {}
         lang = settings.get('lang')
 
         while True:

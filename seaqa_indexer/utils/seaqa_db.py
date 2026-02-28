@@ -198,4 +198,7 @@ class SeaqaDB(object):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
             sql = "SELECT settings FROM projects WHERE uuid=:project_uuid AND deleted=false"
-            return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
+            return session.execute(
+                text(sql),
+                {'project_uuid': project_uuid}
+            ).scalar_one_or_none()
