@@ -57,11 +57,14 @@ class DiscourseHandler(ConnectionHandler):
             'url': topic_url,
         }
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, storage, seaqa_db, connection_id, project_uuid):
         page_size = 100
         updates = []
         table_name = self.gen_table_name(connection_id)
         discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
+        project_settings = seaqa_db.get_project_settings_by_project_uuid(project_uuid)
+        settings = json.loads(project_settings) if project_settings else {}
+        lang = settings.get('lang')
 
         ai_processing_count = 0
         while True:
@@ -76,7 +79,7 @@ class DiscourseHandler(ConnectionHandler):
                 result = discourse_seadb_api.get_topic_first_reply(connection_id, topic_id)
                 first_content = result.get('content', '')
                 full_content = f"Title: {title}\n\nBody: {first_content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.DISCOURSE_FORUM.value, project_uuid)
+                summary, vector = generate_summary(full_content, ConnectionType.DISCOURSE_FORUM.value, project_uuid, lang)
                 updates.append({
                     "pk": pk,
                     "row": {

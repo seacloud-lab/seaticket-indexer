@@ -61,11 +61,14 @@ class GithubIssueHandler(ConnectionHandler):
             'url': url,
         }
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, storage, seaqa_db, connection_id, project_uuid):
         page_size = 100
         updates = []
         table_name = self.gen_table_name(connection_id)
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
+        project_settings = seaqa_db.get_project_settings_by_project_uuid(project_uuid)
+        settings = json.loads(project_settings) if project_settings else {}
+        lang = settings.get('lang')
 
         ai_processing_count = 0
         while True:
@@ -78,7 +81,7 @@ class GithubIssueHandler(ConnectionHandler):
                 content = row.get('content', '')
 
                 full_content = f"Title: {title}\n\nBody: {content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.GITHUB_ISSUE.value, project_uuid)
+                summary, vector = generate_summary(full_content, ConnectionType.GITHUB_ISSUE.value, project_uuid, lang)
                 updates.append({
                     "pk": pk,
                     "row": {

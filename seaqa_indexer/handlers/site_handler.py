@@ -54,11 +54,15 @@ class SiteHandler(ConnectionHandler):
             formatted['content'] = result.get('content', '')
         return formatted
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, storage, seaqa_db, connection_id, project_uuid):
         page_size = 100
         updates = []
         ai_processing_count = 0
         table_name = self.gen_table_name(connection_id)
+        project_settings = seaqa_db.get_project_settings_by_project_uuid(project_uuid)
+        settings = json.loads(project_settings) if project_settings else {}
+        lang = settings.get('lang')
+
         while True:
             sql = f"""
                 SELECT _pk, url FROM `{table_name}`
@@ -76,7 +80,7 @@ class SiteHandler(ConnectionHandler):
                 filename = url_to_filename(url)
                 file_json = storage.read_json(connection_id, project_uuid, filename)
                 content = file_json.get('content', '')
-                summary, vector = generate_summary(content, ConnectionType.SITE.value, project_uuid)
+                summary, vector = generate_summary(content, ConnectionType.SITE.value, project_uuid, lang)
                 updates.append({
                     "pk": pk,
                     "row": {
