@@ -100,15 +100,16 @@ def github_webhook():
         logger.exception(e)
         return {'error_msg': 'Bad request.'}, 400
 
-    connection_id = data.get('connection_id')
-
+    installation_id = data.get('installation_id')
     update_data = data.get('update_data')
 
-    if not connection_id:
-        return jsonify({'error_msg': 'Missing connection_id parameter'}), 400
+    if not installation_id:
+        return jsonify({'error_msg': 'Missing installation_id parameter'}), 400
     action = data.get('action')
     event = data.get('event')
+    repository_html_url = data.get('repository_html_url')
 
+    issue_id = ''
     if event == 'issues':
         try:
             issue_id = update_data['id']
@@ -122,7 +123,7 @@ def github_webhook():
             return jsonify({'error_msg': 'Missing expected field in webhook payload'}), 400
 
     try:
-        application.app.sync_manager.update_github_issues_by_webhook(connection_id, update_data, issue_id, action, event)
+        application.app.sync_manager.update_github_issues_by_webhook(installation_id, update_data, issue_id, action, event, repository_html_url)
     except Exception as e:
         logger.error(e)
         return jsonify({'error_msg': 'Internal Server Error'}), 500

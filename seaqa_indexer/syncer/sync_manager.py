@@ -97,29 +97,43 @@ class SyncManager(Thread):
         else:
             logger.warning(f"Unknown event type: {event_type}")
 
-    def update_github_issues_by_webhook(self, connection_id, update_data, issue_id, action, event):
-        project_connection = self.seaqa_db.get_project_connection_by_id(connection_id)
-        project_uuid = project_connection.project_uuid
-        github_seadb_api = GitHubSeaDBAPI(project_uuid)
+    def update_github_issues_by_webhook(self, installation_id, update_data, issue_id, action, event, repository_html_url):
+        if event not in ('issues', 'issue_comment', 'installation'):
+            return
 
-        if event == "issues":
-            logger.info(f"Received webhook for issue #{issue_id}, action: {action}, event: {event}")
-            modified_time = update_data.get("updated_at")
-            if action == 'deleted':
-                github_seadb_api.update_issue_record(connection_id, issue_id, modified_time, deleted=True)
-                return
+        if event == 'installation' and action != 'deleted':
+            return
+        project_connections = self.seaqa_db.get_project_connections_by_installation_id(installation_id)
+        for connection in project_connections:
+            project_uuid = connection.project_uuid
+            connection_id = connection.id
+            if not connection.is_active:
+                continue
+            connection_config = json.loads(connection.config)
+            if connection_config.get('repository').strip('/') != repository_html_url:
+                continue
+            github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
-        elif event == "issue_comment":
-            logger.info(f"Received webhook for issue_comment #{issue_id}, action: {action}, event: {event}")
-            comment_data = update_data.get('comment')
+            if event == "issues":
+                logger.info(f"Received webhook for issue #{issue_id}, action: {action}, event: {event}")
+                modified_time = update_data.get("updated_at")
+                if action == 'deleted':
+                    github_seadb_api.update_issue_record(connection_id, issue_id, modified_time, deleted=True)
+                    continue
 
-            if action == 'deleted':
-                comment_id = comment_data['id']
-                github_seadb_api.delete_comment_from_db(connection_id, comment_id)
-                github_seadb_api.update_issue_sync_and_record_time(connection_id, issue_id)
-                return
+            elif event == "issue_comment":
+                logger.info(f"Received webhook for issue_comment #{issue_id}, action: {action}, event: {event}")
+                comment_data = update_data.get('comment')
 
-        self.check_and_sync(connection_id)
+                if action == 'deleted':
+                    comment_id = comment_data['id']
+                    github_seadb_api.delete_comment_from_db(connection_id, comment_id)
+                    github_seadb_api.update_issue_sync_and_record_time(connection_id, issue_id)
+                    continue
+            elif event == 'installation' and action == 'deleted':
+                pass
+
+            self.check_and_sync(connection_id)
 
     def check_and_sync(self, connection_id):
         now_time = time.time()
