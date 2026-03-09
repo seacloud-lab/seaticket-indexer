@@ -97,7 +97,7 @@ LANG = configs.get('LANG', 'chinese')
 SEASEARCH_URL = configs.get('SEASEARCH_URL', '')
 SEASEARCH_TOKEN = configs.get('SEASEARCH_TOKEN', '')
 
-SEAQA_WEB_SECRET_KEY = configs.get('SEAQA_WEB_SECRET_KEY', '')
+SECRET_KEY = configs.get('SECRET_KEY', '')
 
 JWT_PRIVATE_KEY = configs.get('JWT_PRIVATE_KEY', '')
 
