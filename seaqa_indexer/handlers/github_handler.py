@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import GithubIssuesTable, GithubIssueCommentsTable
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.utils.github_issues_api import GitHubAPI
+from seaqa_indexer.utils.github_issues_api import GitHubAPI, GitHubAppNotInstalled
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.index.utils import gen_index_name_by_type
@@ -127,7 +127,7 @@ class GithubIssueHandler(ConnectionHandler):
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
         server_url = config.get('repository')
-        token = config.get('access_token')
+        installation_id = config.get('installation_id')
 
         try:
             path = urlparse(server_url).path
@@ -138,11 +138,15 @@ class GithubIssueHandler(ConnectionHandler):
             return None, None, None, None
 
         since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
-        github_api = GitHubAPI(token, repo_owner, repo_name)
+        try:
+            github_api = GitHubAPI(installation_id)
+        except GitHubAppNotInstalled:
+            sync_logger.log(f"Github app installation_id is incorrect")
+            return None, None, None, None
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
         sync_count, total_count = self._sync_github_issue(connection_id, since, connection_status,
-                                github_api, seaqa_db, github_seadb_api)
+                                github_api, seaqa_db, github_seadb_api, repo_owner, repo_name)
         return sync_count, total_count, False, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
@@ -188,18 +192,18 @@ class GithubIssueHandler(ConnectionHandler):
                 if table['name'] in (issues_table_name, comments_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])
 
-    def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api):
+    def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api, repo_owner, repo_name):
         page = 1
         per_page = 100  # max 100
         sync_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
 
-        issues_labels = github_api.get_issues_labels(page, per_page)
+        issues_labels = github_api.get_issues_labels(repo_owner, repo_name, page, per_page)
         github_seadb_api.add_or_update_issue_label_column_options(connection_id, issues_labels)
 
         while True:
-            issues = github_api.list_issues(since=since, state='all', per_page=per_page, page=page)
+            issues = github_api.list_issues(repo_owner, repo_name, since=since, state='all', per_page=per_page, page=page)
             if not issues:
                 break
 
@@ -230,7 +234,7 @@ class GithubIssueHandler(ConnectionHandler):
                 comments_page = 1
                 all_comments = []
                 while True:
-                    comments = github_api.get_issue_comments(issue['number'], per_page=per_page, page=comments_page)
+                    comments = github_api.get_issue_comments(repo_owner, repo_name, issue['number'], per_page=per_page, page=comments_page)
                     all_comments += comments
                     comments_page += 1
                     if not comments or len(comments) < per_page:

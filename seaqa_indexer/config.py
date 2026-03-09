@@ -47,12 +47,12 @@ class _ConfigParser(object):
     def __init__(self, yaml_file_path, component_name):
         assert yaml_file_path and component_name, "yaml_file_path and component_name must be specified in initilizing ConfigParser"
         self.refresh_yaml_configs(yaml_file_path, component_name)
-    
+
     def refresh_yaml_configs(self, yaml_file_path=None, component_name=None):
         self.yaml_file_path = yaml_file_path or self.yaml_file_path
         self.component_name = component_name or self.component_name
         self.yaml_configs = _read_yaml(self.yaml_file_path, self.component_name)
-    
+
     @_check_type
     def get(self, key, default=None):
         if key in os.environ:
@@ -110,3 +110,12 @@ S3_FILE_BUCKET = configs.get('S3_FILE_BUCKET')
 S3_WEB_CRAWL_BUCKET = configs.get('S3_WEB_CRAWL_BUCKET')
 S3_KEY_ID = configs.get('S3_KEY_ID')
 S3_SECRET_KEY = configs.get('S3_SECRET_KEY')
+
+GITHUB_APP_ID = configs.get('GITHUB_APP_ID')
+GITHUB_PRIVATE_KEY_PATH = configs.get('GITHUB_PRIVATE_KEY_PATH', '')
+
+if not GITHUB_PRIVATE_KEY_PATH:
+    raise RuntimeError('GITHUB_PRIVATE_KEY_PATH configured error.')
+
+with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:
+    GITHUB_PRIVATE_KEY = f.read()

@@ -10,6 +10,19 @@ class SeaqaDB(object):
     def __init__(self, db_session_class):
         self.db_session_class = db_session_class
 
+    def get_project_connections_by_installation_id(self, installation_id):
+        with self.db_session_class() as session:
+            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.is_active
+            FROM project_connection pc 
+            INNER JOIN projects p 
+            ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.deleted=false AND 
+            JSON_UNQUOTE(JSON_EXTRACT(`config`, '$.installation_id')) = :installation_id
+            """
+            connections = session.execute(
+                text(sql), {'installation_id': installation_id}
+            ).fetchall()
+            return connections
+
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, pc.ai_status, pc.content_vector_status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.indexed_at, pc.ai_indexed_at, pc.content_vector_indexed_at, pc.is_active, pc.created_at
