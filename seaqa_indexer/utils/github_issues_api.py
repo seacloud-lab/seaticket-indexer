@@ -20,17 +20,13 @@ class GitHubRepoNotFound(Exception):
 
 
 class GitHubAPI:
-    # def __init__(self, installation_id, owner, repo, timeout=60):
     def __init__(self, installation_id, timeout=60):
-        # self.owner = owner
-        # self.repo = repo
         self.installation_id = installation_id
         self.app_id = GITHUB_APP_ID
         self.app_private_key = GITHUB_PRIVATE_KEY
         self.timeout = timeout
-        self.headers = self._gen_headers()
         self.base_url = "https://api.github.com"
-        # self.base_url = f'https://api.github.com/repos/{self.owner}/{self.repo}'
+        self.headers = self._gen_headers()
 
     def generate_github_app_jwt(self):
         now = int(time.time())
