@@ -4,7 +4,7 @@ try:
 except ImportError:
     AES = None
 
-from seaqa_indexer.config import SEAQA_WEB_SECRET_KEY
+from seaqa_indexer.config import SECRET_KEY
 
 class AESPasswordDecodeError(Exception):
     pass
@@ -44,7 +44,7 @@ class AESPasswordHasher:
 
     def __init__(self, secret=None):
         if not secret:
-            secret = SEAQA_WEB_SECRET_KEY[:BLOCK_SIZE]
+            secret = SECRET_KEY[:BLOCK_SIZE]
         self.cipher = AES.new(secret.encode('utf-8'), AES.MODE_ECB)
 
     def encode(self, password):
