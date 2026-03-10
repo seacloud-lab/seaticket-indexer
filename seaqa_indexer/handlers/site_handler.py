@@ -1,6 +1,7 @@
 import json
 import logging
 import datetime
+from os import supports_effective_ids
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import WebCrawlTable
@@ -135,7 +136,8 @@ class SiteHandler(ConnectionHandler):
             seaqa_db,
             seadb_api,
             storage,
-            since
+            since,
+            self.connection_type
         )
 
         content_vector_status['last_content_vector_indexed_count'] = index_count

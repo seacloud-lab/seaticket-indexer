@@ -19,7 +19,8 @@ from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
-from seaqa_indexer.index.utils import gen_index_name_by_type
+from seaqa_indexer.index.utils import gen_index_name_by_type, gen_content_vector_index_name
+from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,11 @@ class SeafileHandler(ConnectionHandler):
         seafile_index = SeafileIndex(seasearch_api)
         seafile_index.delete_index_by_index_name(index_name)
 
+        # content vector index
+        content_index_name = gen_content_vector_index_name(connection_id, self.connection_type)
+        content_vector_index = ContentVectorIndex(seasearch_api)
+        content_vector_index.delete_index_by_index_name(content_index_name)
+
         # summary vector index
         self.delete_summary_vector_index_by_connection_id(seasearch_api, connection_id)
 
@@ -52,7 +58,7 @@ class SeafileHandler(ConnectionHandler):
         url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/' + record.get('path', '').strip(
             '/') + '/' + record.get('title', '')
 
-        return {
+        formatted = {
             'title': record.get('title', ''),
             'path': record.get('path', ''),
             'repo_id': repo_id,
@@ -60,6 +66,10 @@ class SeafileHandler(ConnectionHandler):
             'server_url': server_url,
             'url': url,
         }
+        if result.get('source_type') == 'chunk':
+            formatted['source_type'] = 'chunk'
+            formatted['content'] = result.get('content', '')
+        return formatted
 
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
@@ -121,6 +131,38 @@ class SeafileHandler(ConnectionHandler):
         connection_status['last_index_status'] = IndexStatus.COMPLETED
         new_indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status))
+
+    def update_content_vector_index(self, project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api,
+                                    storage, seasearch_api, last_content_vector_indexed_at):
+        table_name = self.gen_table_name(connection_id)
+        content_vector_index = ContentVectorIndex(seasearch_api)
+        content_index_name = gen_content_vector_index_name(connection_id, self.connection_type)
+        content_vector_index.create_index_if_missing(content_index_name)
+
+        since = get_since_time(last_content_vector_indexed_at)
+        index_count = content_vector_index.update(
+            table_name,
+            content_index_name,
+            connection_id,
+            project_uuid,
+            content_vector_status,
+            seaqa_db,
+            seadb_api,
+            storage,
+            since,
+            self.connection_type
+        )
+
+        content_vector_status['last_content_vector_indexed_count'] = index_count
+        content_vector_status['last_content_vector_index_status'] = IndexStatus.COMPLETED
+        content_vector_indexed_at = datetime.datetime.now(datetime.UTC)
+        seaqa_db.update_content_vector_status_and_time(
+            connection_id,
+            json.dumps(content_vector_status),
+            content_vector_indexed_at
+        )
+
+        logger.info('Finish content vector indexing for connection %s, indexed %d chunks', connection_id, index_count)
 
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):

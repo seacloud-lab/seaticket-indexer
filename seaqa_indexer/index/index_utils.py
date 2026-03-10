@@ -2,7 +2,7 @@ import logging
 import json
 import datetime
 
-from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
+from seaqa_indexer.utils.constants import IndexStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 from seaqa_indexer.index.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
@@ -136,8 +136,7 @@ def update_connection_content_vector_index(connection_id, seaqa_db, seadb_api, s
     last_content_vector_indexed_at = connection.content_vector_indexed_at
 
     try:
-        # Only support SITE type for now
-        if connection_type != ConnectionType.SITE.value:
+        if connection_type not in SUPPORT_VECTOR_RETRIEVAL_TYPES:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
 

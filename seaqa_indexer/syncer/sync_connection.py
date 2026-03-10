@@ -2,7 +2,7 @@ import logging
 import json
 import datetime
 
-from seaqa_indexer.utils.constants import CrawlStatus
+from seaqa_indexer.utils.constants import CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES
 from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.handlers import get_handler
@@ -118,3 +118,5 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     }
     mq.lpush('index_task', json.dumps(msg_content))
     mq.lpush('ai_process_task', json.dumps(msg_content))
+    if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
+        mq.lpush('content_vector_index_task', json.dumps({'connection_id': connection_id}))
