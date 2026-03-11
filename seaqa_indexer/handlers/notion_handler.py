@@ -9,7 +9,7 @@ from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
 from seaqa_indexer.ai_processor.utils import generate_summary
 from seaqa_indexer.utils.notion_api import NotionAPI
 
@@ -94,10 +94,7 @@ class NotionHandler(ConnectionHandler):
         notion_index_name = gen_index_name_by_type(connection_id, connection_type)
         notion_index.create_index_if_missing(notion_index_name)
 
-        since = old_indexed_at
-        if not since:
-            since = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-        since = time_to_utc_time(str(since)).isoformat()
+        since = get_since_time(old_indexed_at)
 
         index_count = notion_index.update(notion_index_name, connection_id, connection_status,
                                           seaqa_db, notion_seadb_api, since)
@@ -133,6 +130,7 @@ class NotionHandler(ConnectionHandler):
                 break
 
             deleted_pks = [row.get('_pk') for row in rows]
+            seadb_api.delete_rows(project_uuid, table_name, deleted_pks)
             total_deleted += len(deleted_pks)
 
             if len(rows) < page_size:
