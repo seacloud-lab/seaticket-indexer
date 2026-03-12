@@ -23,12 +23,6 @@ class NotionAPI:
         return headers
 
 
-    def fetch_page(self, page_id):
-        url = f"{self.base_url}/pages/{page_id}"
-        resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
-
     def search_pages(self, per_page, start_cursor=None):
         pages = []
 
@@ -87,27 +81,33 @@ class NotionAPI:
         return ""
 
 
-    def fetch_full_page(self, page_id):
+    def fetch_full_page(self, page):
+        if not page:
+            return {}
+
+        page_id = page.get("id")
+        if not page_id:
+            return {}
+
         blocks = self.fetch_blocks(page_id)
 
-        page = self.fetch_page(page_id)
-        created_by = page["created_by"]["id"]
-        last_edited_by = page["last_edited_by"]["id"]
-        creator = self.get_user_info(created_by)
-        last_modifier = self.get_user_info(last_edited_by)
+        created_by = page.get("created_by").get("id")
+        last_edited_by = page.get("last_edited_by").get("id")
+        creator = self.get_user_info(created_by) if created_by else None
+        last_modifier = self.get_user_info(last_edited_by) if last_edited_by else None
 
         parent = page.get("parent") or {}
         parent_page_id = parent.get("page_id") if parent.get("type") == "page_id" else None
 
         return {
-            "page_id": page["id"],
+            "page_id": page_id,
             "parent_page_id": parent_page_id,
             "title": self.extract_page_title(page),
-            'created_time': page['created_time'],
-            "last_modified_time": page['last_edited_time'],
-            'creator': creator,
-            'last_modifier': last_modifier,
-            "url": page['url'],
+            "created_time": page.get("created_time"),
+            "last_modified_time": page.get("last_edited_time"),
+            "creator": creator,
+            "last_modifier": last_modifier,
+            "url": page.get("url"),
             "blocks": blocks,
         }
 

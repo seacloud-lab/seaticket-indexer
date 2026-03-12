@@ -165,7 +165,7 @@ class NotionHandler(ConnectionHandler):
                 page_id = page.get('id')
                 if not page_id:
                     continue
-                notion_page = notion_api.fetch_full_page(page_id=page_id)
+                notion_page = notion_api.fetch_full_page(page)
                 if not notion_page:
                     continue
 
