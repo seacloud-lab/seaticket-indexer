@@ -89,8 +89,6 @@ class NotionAPI:
 
     def fetch_full_page(self, page_id):
         blocks = self.fetch_blocks(page_id)
-        if not blocks:
-            return {}
 
         page = self.fetch_page(page_id)
         created_by = page["created_by"]["id"]
