@@ -5,8 +5,7 @@ from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.ai_processor.utils import generate_chunks_embedding
 from seaqa_indexer.index.index_store.vector_base_index import VectorBaseIndex
-from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
-
+from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class ContentVectorIndex(VectorBaseIndex):
     }
 
     def update(self, table_name, index_name, connection_id, project_uuid,
-               content_vector_status, seaqa_db, seadb_api, storage, since):
+               content_vector_status, seaqa_db, seadb_api, storage, since, connection_type):
 
         index_count = 0
         page_size = 100  # Smaller page size since we process chunks
@@ -52,13 +51,36 @@ class ContentVectorIndex(VectorBaseIndex):
         bulk_params = []
 
         while True:
-            sql = f"""
-                SELECT _pk, url, deleted, outdated, sync_time, modified_time 
-                FROM `{table_name}` 
-                WHERE record_modified_time >= '{since}'
-                ORDER BY sync_time 
-                LIMIT {page_size} OFFSET {offset}
-            """
+            if connection_type == ConnectionType.SITE.value:
+                sql = f"""
+                    SELECT _pk, url, deleted, outdated, sync_time, modified_time 
+                    FROM `{table_name}` 
+                    WHERE record_modified_time >= '{since}'
+                    ORDER BY sync_time 
+                    LIMIT {page_size} OFFSET {offset}
+                """
+
+                def get_content(row):
+                    url = row.get('url')
+                    filename = url_to_filename(url)
+                    file_json = storage.read_json(connection_id, project_uuid, filename)
+                    return (file_json or {}).get('content')
+
+            elif connection_type == ConnectionType.SEAFILE.value:
+                sql = f"""
+                    SELECT _pk, content, deleted, outdated, sync_time, modified_time
+                    FROM `{table_name}`
+                    WHERE record_modified_time >= '{since}'
+                    ORDER BY sync_time
+                    LIMIT {page_size} OFFSET {offset}
+                """
+
+                def get_content(row):
+                    return row.get('content')
+
+            else:
+                return index_count
+
             result = seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])
             if not rows:
@@ -66,7 +88,6 @@ class ContentVectorIndex(VectorBaseIndex):
 
             for row in rows:
                 pk = row.get('_pk')
-                url = row.get('url')
                 deleted = row.get('deleted')
                 outdated = row.get('outdated')
                 modified_time = row.get('modified_time')
@@ -75,12 +96,9 @@ class ContentVectorIndex(VectorBaseIndex):
                     deleted_index_pk_set.add(pk)
                     continue
 
-                filename = url_to_filename(url)
-                file_json = storage.read_json(connection_id, project_uuid, filename)
-                content = (file_json or {}).get('content')
-
+                content = get_content(row)
                 if not content:
-                    logger.debug('Skip empty content document url=%s', url)
+                    logger.debug('Skip empty content document pk=%s', pk)
                     continue
 
                 # Chunk the content
@@ -115,12 +133,13 @@ class ContentVectorIndex(VectorBaseIndex):
 
             offset += page_size
 
-        if len(bulk_params) >= SEASEARCH_BULK_OPERATE_LIMIT:
+        if bulk_params:
             self.seasearch_api.bulk(index_name, bulk_params)
 
         if deleted_index_pk_set:
             self.delete_indexes_by_pks(index_name, deleted_index_pk_set)
         return index_count
+
 
     def semantic_search(self, index_names, query_vector, top_k=10, time_from=None, time_to=None):
         data = {

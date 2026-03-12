@@ -67,7 +67,8 @@ SYNC_FILE_SUFFIXES = office_suffixes + text_suffixes
 INDEX_CONTENT_LIMIT = 100 * 1000
 
 SUPPORT_VECTOR_RETRIEVAL_TYPES = {
-    ConnectionType.SITE.value
+    ConnectionType.SITE.value,
+    ConnectionType.SEAFILE.value,
 }
 
 SEASEARCH_BULK_OPERATE_LIMIT = 100
