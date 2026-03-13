@@ -107,8 +107,7 @@ class EmailHandler(ConnectionHandler):
         connection_status['last_index_status'] = IndexStatus.COMPLETED
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
-    def sync(self, connection_id, project_uuid, config, old_last_sync_time,
-             connection_status, seaqa_db, sync_logger):
+    def sync(self, connection_id, project_uuid, config, old_last_sync_time, connection_status, seaqa_db, sync_logger):
         imap_host = config.get('imap_host')
         imap_port = config.get('imap_port')
         email_user = config.get('username')
@@ -226,12 +225,14 @@ class EmailHandler(ConnectionHandler):
                 }
                 new_email_list.append(email_info)
 
-                upload_email_attachment(connection_id, project_uuid, storage, email)
+                pk = email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email)
+                upload_email_attachment(connection_id, project_uuid, storage, email, pk)
+                email_seadb_api.update_html_content_and_attachments(connection_id, pk, email)
 
-                email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email)
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count
                 )
+
                 if should:
                     connection_status['last_sync_count'] = sync_count
                     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))

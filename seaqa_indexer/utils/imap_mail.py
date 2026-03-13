@@ -99,8 +99,9 @@ class ImapMail(object):
 
     def get_attachments(self, msg):
         file_list = []
-        content_info = {}
+        filename2content_id = {}
         for part in msg.walk():
+            disposition = part.get_content_disposition()
             content_id = part.get('Content-ID')
             filename = part.get_filename()
             content_type = part.get_content_type()
@@ -109,11 +110,11 @@ class ImapMail(object):
             if filename is not None or (content_id is not None and 'image' in content_type):
                 data = part.get_payload(decode=True)
                 filename = self.decode_str(filename) if filename else content_id[1:-1] + '.' + content_type[6:]
-                file_list.append({'file_name': filename, 'file_data': data})
+                file_list.append({'file_name': filename, 'file_data': data, 'content_disposition': disposition})
 
             if content_id is not None and 'image' in content_type:
-                content_info[filename] = content_id[1:-1]
-        return file_list, content_info
+                filename2content_id[filename] = content_id[1:-1]
+        return file_list, filename2content_id
 
     def parse_addr(self, addr):
         addr_info = parseaddr(addr)
@@ -161,11 +162,11 @@ class ImapMail(object):
         if not header_info['To']:
             logger.warning('account: %s message: %s no recipient!', self.user, message_id)
         plain_content, html_content = self.get_content(msg)
-        file_list, content_info = self.get_attachments(msg)
+        file_list, filename2content_id = self.get_attachments(msg)
         email_dict['content'] = plain_content
         email_dict['html_content'] = html_content
-        email_dict['filename2content_id'] = content_info
-        email_dict['attachment'] = file_list
+        email_dict['filename2content_id'] = filename2content_id
+        email_dict['attachments'] = file_list
         email_dict['email_from'] = header_info.get('From')
         email_dict['email_to'] = header_info.get('To')
         email_dict['subject'] = header_info.get('Subject')
@@ -202,7 +203,7 @@ class ImapMail(object):
             search_criteria = f'(SINCE "{start_date}" BEFORE "{end_date}")'
             email_ids = self.server.search(search_criteria)
 
-            offset = 100
+            offset = 10
             for i in range(0, len(email_ids), offset):
                 if self.email_type == 'fastmail':
                     emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]', 'EMAILID', 'THREADID'])

@@ -1,3 +1,4 @@
+import os
 import json
 import boto3
 import logging
@@ -78,6 +79,10 @@ class S3Storage(BaseStorage):
         key = self._key(project_uuid, site_id, filename)
         self.client.put_object(Bucket=self.bucket, Key=key, Body=data)
 
+    def upload_connection_record_file(self, project_uuid, connection_id, pk, filename, data):
+        key = os.path.join(project_uuid, str(connection_id), str(pk), filename)
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=data)
+
     def read_json(self, site_id, project_uuid, filename):
         key = self._key(project_uuid, site_id, filename)
         try:
@@ -97,9 +102,9 @@ class S3Storage(BaseStorage):
         key = self._key(project_uuid, site_id, filename)
         self.client.delete_object(Bucket=self.bucket, Key=key)
 
-    def batch_delete_files(self, site_id, project_uuid, files):
+    def batch_delete_files(self, site_id, project_uuid, filenames):
         prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=site_id)
-        objects = [{'Key': prefix + file} for file in files]
+        objects = [{'Key': prefix + filename} for filename in filenames]
         self.client.delete_objects(Bucket=self.bucket, Delete={'Objects': objects})
 
     def list_files(self, site_id, project_uuid):
