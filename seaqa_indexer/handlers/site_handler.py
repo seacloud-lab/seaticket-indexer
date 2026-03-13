@@ -1,7 +1,6 @@
 import json
 import logging
 import datetime
-from os import supports_effective_ids
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import WebCrawlTable

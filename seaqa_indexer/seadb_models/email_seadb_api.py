@@ -18,15 +18,10 @@ class EmailSeaDBAPI:
             'title': email['subject'],
             'cc': email['cc'],
             'content': email['content'][:SEADB_CONTENT_SIZE_LIMIT],
-            'html_content': email['html_content'][:SEADB_CONTENT_SIZE_LIMIT],
-            'attachment': email['attachment'],
-            'modified_time': time_to_utc_time(email['email_date']).isoformat(),
             'reply_to_message_id': email['reply_to_message_id'],
             'is_sender': email['is_sender'],
             'email_id': email.get('email_id'),
             'origin_thread_id': email.get('origin_thread_id'),
-            'sync_time': datetime.datetime.now(datetime.UTC).isoformat(),
-            'record_modified_time': datetime.datetime.now(datetime.UTC).isoformat(),
             'deleted': False,
         }
 
@@ -36,13 +31,31 @@ class EmailSeaDBAPI:
             _pk = existed_email.get('_pk')
             update_row = [
                 {
-                "pk":_pk,
-                "row":insert_row,
+                    "pk": _pk,
+                    "row": insert_row,
                 }
             ]
             self.seadb_api.update_rows(self.base_id, table_name, update_row)
+            return _pk
         else:
-            self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
+            resp = self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
+            return resp.get('pks')[0]
+
+    def update_html_content_and_attachments(self, connection_id, pk, email):
+        table_name = EmailTable.gen_table_name(connection_id)
+        update_rows = [
+            {
+                "pk": pk,
+                "row": {
+                    'html_content': email['html_content'][:SEADB_CONTENT_SIZE_LIMIT],
+                    'attachments': email['attachments'],
+                    'sync_time': datetime.datetime.now(datetime.UTC).isoformat(),
+                    'record_modified_time': datetime.datetime.now(datetime.UTC).isoformat(),
+                    'modified_time': time_to_utc_time(email['email_date']).isoformat(),
+                }
+            }
+        ]
+        self.seadb_api.update_rows(self.base_id, table_name, update_rows)
 
     def update_email_thread_id(self, connection_id, message_id, thread_id):
         table_name = EmailTable.gen_table_name(connection_id)
