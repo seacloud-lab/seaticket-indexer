@@ -28,6 +28,9 @@ class NotionIndex(BaseIndex):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
+            'page_id': {
+                'type': 'keyword',
+            },
             'modified_time': {
                 'type': 'date',
             },
@@ -45,7 +48,7 @@ class NotionIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'title', 'content', 'modified_time'],
+            '_source': ['connection_id', 'page_id', 'title', 'content', 'modified_time'],
             'sort': [
                 '_score'
             ],
@@ -88,8 +91,12 @@ class NotionIndex(BaseIndex):
                     if len(content) > INDEX_CONTENT_LIMIT:
                         content = content[:INDEX_CONTENT_LIMIT]
 
+                    page_id = notion_page.get('page_id')
+                    if isinstance(page_id, str):
+                        page_id = page_id.replace('-', '')
                     doc = {
                         'connection_id': str(connection_id),
+                        'page_id': page_id,
                         'title': notion_page.get('title'),
                         'content': content,
                         'modified_time': notion_page.get('modified_time'),

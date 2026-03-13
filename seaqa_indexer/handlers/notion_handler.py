@@ -38,9 +38,13 @@ class NotionHandler(ConnectionHandler):
         self.delete_summary_vector_index_by_connection_id(seasearch_api, connection_id)
 
     def format_vector_search_result(self, record, connection, result):
+        page_id = record.get('page_id') or ''
+        url = f"https://www.notion.so/{page_id}" if page_id else ''
         return {
             'title': record.get('title', ''),
             'modified_time': record.get('modified_time', ''),
+            'page_id': page_id,
+            'url': url,
         }
 
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
@@ -109,7 +113,15 @@ class NotionHandler(ConnectionHandler):
         token = config.get('integration_secret')
         notion_api = NotionAPI(token)
         notion_seadb_api = NotionSeaDBAPI(project_uuid)
-        sync_count, total_count = self._sync_notion(connection_id, connection_status, notion_api, seaqa_db, notion_seadb_api)
+        since_time = time_to_utc_time(str(old_last_sync_time)).isoformat() if old_last_sync_time else None
+        sync_count, total_count = self._sync_notion(
+            connection_id,
+            connection_status,
+            notion_api,
+            seaqa_db,
+            notion_seadb_api,
+            since_time,
+        )
         return sync_count, total_count, False, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
@@ -146,7 +158,7 @@ class NotionHandler(ConnectionHandler):
                 if table['name'] == table_name:
                     seadb_api.delete_table(project_uuid, table['id'])
 
-    def _sync_notion(self, connection_id, connection_status, notion_api, seaqa_db, notion_seadb_api):
+    def _sync_notion(self, connection_id, connection_status, notion_api, seaqa_db, notion_seadb_api, since_time=None):
         per_page = 100  # max 100
         sync_count = 0
         _status_last_update_time = datetime.datetime.now()
@@ -162,6 +174,15 @@ class NotionHandler(ConnectionHandler):
                 break
 
             for page in pages:
+                if since_time:
+                    last_edited_time = page.get('last_edited_time')
+                    if last_edited_time:
+                        try:
+                            if time_to_utc_time(last_edited_time) < time_to_utc_time(since_time):
+                                has_more = False
+                                break
+                        except Exception:
+                            pass
                 page_id = page.get('id')
                 if not page_id:
                     continue
