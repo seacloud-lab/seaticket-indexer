@@ -12,7 +12,7 @@ class GitHubSeaDBAPI:
         self.base_id = base_id
         self.seadb_api = SeaDBAPI()
 
-    def update_issue_record(self, connection_id, issue_id, modified_time, comments_count=None, deleted=False):
+    def update_issue_record(self, connection_id, issue_id, modified_time, comment_count=None, deleted=False):
 
         row = {
             GithubIssuesTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
@@ -20,8 +20,8 @@ class GitHubSeaDBAPI:
             GithubIssuesTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
 
-        if comments_count is not None:
-            row[GithubIssuesTable.comments_count.name] = int(comments_count)
+        if comment_count is not None:
+            row[GithubIssuesTable.comment_count.name] = int(comment_count)
         if deleted:
             row[GithubIssuesTable.deleted.name] = deleted
 
@@ -76,7 +76,7 @@ class GitHubSeaDBAPI:
             GithubIssuesTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             GithubIssuesTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             GithubIssuesTable.closed_time.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
-            GithubIssuesTable.comments_count.name: issue.get('comments'),
+            GithubIssuesTable.comment_count.name: issue.get('comments'),
             GithubIssuesTable.deleted.name: False,
         }
 
