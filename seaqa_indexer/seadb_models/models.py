@@ -325,7 +325,7 @@ class GithubIssuesTable(BaseModel):
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
     sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
     closed_time = MappedColumn('closed_time', PropertyTypes.DATETIME)
-    comments_count = MappedColumn('comments_count', PropertyTypes.INT)
+    comment_count = MappedColumn('comment_count', PropertyTypes.INT)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     outdated = MappedColumn('outdated', PropertyTypes.BOOL)
     record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
