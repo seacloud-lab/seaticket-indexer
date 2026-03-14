@@ -34,6 +34,18 @@ CONNECTION_TYPE_TO_INDEX_PREFIX = {
     connection_type.value: connection_type.value + '_' for connection_type in ConnectionType
 }
 
+class AIScenario(Enum):
+    SUMMARY = 'summary'
+    AGENT = 'agent'
+    CHAT = 'chat'
+    SEARCH = 'search'
+    RECORD_GENERATION = 'record_generation'
+    UNKNOWN = 'unknown'
+
+    @classmethod
+    def is_valid(cls, value):
+        return value in {item.value for item in cls}
+
 text_suffixes = [
     'txt',
     'md',

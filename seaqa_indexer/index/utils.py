@@ -3,7 +3,7 @@ import logging
 import datetime
 import re
 
-from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX
+from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX, AIScenario
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.utils import uuid_str_to_32_chars
 
@@ -68,7 +68,7 @@ def fix_summary(project_uuid, table_name, seadb_api):
                 pk = row.get('_pk')
                 ai_summary = row.get('ai_summary')
 
-                embedding = generate_embedding(ai_summary, project_uuid)
+                embedding = generate_embedding(ai_summary, project_uuid, scenario=AIScenario.SUMMARY.value)
                 if not embedding:
                     logger.warning('Failed to generate embedding for pk=%s', pk)
                     continue

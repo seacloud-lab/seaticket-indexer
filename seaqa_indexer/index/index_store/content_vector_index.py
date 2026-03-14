@@ -5,7 +5,7 @@ from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.ai_processor.utils import generate_chunks_embedding
 from seaqa_indexer.index.index_store.vector_base_index import VectorBaseIndex
-from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType
+from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType, AIScenario
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class ContentVectorIndex(VectorBaseIndex):
                     continue
 
                 # Chunk the content
-                chunks, embeddings = generate_chunks_embedding(content, project_uuid)
+                chunks, embeddings = generate_chunks_embedding(content, project_uuid, scenario=AIScenario.SUMMARY.value)
                 # Delete old chunks for this document before adding new ones
                 self.delete_indexes_by_pks(index_name, [pk])
 
