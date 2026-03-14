@@ -3,6 +3,7 @@ import json
 import datetime
 
 from seaqa_indexer.utils.constants import CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES
+from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.handlers import get_handler
@@ -107,6 +108,18 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     if is_update_config:
         new_config = encrypt_config(config)
     seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time, config=new_config)
+
+    if connection_type in {
+        ConnectionType.GITHUB_ISSUE.value,
+        ConnectionType.DISCOURSE_FORUM.value,
+        ConnectionType.EMAIL.value,
+    } and int(sync_count or 0) > 0:
+        try:
+            issue_statistics_message = json.dumps({'project_uuid': project_uuid})
+            mq.publish('issue_statistics_update', issue_statistics_message)
+        except Exception as e:
+            logger.warning('Failed to publish issue_statistics_update for project %s: %s', project_uuid, e)
+
 
     logger.info('Finish sync connection: %s, last sync count %s', connection_id, sync_count)
     sync_logger.log(f'Finish sync connection: {connection_id}')
