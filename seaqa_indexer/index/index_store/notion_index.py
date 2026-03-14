@@ -4,6 +4,7 @@ import logging
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT, SEASEARCH_BULK_OPERATE_LIMIT
 from seaqa_indexer.index.index_store.base_index import BaseIndex
+from seaqa_indexer.utils import uuid_str_to_32_chars
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,6 @@ class NotionIndex(BaseIndex):
 
         return repo_query_info
 
-
     def update(self, index_name, connection_id, connection_status, seaqa_db, notion_seadb_api, since):
         index_count = 0
         page_size = 1000
@@ -91,9 +91,8 @@ class NotionIndex(BaseIndex):
                     if len(content) > INDEX_CONTENT_LIMIT:
                         content = content[:INDEX_CONTENT_LIMIT]
 
-                    page_id = notion_page.get('page_id')
-                    if isinstance(page_id, str):
-                        page_id = page_id.replace('-', '')
+                    page_id = uuid_str_to_32_chars(notion_page.get('page_id'))
+
                     doc = {
                         'connection_id': str(connection_id),
                         'page_id': page_id,

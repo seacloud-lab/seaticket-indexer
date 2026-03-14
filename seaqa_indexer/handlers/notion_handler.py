@@ -113,14 +113,13 @@ class NotionHandler(ConnectionHandler):
         token = config.get('integration_secret')
         notion_api = NotionAPI(token)
         notion_seadb_api = NotionSeaDBAPI(project_uuid)
-        since_time = time_to_utc_time(str(old_last_sync_time)).isoformat() if old_last_sync_time else None
         sync_count, total_count = self._sync_notion(
             connection_id,
             connection_status,
             notion_api,
             seaqa_db,
             notion_seadb_api,
-            since_time,
+            old_last_sync_time,
         )
         return sync_count, total_count, False, config
 
@@ -158,12 +157,14 @@ class NotionHandler(ConnectionHandler):
                 if table['name'] == table_name:
                     seadb_api.delete_table(project_uuid, table['id'])
 
-    def _sync_notion(self, connection_id, connection_status, notion_api, seaqa_db, notion_seadb_api, since_time=None):
+    def _sync_notion(self, connection_id, connection_status, notion_api, seaqa_db, notion_seadb_api, last_sync_time):
         per_page = 100  # max 100
         sync_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
         cursor = None
+        if last_sync_time:
+            last_sync_time = time_to_utc_time(str(last_sync_time))
 
         while True:
             pages, next_cursor, has_more = notion_api.search_pages(
@@ -174,26 +175,21 @@ class NotionHandler(ConnectionHandler):
                 break
 
             for page in pages:
-                if since_time:
-                    last_edited_time = page.get('last_edited_time')
-                    if last_edited_time:
-                        try:
-                            if time_to_utc_time(last_edited_time) < time_to_utc_time(since_time):
-                                has_more = False
-                                break
-                        except Exception:
-                            pass
                 page_id = page.get('id')
                 if not page_id:
                     continue
+
+                last_edited_time = time_to_utc_time(page.get('last_edited_time'))
+                if last_sync_time and last_edited_time < last_sync_time:
+                    has_more = False
+                    break
                 notion_page = notion_api.fetch_full_page(page)
                 if not notion_page:
                     continue
 
                 existed_page = notion_seadb_api.get_page_by_page_id(notion_page.get('page_id'), connection_id)
                 if existed_page:
-                    if time_to_utc_time(notion_page.get('last_modified_time')) <= time_to_utc_time(
-                            str(existed_page.get('modified_time'))):
+                    if last_edited_time <= time_to_utc_time(str(existed_page.get('modified_time'))):
                         logger.debug(f'Notion page {page_id} is up to date, skipping sync.')
                         continue
 

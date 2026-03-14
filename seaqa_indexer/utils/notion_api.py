@@ -3,6 +3,7 @@ import requests
 
 NOTION_VERSION = "2025-09-03"
 
+
 class NotionAPI:
     def __init__(self, token, timeout=60):
         self.token = token
@@ -12,7 +13,6 @@ class NotionAPI:
         self._user_cache = {}
         self.session = requests.Session()
 
-
     def _gen_headers(self):
         headers = {
             "Notion-Version": NOTION_VERSION,
@@ -21,7 +21,6 @@ class NotionAPI:
         if self.token:
             headers['Authorization'] = f'Bearer {self.token}'
         return headers
-
 
     def search_pages(self, per_page, start_cursor=None):
         pages = []
@@ -42,7 +41,6 @@ class NotionAPI:
         pages.extend(results)
 
         return pages, data.get('next_cursor'), bool(data.get('has_more'))
-
 
     def fetch_blocks(self, block_id):
         blocks = []
@@ -71,7 +69,6 @@ class NotionAPI:
 
         return blocks
 
-
     def extract_page_title(self, page):
         for prop in page["properties"].values():
             if prop["type"] == "title":
@@ -80,21 +77,18 @@ class NotionAPI:
                 )
         return ""
 
-
     def fetch_full_page(self, page):
-        if not page:
-            return {}
-
         page_id = page.get("id")
-        if not page_id:
-            return {}
 
         blocks = self.fetch_blocks(page_id)
 
         created_by = page.get("created_by").get("id")
         last_edited_by = page.get("last_edited_by").get("id")
         creator = self.get_user_info(created_by) if created_by else None
-        last_modifier = self.get_user_info(last_edited_by) if last_edited_by else None
+        if last_edited_by == created_by:
+            last_modifier = creator
+        else:
+            last_modifier = self.get_user_info(last_edited_by) if last_edited_by else None
 
         parent = page.get("parent") or {}
         parent_page_id = parent.get("page_id") if parent.get("type") == "page_id" else None
@@ -114,11 +108,8 @@ class NotionAPI:
 
     def get_user_info(self, user_id):
         url = f"{self.base_url}/users/{user_id}"
-        try:
-            resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
-            resp.raise_for_status()
-            data = resp.json()
-            name = data.get('name')
-        except Exception:
-            name = None
+        resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        name = data.get('name')
         return name
