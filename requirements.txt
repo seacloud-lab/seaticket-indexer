@@ -1,7 +1,7 @@
 flask_sqlalchemy==3.1.1
 SQLAlchemy==2.0.*
 redis==5.0.*
-pyjwt==2.9.*
+pyjwt==2.12.*
 pymysql==1.1.*
 Flask==3.0.*
 waitress==3.0.*
