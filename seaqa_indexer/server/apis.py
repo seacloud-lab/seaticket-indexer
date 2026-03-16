@@ -8,7 +8,7 @@ from seaqa_indexer import config
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.syncer.sync_manager import ForumNotFoundException, \
     ForumInActiveException
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, AIScenario
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
@@ -160,7 +160,7 @@ def search():
     except:
         count = 20
     if search_type == 'semantic_search':
-        query_vector = generate_embedding(query, project_uuid, username=username)
+        query_vector = generate_embedding(query, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
         if not query_vector:
             return {'error_msg': ('Failed to generate query vector for: %s', query)}, 500
         results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, time_from, time_to, count)

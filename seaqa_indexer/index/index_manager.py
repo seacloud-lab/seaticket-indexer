@@ -3,7 +3,7 @@ import json
 from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES, ConnectionType, REPO_NAME_CACHE_TIME_OUT
+from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES, ConnectionType, REPO_NAME_CACHE_TIME_OUT, AIScenario
 from seaqa_indexer.index.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
@@ -441,7 +441,7 @@ class IndexManager:
 
     def semantic_search(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
 
-        query_vector = generate_embedding(query_text, project_uuid, username=username)
+        query_vector = generate_embedding(query_text, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
         if not query_vector:
             logger.warning('Failed to generate query vector for: %s', query_text)
             return []
