@@ -19,6 +19,7 @@ SYNC_CONNECTION_TYPES = [
     ConnectionType.SEAFILE.value,
     ConnectionType.DISCOURSE_FORUM.value,
     ConnectionType.GITHUB_ISSUE.value,
+    ConnectionType.JIRA_ISSUE.value,
     ConnectionType.EMAIL.value,
     ConnectionType.NOTION.value,
     ConnectionType.CONFLUENCE.value,

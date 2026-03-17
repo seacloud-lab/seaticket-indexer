@@ -25,6 +25,7 @@ class ForumInActiveException(Exception):
 
 NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.GITHUB_ISSUE.value,
+    ConnectionType.JIRA_ISSUE.value,
     ConnectionType.DISCOURSE_FORUM.value,
     ConnectionType.SEAFILE.value,
     ConnectionType.EMAIL.value,
