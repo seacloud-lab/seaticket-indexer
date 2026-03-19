@@ -40,6 +40,9 @@ class GitHubIssuesIndex(BaseIndex):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
+            "ai_summary": {
+                "type": "keyword"
+            },
             'state': {
                 'type': 'keyword',
             },
@@ -63,7 +66,7 @@ class GitHubIssuesIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'content',
+            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'content', 'ai_summary',
                         'state', 'labels'],
             'sort': [
                 '_score'
@@ -123,6 +126,7 @@ class GitHubIssuesIndex(BaseIndex):
                         'issue_number': issue.get('issue_number'),
                         'title': issue.get('title'),
                         'content': content,
+                        'ai_summary': issue.get('ai_summary'),
                         'state': issue.get('state'),
                         'labels': issue.get('labels'),
                         'modified_time': issue.get('modified_time'),

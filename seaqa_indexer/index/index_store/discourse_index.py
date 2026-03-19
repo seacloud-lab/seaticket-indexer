@@ -33,6 +33,9 @@ class DiscourseIndex(BaseIndex):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
+            "ai_summary": {
+                "type": "keyword"
+            },
             'category_id': {
                 'type': 'long'
             },
@@ -56,7 +59,7 @@ class DiscourseIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'topic_id', 'title', 'content', 'slug', 'modified_time'],
+            '_source': ['connection_id', 'ai_summary', 'topic_id', 'title', 'content', 'slug', 'modified_time'],
             'sort': [
                 '_score'
             ],
@@ -111,6 +114,7 @@ class DiscourseIndex(BaseIndex):
                         'topic_id': topic['topic_id'],
                         'title': topic['title'],
                         'content': body_content,
+                        'ai_summary': topic.get('ai_summary'),
                         'category_id': topic.get('category_id'),
                         'slug': topic.get('slug', ''),
                         'modified_time': topic.get('modified_time'),

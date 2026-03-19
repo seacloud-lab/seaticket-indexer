@@ -148,6 +148,7 @@ def search():
     search_type = data.get('search_type', 'normal_search')
     username = data.get('username', '')
     extra_sources = data.get('extra_sources', [])
+    caller = request.args.to_dict().get('from')
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
@@ -160,13 +161,12 @@ def search():
     except:
         count = 20
     if search_type == 'semantic_search':
-        query_vector = generate_embedding(query, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
-        if not query_vector:
-            return {'error_msg': ('Failed to generate query vector for: %s', query)}, 500
-        results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, time_from, time_to, count)
+        results = application.app.index_manager.semantic_search(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count, caller=caller)
     else:
-        results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
-        # Skip deleted kb
+        results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count, caller=caller)
+
+    # Skip deleted kb
+    if caller != 'seaqa-ai':
         kb_ids = [
             int(r.get('_id'))
             for r in results or [] if r.get('type') == 'knowledge_base'
@@ -179,9 +179,11 @@ def search():
             try:
                 res = seadb_api.query_rows(project_uuid, sql, convert_keys=False)
                 rows = res.get('results', [])
-                deleted_ids = {row.get('_pk') for row in rows if row.get('deleted') is True}
-                if deleted_ids:
-                    results = [r for r in results if not (r.get('type') == 'knowledge_base' and int(r.get('_id'))  in deleted_ids)]
+                valid_ids = {row.get('_pk') for row in rows if not row.get('deleted')}
+                results = [
+                    r 
+                    for r in results if r.get('type') != 'knowledge_base' or int(r.get('_id'))  in valid_ids
+                ]
             except Exception:
                 pass
 

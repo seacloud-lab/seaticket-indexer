@@ -20,6 +20,9 @@ class SummaryVectorIndex(VectorBaseIndex):
             'pk': {
                 'type': 'keyword'
             },
+            'title': {
+                'type': 'keyword'
+            },
             'ai_summary': {
                 'type': 'text'
             },
@@ -56,7 +59,7 @@ class SummaryVectorIndex(VectorBaseIndex):
 
         while True:
             sql = f"""
-                SELECT _pk, ai_summary, ai_summary_vector, deleted, outdated, modified_time 
+                SELECT _pk, title, ai_summary, ai_summary_vector, deleted, outdated, modified_time 
                 FROM `{table_name}` 
                 WHERE ai_processed_time > '{since}'
                 ORDER BY ai_processed_time 
@@ -69,6 +72,7 @@ class SummaryVectorIndex(VectorBaseIndex):
 
             for row in rows:
                 pk = row.get('_pk')
+                title = row.get('title')
                 ai_summary = row.get('ai_summary')
                 ai_summary_vector = row.get('ai_summary_vector')
                 deleted = row.get('deleted')
@@ -87,6 +91,7 @@ class SummaryVectorIndex(VectorBaseIndex):
                 index_info = {"index": {"_index": index_name}}
                 doc_info = {
                     "ai_summary": ai_summary,
+                    "title": title,
                     "vec": ai_summary_vector,
                     "project_uuid": project_uuid,
                     "connection_id": str(connection_id),
@@ -117,7 +122,7 @@ class SummaryVectorIndex(VectorBaseIndex):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "project_uuid", "connection_id", "pk", "modified_time"],
+            "return_fields": ["ai_summary", "title", "project_uuid", "connection_id", "pk", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -137,6 +142,7 @@ class SummaryVectorIndex(VectorBaseIndex):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
+                'title': fields.get('title', [''])[0],
                 'project_uuid': fields.get('project_uuid')[0],
                 'connection_id': fields.get('connection_id')[0],
                 'pk': fields.get('pk')[0],

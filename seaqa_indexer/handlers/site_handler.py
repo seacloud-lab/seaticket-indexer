@@ -113,8 +113,7 @@ class SiteHandler(ConnectionHandler):
         indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
-    def update_content_vector_index(self, project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api,
-                                    storage, seasearch_api, since):
+    def update_content_vector_index(self, project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api, storage, seasearch_api, since):
         table_name = self.gen_table_name(connection_id)
         content_vector_index = ContentVectorIndex(seasearch_api)
         content_index_name = gen_content_vector_index_name(connection_id, self.connection_type)

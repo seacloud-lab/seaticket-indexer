@@ -29,6 +29,9 @@ class EmailIndex(BaseIndex):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
+            "ai_summary": {
+                "type": "keyword"
+            },
             'modified_time': {
                 'type': 'date',
             },
@@ -46,7 +49,7 @@ class EmailIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'title', 'content', 'modified_time'],
+            '_source': ['connection_id', 'title', 'content', 'ai_summary', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -100,6 +103,7 @@ class EmailIndex(BaseIndex):
                         'connection_id': str(connection_id),
                         'title': thread.get('title'),
                         'content': content,
+                        'ai_summary': thread.get('ai_summary'),
                         'modified_time': thread.get('modified_time'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}

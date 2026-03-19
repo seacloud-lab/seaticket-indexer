@@ -36,6 +36,9 @@ class SiteIndex(BaseIndex):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
+            "ai_summary": {
+                "type": "keyword"
+            },
             'modified_time': {
                 'type': 'date'
             },
@@ -53,7 +56,7 @@ class SiteIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'url', 'title', 'content'],
+            '_source': ['connection_id', 'url', 'title', 'content', 'ai_summary'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -101,14 +104,13 @@ class SiteIndex(BaseIndex):
                 deleted = row.get('deleted')
                 pk = row.get('_pk')
                 outdated = row.get('outdated')
+                ai_summary = row.get('ai_summary')
                 key = str(pk)
                 if deleted or outdated:
                     deleted_index_id_set.add(key)
                     continue
                 else:
                     new_index_ids_set.add(key)
-
-                logger.debug('start to update url: %s', url)
 
                 filename = url_to_filename(url)
                 file_json = storage.read_json(connection_id, project_uuid, filename)
@@ -118,6 +120,7 @@ class SiteIndex(BaseIndex):
                 doc_info = {
                     'connection_id': str(connection_id),
                     'content': content,
+                    'ai_summary': ai_summary,
                     'url': url,
                     'etag': etag,
                     'title': title,

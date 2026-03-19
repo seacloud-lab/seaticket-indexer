@@ -22,6 +22,9 @@ class KnowledgeBaseIndex(BaseIndex):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
+            "ai_summary": {
+                "type": "keyword"
+            },
             'modified_time': {'type': 'date'}
         }
     }
@@ -37,7 +40,7 @@ class KnowledgeBaseIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['title', 'project_uuid', 'content', 'modified_time'],
+            '_source': ['title', 'project_uuid', 'content', 'ai_summary', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -64,6 +67,7 @@ class KnowledgeBaseIndex(BaseIndex):
                 pk = row.get('_pk')
                 title = row.get('title')
                 content = row.get('content')
+                ai_summary = row.get('ai_summary')
                 deleted = row.get('deleted')
                 doc_id = str(pk)
                 if deleted:
@@ -75,6 +79,7 @@ class KnowledgeBaseIndex(BaseIndex):
                     'project_uuid': project_uuid,
                     'title': title,
                     'content': content,
+                    'ai_summary': ai_summary,
                     'modified_time': row.get('modified_time')
                 }
                 bulk_params.append(index_info)
