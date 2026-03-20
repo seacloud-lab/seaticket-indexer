@@ -173,12 +173,6 @@ Examples:
     )
 
     parser.add_argument(
-        '--project_uuids',
-        type=str,
-        help='Project UUIDs (optional, separated by commas)'
-    )
-
-    parser.add_argument(
         '--connection-id',
         type=int,
         help='Only repair records for a specific connection (optional)'
