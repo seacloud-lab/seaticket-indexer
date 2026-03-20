@@ -12,7 +12,7 @@ from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
 
@@ -93,11 +93,10 @@ class DiscourseHandler(ConnectionHandler):
                 seadb_api.update_rows(project_uuid, table_name, updates)
         return ai_processing_count
 
-    def update_index(self, project_connection, seasearch_api, seaqa_db):
+    def update_index(self, project_connection, seasearch_api, seaqa_db, since):
         connection_id = project_connection.id
         connection_type = project_connection.type
         project_uuid = project_connection.project_uuid
-        old_indexed_at = project_connection.indexed_at
         connection_status = json.loads(project_connection.status)
 
         discourse_seadb_api = DiscourseSeaDBAPI(project_uuid)
@@ -107,8 +106,6 @@ class DiscourseHandler(ConnectionHandler):
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         discourse_index_name = gen_index_name_by_type(connection_id, connection_type)
         discourse_forum_index.create_index_if_missing(discourse_index_name)
-
-        since = get_since_time(old_indexed_at)
 
         index_count = discourse_forum_index.update(discourse_index_name, connection_id, connection_status, seaqa_db, discourse_seadb_api, since)
         indexed_at = datetime.datetime.now(datetime.UTC)

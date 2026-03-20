@@ -2,6 +2,8 @@ import requests
 import logging
 import datetime
 import re
+import os
+import sys
 
 from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX
 from seaqa_indexer.ai_processor.utils import generate_embedding
@@ -241,3 +243,42 @@ class Fragment(object):
     @property
     def content(self):
         return self._content.strip()
+
+
+def init_logging(args):
+    level = args.loglevel
+
+    if level == 'debug':
+        level = logging.DEBUG
+    elif level == 'info':
+        level = logging.INFO
+    elif level == 'warning':
+        level = logging.WARNING
+    else:
+        level = logging.INFO
+
+    try:
+        # set boto3 log level
+        import boto3
+        boto3.set_stream_logger(level=logging.WARNING)
+    except:
+        pass
+
+    seafile_log_to_stdout = os.getenv('SEAFILE_LOG_TO_STDOUT', 'false') == 'true'
+    stream = args.logfile
+    format = '[%(asctime)s] [%(levelname)s] %(name)s:%(lineno)s %(funcName)s %(message)s'
+    if seafile_log_to_stdout:
+        stream = sys.stdout
+        format = '[seafevents] [%(asctime)s] [%(levelname)s] %(name)s:%(lineno)s %(funcName)s %(message)s'
+    kw = {
+        # 'format': '[seafevents] [%(asctime)s] [%(levelname)s] %(message)s',
+        'format': format,
+        'datefmt': '%Y-%m-%d %H:%M:%S',
+        'level': level,
+        'stream': stream
+    }
+
+    logging.basicConfig(**kw)
+    logging.getLogger('oss_util').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger("requests").setLevel(logging.WARNING)

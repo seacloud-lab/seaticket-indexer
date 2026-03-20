@@ -144,7 +144,7 @@ class SyncManager(Thread):
 
     def run(self):
         logger.info('sync manager thread started')
-        self.recover_interrupted_tasks()
+        # self.recover_interrupted_tasks()
         while True:
             copied_pending_tasks = deepcopy(self.pending_tasks)
             now_time = time.time()

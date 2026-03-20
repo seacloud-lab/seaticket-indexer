@@ -11,7 +11,7 @@ from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
 
@@ -95,7 +95,7 @@ class GithubIssueHandler(ConnectionHandler):
                 seadb_api.update_rows(project_uuid, table_name, updates)
         return ai_processing_count
 
-    def update_index(self, project_connection, seasearch_api, seaqa_db):
+    def update_index(self, project_connection, seasearch_api, seaqa_db, since):
         connection_id = project_connection.id
         config = decrypt_config(json.loads(project_connection.config))
         connection_type = project_connection.type
@@ -104,7 +104,6 @@ class GithubIssueHandler(ConnectionHandler):
         parts = path.strip("/").split("/")
         repo_owner, repo_name = parts[0], parts[1]
         connection_status = json.loads(project_connection.status)
-        old_indexed_at = project_connection.indexed_at
         project_uuid = project_connection.project_uuid
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
         github_issues_index = GitHubIssuesIndex(seasearch_api)
@@ -114,8 +113,6 @@ class GithubIssueHandler(ConnectionHandler):
 
         issues_index_name = gen_index_name_by_type(connection_id, connection_type)
         github_issues_index.create_index_if_missing(issues_index_name)
-
-        since = get_since_time(old_indexed_at)
 
         index_count = github_issues_index.update(issues_index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, since)
         # finish index

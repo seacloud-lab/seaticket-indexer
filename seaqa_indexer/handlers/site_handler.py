@@ -9,7 +9,6 @@ from seaqa_indexer.index.utils import gen_index_name_by_type, gen_content_vector
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils import get_since_time
 from seaqa_indexer.index.index_store.site_index import SiteIndex
 from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
@@ -94,22 +93,19 @@ class SiteHandler(ConnectionHandler):
                 updates = []
         return ai_processing_count
 
-    def update_index(self, project_connection, seasearch_api, seaqa_db):
+    def update_index(self, project_connection, seasearch_api, seaqa_db, since):
         connection_status = json.loads(project_connection.status)
         site_index = SiteIndex(seasearch_api)
 
         connection_id = project_connection.id
         project_uuid = project_connection.project_uuid
         connection_type = project_connection.type
-        old_indexed_at = project_connection.indexed_at
 
         site_index_name = gen_index_name_by_type(connection_id, connection_type)
         site_index.create_index_if_missing(site_index_name)
 
         seadb_api = SeaDBAPI()
         storage = get_storage()
-
-        since = get_since_time(old_indexed_at)
 
         index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db, seadb_api, storage, since)
         connection_status['last_indexed_count'] = index_count
@@ -118,13 +114,11 @@ class SiteHandler(ConnectionHandler):
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
     def update_content_vector_index(self, project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api,
-                                    storage, seasearch_api, last_content_vector_indexed_at):
+                                    storage, seasearch_api, since):
         table_name = self.gen_table_name(connection_id)
         content_vector_index = ContentVectorIndex(seasearch_api)
         content_index_name = gen_content_vector_index_name(connection_id, self.connection_type)
         content_vector_index.create_index_if_missing(content_index_name)
-
-        since = get_since_time(last_content_vector_indexed_at)
 
         index_count = content_vector_index.update(
             table_name,

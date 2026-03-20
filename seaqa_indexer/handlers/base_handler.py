@@ -40,10 +40,10 @@ class ConnectionHandler(ABC):
         pass
 
     @abstractmethod
-    def update_index(self, connection, seasearch_api, seaqa_db) -> None:
+    def update_index(self, connection, seasearch_api, seaqa_db, since) -> None:
         pass
 
-    def update_summary_index(self, project_uuid, connection_id, seadb_api, ai_status, seaqa_db, seasearch_api, last_ai_indexed_at):
+    def update_summary_index(self, project_uuid, connection_id, seadb_api, ai_status, seaqa_db, seasearch_api, since):
         table_name = self.gen_table_name(connection_id)
 
         fixed_count = fix_summary(project_uuid, table_name, seadb_api)
@@ -53,8 +53,6 @@ class ConnectionHandler(ABC):
         summary_vector_index = SummaryVectorIndex(seasearch_api)
         ai_index_name = gen_conn_summary_index_name(connection_id, self.connection_type)
         summary_vector_index.create_index_if_missing(ai_index_name)
-
-        since = get_since_time(last_ai_indexed_at)
 
         index_count = summary_vector_index.update(
             table_name,
