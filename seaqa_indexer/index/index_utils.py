@@ -17,7 +17,7 @@ from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
 from seaqa_indexer.handlers import get_handler
-from seaqa_indexer.utils import get_since_time, get_unix_epoch
+from seaqa_indexer.utils import get_since_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
 
