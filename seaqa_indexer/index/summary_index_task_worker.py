@@ -30,9 +30,6 @@ class SummaryIndexTaskWorker(LockingTaskWorker):
 
     def init_dependencies(self):
         self.db_session_class = init_db_session_class()
-        self.seadb_api = SeaDBAPI()
-        self.seaqa_db = SeaqaDB(self.db_session_class)
-        self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
 
     def process_message(self, data: dict):
         task_type = data.get('type', 'connection')
@@ -70,19 +67,19 @@ class SummaryIndexTaskWorker(LockingTaskWorker):
         )
     def update_tickets_ai_index(self, project_uuid):
         try:
-            update_tickets_summary_index(project_uuid, self.seaqa_db, self.seadb_api, self.seasearch_api)
+            update_tickets_summary_index(project_uuid, self.db_session_class)
         except Exception as e:
             logger.exception('Summary index tickets: %s failed, error: %s', project_uuid, e)
 
     def update_ai_index(self, connection_id):
         try:
-            update_connection_summary_index(connection_id, self.seaqa_db, self.seadb_api, self.seasearch_api)
+            update_connection_summary_index(connection_id, self.db_session_class)
         except Exception as e:
             logger.exception('Summary index connection: %s failed, error: %s', connection_id, e)
 
     def update_kb_ai_index(self, project_uuid):
         try:
-            update_knowledge_base_summary_index(project_uuid, self.seaqa_db, self.seadb_api, self.seasearch_api)
+            update_knowledge_base_summary_index(project_uuid, self.db_session_class)
         except Exception as e:
             logger.exception('Summary index knowledge base of project: %s failed, error: %s', project_uuid, e)
 
