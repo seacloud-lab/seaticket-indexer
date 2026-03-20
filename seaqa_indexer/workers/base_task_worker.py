@@ -70,26 +70,26 @@ class BaseTaskWorker(ABC):
 
     def task_worker(self):
         logger.info('%s starting %s', self.tname, self.get_worker_name())
-        try:
-            while not self.should_stop.is_set():
-                try:
-                    res = self.mq.brpop(self.get_queue_name(), timeout=30)
-                    if res is not None:
-                        key, value = res
-                        try:
-                            data = json.loads(value)
-                        except:
-                            data = None
-                        if not data:
-                            logger.warning('%s: invalid message.', self.get_queue_name(), res)
-                        else:
-                            self.process_message(data)
-                except (ResponseError, NoMQAvailable, TimeoutError) as e:
-                    logger.error('The connection to the redis server failed: %s' % e)
-        except Exception as e:
-            logger.error('%s %s Error' % (self.tname, self.get_worker_name()))
-            logger.error(e, exc_info=True)
-            time.sleep(0.3)
+        while not self.should_stop.is_set():
+            try:
+                res = self.mq.brpop(self.get_queue_name(), timeout=30)
+                if res is not None:
+                    _, value = res
+                    try:
+                        data = json.loads(value)
+                    except:
+                        data = None
+                    if not data:
+                        logger.warning('%s: invalid message.', self.get_queue_name(), res)
+                    else:
+                        self.process_message(data)
+            except (ResponseError, NoMQAvailable, TimeoutError) as e:
+                logger.error('The connection to the redis server failed: %s' % e)
+                time.sleep(1)
+            except Exception as e:
+                logger.exception('%s %s Error: %s', self.tname, self.get_worker_name(), e)
+                logger.error(e, exc_info=True)
+                time.sleep(1)
 
     def clear(self):
         if not self.mq:

@@ -332,6 +332,7 @@ class GithubIssuesTable(BaseModel):
     ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
     ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
     ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
+    last_agent_processed_at = MappedColumn('last_agent_processed_at', PropertyTypes.DATETIME)
 
     @classmethod
     def gen_table_name(cls, connection_id):
@@ -388,6 +389,7 @@ class TicketsTable(BaseModel):
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
     closed_time = MappedColumn('closed_time', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    last_agent_processed_at = MappedColumn('last_agent_processed_at', PropertyTypes.DATETIME)
 
     @classmethod
     def gen_table_name(cls):

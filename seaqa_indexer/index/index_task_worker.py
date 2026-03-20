@@ -35,7 +35,7 @@ class IndexTaskWorker(LockingTaskWorker):
         elif task_type == 'ticket':
             project_uuid = data.get('project_uuid')
             self.ticket_task_handler(project_uuid)
-        elif task_type == 'connection':
+        else:
             connection_id = data.get('connection_id')
             self.connection_task_handler(connection_id)
 

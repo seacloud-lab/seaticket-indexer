@@ -11,6 +11,7 @@ from seaqa_indexer.ai_processor.ai_processor import (
 )
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.utils.constants import ConnectionType
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,20 @@ class AIProcessTaskWorker(LockingTaskWorker):
         else:
             connection_id = data.get('connection_id')
             self.work_task_handler(connection_id)
+        
+        if task_type == ConnectionType.GITHUB_ISSUE.value:
+            connection_id = data.get('connection_id')
+            project_uuid = data.get('project_uuid')
+            github_issue_event = {
+                'project_uuid': project_uuid,
+                'connection_id': connection_id,
+                'type': task_type,
+            }
+            try:
+                self.mq.publish('issue_update', json.dumps(github_issue_event))
+                logger.info('Published issue_update event for project %s connection %s type %s', project_uuid, connection_id, task_type)
+            except Exception as e:
+                logger.exception('Failed to publish issue_update event for project %s connection %s type %s: %s', project_uuid, connection_id, 'github_issue', e)
 
     def work_task_handler(self, connection_id):
         self.execute_with_lock(
