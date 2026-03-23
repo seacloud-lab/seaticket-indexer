@@ -40,7 +40,7 @@ class TicketIndexMaster(Thread):
 
     def master_handler(self):
         with self.mq.pubsub(ignore_subscribe_messages=True) as p:  # ensure pubsub connection is closed
-            p.subscribe('issue_update')
+            p.subscribe('ticket_update')
             logger.info('ticket master starting listen')
 
             message_check_time = time.time()
@@ -57,10 +57,7 @@ class TicketIndexMaster(Thread):
                         data = None
                     if data:
                         project_uuid = data.get('project_uuid')
-                        issue_type = data.get('type')
-                        if issue_type != 'ticket':
-                            continue
-                        
+
                         last_update_time = self.pending_tasks.get(project_uuid, 0)
                         if (now_time - last_update_time) > self.interval:
                             self.pending_tasks[project_uuid] = now_time

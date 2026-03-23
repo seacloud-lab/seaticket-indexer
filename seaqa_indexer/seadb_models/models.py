@@ -403,6 +403,7 @@ class TicketCommentsTable(BaseModel):
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    via_agent = MappedColumn('via_agent', PropertyTypes.BOOL)
 
     @classmethod
     def gen_table_name(cls):

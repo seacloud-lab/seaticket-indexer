@@ -61,7 +61,7 @@ class GithubIssueHandler(ConnectionHandler):
             'url': url,
         }
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, storage, connection_id, project_uuid, mq=None):
         page_size = 100
         updates = []
         table_name = self.gen_table_name(connection_id)
@@ -91,6 +91,18 @@ class GithubIssueHandler(ConnectionHandler):
                 if len(updates) >= self.BATCH_SIZE:
                     seadb_api.update_rows(project_uuid, table_name, updates)
                     updates = []
+                if mq and pk is not None:
+                    try:
+                        event = json.dumps({
+                            'event_type': 'ai_summary_updated',
+                            'source_type': ConnectionType.GITHUB_ISSUE.value,
+                            'project_uuid': project_uuid,
+                            'connection_id': connection_id,
+                            'record_id': pk,
+                        })
+                        mq.publish('data_events', event)
+                    except Exception as e:
+                        logger.warning('Failed to publish data_events for issue pk=%s: %s', pk, e)
             if updates:
                 seadb_api.update_rows(project_uuid, table_name, updates)
         return ai_processing_count

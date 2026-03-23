@@ -48,7 +48,7 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
         
-        ai_processing_count = conn_handler.process_ai(seadb_api, storage, connection_id, project_uuid)
+        ai_processing_count = conn_handler.process_ai(seadb_api, storage, connection_id, project_uuid, mq=mq)
         
         logger.info('AI processing completed for connection %s', connection_id)
         ai_status['last_ai_processing_status'] = AIStatus.COMPLETED
@@ -104,7 +104,7 @@ def process_knowledge_base_ai(seadb_api, project_uuid):
     return ai_processing_count
 
 
-def process_ticket_ai(seadb_api, project_uuid):
+def process_ticket_ai(seadb_api, project_uuid, mq=None):
     page_size = 100
     updates = []
     table_name = TicketsTable.gen_table_name()
@@ -134,6 +134,17 @@ def process_ticket_ai(seadb_api, project_uuid):
             if len(updates) >= BATCH_SIZE:
                 seadb_api.update_rows(project_uuid, table_name, updates)
                 updates = []
+            if mq and pk is not None:
+                try:
+                    event = json.dumps({
+                        'event_type': 'ai_summary_updated',
+                        'source_type': 'ticket',
+                        'project_uuid': project_uuid,
+                        'record_id': pk,
+                    })
+                    mq.publish('data_events', event)
+                except Exception as e:
+                    logger.warning('Failed to publish data_events for ticket pk=%s: %s', pk, e)
         if updates:
             seadb_api.update_rows(project_uuid, table_name, updates)
 
