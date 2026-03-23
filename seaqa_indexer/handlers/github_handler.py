@@ -196,6 +196,8 @@ class GithubIssueHandler(ConnectionHandler):
         page = 1
         per_page = 100  # max 100
         sync_count = 0
+        added_count = 0
+        updated_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
 
@@ -220,6 +222,10 @@ class GithubIssueHandler(ConnectionHandler):
                         continue
 
                 sync_count += 1
+                if existed_issue:
+                    updated_count += 1
+                else:
+                    added_count += 1
                 github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count
@@ -246,5 +252,10 @@ class GithubIssueHandler(ConnectionHandler):
                 break
             page += 1
 
+        connection_status['last_sync_changes'] = {
+            'added': added_count,
+            'deleted': 0,
+            'updated': updated_count,
+        }
         total_count = github_seadb_api.get_github_issues_count(connection_id)
         return sync_count, total_count

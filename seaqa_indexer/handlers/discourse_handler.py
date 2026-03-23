@@ -184,6 +184,8 @@ class DiscourseHandler(ConnectionHandler):
         page = 0
         should_stop = False
         sync_count = 0
+        added_count = 0
+        updated_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
 
@@ -222,8 +224,10 @@ class DiscourseHandler(ConnectionHandler):
                 primary_key = existing_topic.get('_pk')
                 if primary_key:
                     discourse_seadb_api.update_topic(connection_id, primary_key, topic_data)
+                    updated_count += 1
                 else:
                     discourse_seadb_api.insert_topic(connection_id, topic_id, topic_data)
+                    added_count += 1
 
                 # sync topic replies
                 topic_replies = discourse_forum_api.fetch_topic_replies(topic_id)
@@ -244,5 +248,10 @@ class DiscourseHandler(ConnectionHandler):
             if should_stop:
                 break
 
+        connection_status['last_sync_changes'] = {
+            'added': added_count,
+            'deleted': 0,
+            'updated': updated_count,
+        }
         total_count = discourse_seadb_api.get_topic_count(connection_id)
         return sync_count, total_count

@@ -109,16 +109,19 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         new_config = encrypt_config(config)
     seaqa_db.update_status_and_time(connection_id, json.dumps(connection_status), last_sync_time, config=new_config)
 
-    if connection_type in {
-        ConnectionType.GITHUB_ISSUE.value,
-        ConnectionType.DISCOURSE_FORUM.value,
-        ConnectionType.EMAIL.value,
-    } and int(sync_count or 0) > 0:
-        try:
-            issue_statistics_message = json.dumps({'project_uuid': project_uuid})
-            mq.publish('issue_statistics_update', issue_statistics_message)
-        except Exception as e:
-            logger.warning('Failed to publish issue_statistics_update for project %s: %s', project_uuid, e)
+    try:
+        sync_changes = connection_status.get('last_sync_changes') or {}
+        connection_update_message = json.dumps({
+            'project_uuid': project_uuid,
+            'type': connection_type,
+            'connection_id': int(connection_id),
+            'add': int(sync_changes.get('added', 0) or 0),
+            'delete': int(sync_changes.get('deleted', 0) or 0),
+            'update': int(sync_changes.get('updated', sync_count or 0) or 0),
+        })
+        mq.publish('connection_update', connection_update_message)
+    except Exception as e:
+        logger.warning('Failed to publish connection_update for project %s, connection %s: %s', project_uuid, connection_id, e)
 
 
     logger.info('Finish sync connection: %s, last sync count %s', connection_id, sync_count)
