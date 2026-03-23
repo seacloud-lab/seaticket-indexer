@@ -96,53 +96,6 @@ def start_index_local(project_uuid: str, connection_id: Optional[str]):
         logger.error(f"Error during index initialization: {str(e)}")
         raise
 
-def start_index_all_projects(threads=1):
-    assert threads >= 1, 'The number of working thread must be larger then 1 (int)'
-    if threads > 1:
-        from concurrent.futures import ThreadPoolExecutor
-        import threading
-
-    try:
-        manager = IndexManager()
-        
-        project_uuids = [
-            project[0]
-            for project in manager.seaqa_db.get_all_active_projects()
-        ]
-
-        projects_num = len(project_uuids)
-
-        def index_a_project(project_uuid, p_running_id, multi_threads=False):
-            logger_prefix = f'[Thread {threading.current_thread().ident}] ' if multi_threads else ''
-            logger.info(f'{logger_prefix}Starting to update indexes for project {project_uuid} ({p_running_id + 1}/{projects_num})')
-            connections = manager.seaqa_db.get_connections_by_project_uuid(project_uuid)
-            for j, connection in enumerate(connections):
-                logger.info(f"{logger_prefix}Starting to indexes for connection {connection[0]} indexes ({j + 1}/{len(connections)}) in project {project_uuid} ({p_running_id + 1}/{projects_num})")
-                manager.update_connection_index(connection[0])
-            logger.info(f"{logger_prefix}Starting to indexes for project indexes in project {project_uuid} ({p_running_id + 1}/{projects_num})")
-            manager.update_project_index(project_uuid)
-        
-        if threads == 1:
-            for i, project_uuid in enumerate(project_uuids):
-                index_a_project(project_uuid, i)
-        else:
-            logger.info(f'Starting to update indexes with {threads} threads')
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            with ThreadPoolExecutor(max_workers=threads) as executor:
-                future_to_project = {
-                    executor.submit(index_a_project, project_uuid, i, True): project_uuid
-                    for i, project_uuid in enumerate(project_uuids)
-                }
-                for future in as_completed(future_to_project):
-                    project_uuid = future_to_project[future]
-                    future.result()
-
-        logger.info("Index all projects successfully")
-
-    except Exception as e:
-        logger.error(f"Error during index initialization: {str(e)}")
-        raise
-
 
 def delete_indices(project_uuid: str, connection_id: Optional[str]):
     """
@@ -206,14 +159,6 @@ def create_parser():
         help='Connection ID'
     )
 
-    parser.add_argument(
-        '--threads',
-        dest='threads',
-        type=int,
-        default=1,
-        help='Number of threads (only useful in update_all command)'
-    )
-
     parser_update = subparsers.add_parser(
         'update',
         help='Update repository file index'
@@ -225,12 +170,6 @@ def create_parser():
         help='Clear repository file index'
     )
     parser_clear.set_defaults(func=delete_indices)
-
-    parser_update_all = subparsers.add_parser(
-        'update-all',
-        help='Update all projects index'
-    )
-    parser_update_all.set_defaults(func=start_index_all_projects)
 
     return parser
 
@@ -244,33 +183,25 @@ def main():
 
     args = parser.parse_args()
 
+    try:
+        validate_arguments(args)
+    except ValueError as e:
+        print(f"Argument validation error: {e}")
+        sys.exit(1)
+
+    print(f"Project UUID: {args.project_uuid}")
+    print(f"Connection ID: {args.connection_id}")
+
     init_logging(args)
 
-    if args.func == start_index_all_projects:
-        try:
-            args.func(threads=args.threads)
-        except Exception as e:
-            logger.error(f"Command execution failed: {e}")
-            sys.exit(1)
-    else:
-        try:
-            validate_arguments(args)
-        except ValueError as e:
-            print(f"Argument validation error: {e}")
-            sys.exit(1)
-
-        print(f"Project UUID: {args.project_uuid}")
-        print(f"Connection ID: {args.connection_id}")
-
-
-        try:
-            args.func(
-                project_uuid=args.project_uuid,
-                connection_id=args.connection_id
-            )
-        except Exception as e:
-            logger.error(f"Command execution failed: {e}")
-            sys.exit(1)
+    try:
+        args.func(
+            project_uuid=args.project_uuid,
+            connection_id=args.connection_id
+        )
+    except Exception as e:
+        logger.error(f"Command execution failed: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
