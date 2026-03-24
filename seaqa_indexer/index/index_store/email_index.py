@@ -99,6 +99,7 @@ class EmailIndex(BaseIndex):
                     doc = {
                         'connection_id': str(connection_id),
                         'title': thread.get('title'),
+                        'content': content,
                         'modified_time': thread.get('modified_time'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}

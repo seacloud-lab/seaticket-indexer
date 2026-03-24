@@ -94,7 +94,7 @@ class SeafileIndex(BaseIndex):
                         'path': parent_dir,
                         'title': title,
                         'modified_time': file.get('modified_time'),
-                        'content': file.get('content')
+                        'content': file.get('content'),
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)

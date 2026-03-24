@@ -109,6 +109,9 @@ class SiteIndex(BaseIndex):
                     new_index_ids_set.add(key)
 
                 filename = url_to_filename(url)
+
+                logger.debug('start to update url: %s', url)
+
                 file_json = storage.read_json(connection_id, project_uuid, filename)
                 content = file_json.get('content')
 

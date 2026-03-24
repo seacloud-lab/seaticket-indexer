@@ -63,7 +63,8 @@ class GitHubIssuesIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'content', 'state', 'labels'],
+            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'content',
+                        'state', 'labels'],
             'sort': [
                 '_score'
             ],
