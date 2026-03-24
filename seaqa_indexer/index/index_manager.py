@@ -22,6 +22,7 @@ from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
 from seaqa_indexer.handlers import get_handler
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 
 
 logger = logging.getLogger(__name__)
@@ -35,9 +36,15 @@ def get_result_related_seadb_records(project_uuid, all_results, connection_id_to
         return res.get('results', [])
 
     connection_id_to_pks = {}  # {connection_id: [pk1, pk2]}
+    kb_pks = set()
+    ticket_pks = set()
 
     for result in all_results:
-        if result.get('source_type') not in ('knowledge_base_summary', 'ticket_summary'):
+        if result.get('source_type') == 'knowledge_base_summary':
+            kb_pks.add(result.get('pk'))
+        elif result.get('source_type') == 'ticket_summary':
+            ticket_pks.add(result.get('pk'))
+        else:
             connection_id = int(result.get('connection_id'))
             if connection_id not in connection_id_to_pks:
                 connection_id_to_pks[connection_id] = []
@@ -58,39 +65,53 @@ def get_result_related_seadb_records(project_uuid, all_results, connection_id_to
                 connection_pk_to_record[connection_id] = {}
             connection_pk_to_record[connection_id][record.get('_pk')] = record
 
-    return connection_pk_to_record
+    kb_pk_to_record = {}
+    if kb_pks:
+        kb_table_name = KnowledgeBaseTable.gen_table_name()
+        records = query_records_by_pks(kb_table_name, kb_pks)
+        kb_pk_to_record = {record.get('_pk'): record for record in records}
+
+    ticket_pk_to_record = {}
+    if ticket_pks:
+        ticket_table_name = TicketsTable.gen_table_name()
+        records = query_records_by_pks(ticket_table_name, ticket_pks)
+        ticket_pk_to_record = {record.get('_pk'): record for record in records}
+    return connection_pk_to_record, kb_pk_to_record, ticket_pk_to_record
 
 
-def format_vector_search_result(result, connection_id_to_connection, connection_pk_to_record, caller=None):
+
+def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_record, ticket_pk_to_record, connection_pk_to_record, caller=None):
 
     pk = result.get('pk')
     source_type = result.get('source_type')
     score = result.get('score')
     ai_summary = result.get('ai_summary', '')
-    title = result.get('title', '')
-    modified_time = result.get('modified_time', '')
 
     formatted_result = {
         '_id': pk,
         'score': score,
-        'title': title
     }
 
-    if caller == 'seaqa-ai':
-        formatted_result['ai_summary'] = ai_summary
-    else:
+    if caller != 'seaqa-ai':
         formatted_result.update({
             'content': ai_summary,
-            'source_type': source_type,
-            'modified_time': modified_time
+            'source_type': source_type
         })
     
 
     if source_type == 'knowledge_base_summary':
         formatted_result['type'] = 'knowledge_base'
+        if caller != 'seaqa-ai':
+            record = kb_pk_to_record.get(int(pk))
+            formatted_result['title'] = record.get('title', '')
+            formatted_result['modified_time'] = record.get('modified_time', '')
 
     elif source_type == 'ticket_summary':
         formatted_result['type'] = 'ticket'
+        if caller != 'seaqa-ai':
+            record = ticket_pk_to_record.get(int(pk))
+            formatted_result['title'] = record.get('title', '')
+            formatted_result['modified_time'] = record.get('modified_time', '')
 
     else:
         # format connection vector search result
@@ -103,6 +124,7 @@ def format_vector_search_result(result, connection_id_to_connection, connection_
 
         if caller != 'seaqa-ai':
             record = connection_pk_to_record.get(int(connection_id), {}).get(int(pk))
+            formatted_result['modified_time'] = record.get('modified_time')
 
             conn_handler = get_handler(connection_type)
             if not conn_handler:
@@ -221,17 +243,21 @@ class IndexManager:
 
             if caller == 'seaqa-ai':
                 s_type = None
-                for connection_type in ConnectionType.to_list():
+                for connection_type in ConnectionType.to_list() + ['knowledge_base', 'ticket']:
                     if index_name.startswith(connection_type):
                         s_type = connection_type
                         break
+                
+                if not s_type:
+                    continue
+
                 r = {
                     '_id': _id,
-                    'title': source['title'],
                     'type': s_type,
                     'score': score,
-                    'ai_summary': source['ai_summary']
                 }
+                if s_type not in ('knowledge_base', 'ticket'):
+                    r['connection_id'] = source['connection_id']
                 result_docs.append(r)
                 continue
 
@@ -434,12 +460,12 @@ class IndexManager:
         all_results = all_results[:top_k]
 
         connection_id_to_connection = {connection.id: connection for connection in project_connections}
-        connection_pk_to_record = \
-            get_result_related_seadb_records(project_uuid, all_results, connection_id_to_connection, self.seadb_api) if caller != 'seaqa-ai' else {}
+        connection_pk_to_record, kb_pk_to_record, ticket_pk_to_record = \
+            get_result_related_seadb_records(project_uuid, all_results, connection_id_to_connection, self.seadb_api) if caller != 'seaqa-ai' else ({}, {}, {})
 
         formatted_results = []
         for result in all_results:
-            formatted_result = format_vector_search_result(result, connection_id_to_connection, connection_pk_to_record, caller=caller)
+            formatted_result = format_vector_search_result(result, connection_id_to_connection, kb_pk_to_record, ticket_pk_to_record, connection_pk_to_record, caller=caller)
             if formatted_result:
                 formatted_results.append(formatted_result)
 

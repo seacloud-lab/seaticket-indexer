@@ -36,9 +36,6 @@ class SiteIndex(BaseIndex):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
-            "ai_summary": {
-                "type": "keyword"
-            },
             'modified_time': {
                 'type': 'date'
             },
@@ -56,7 +53,7 @@ class SiteIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'url', 'title', 'content', 'ai_summary'],
+            '_source': ['connection_id', 'url', 'title', 'content'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -104,7 +101,6 @@ class SiteIndex(BaseIndex):
                 deleted = row.get('deleted')
                 pk = row.get('_pk')
                 outdated = row.get('outdated')
-                ai_summary = row.get('ai_summary')
                 key = str(pk)
                 if deleted or outdated:
                     deleted_index_id_set.add(key)
@@ -120,7 +116,6 @@ class SiteIndex(BaseIndex):
                 doc_info = {
                     'connection_id': str(connection_id),
                     'content': content,
-                    'ai_summary': ai_summary,
                     'url': url,
                     'etag': etag,
                     'title': title,

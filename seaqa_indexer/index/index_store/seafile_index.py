@@ -34,9 +34,6 @@ class SeafileIndex(BaseIndex):
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
-            "ai_summary": {
-                "type": "keyword"
-            },
             'modified_time': {
                 'type': 'date',
             },
@@ -54,7 +51,7 @@ class SeafileIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['connection_id', 'repo_id', 'path', 'title', 'content', 'ai_summary', 'modified_time'],
+            '_source': ['connection_id', 'repo_id', 'path', 'title', 'content', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
@@ -97,8 +94,7 @@ class SeafileIndex(BaseIndex):
                         'path': parent_dir,
                         'title': title,
                         'modified_time': file.get('modified_time'),
-                        'content': file.get('content'),
-                        'ai_summary': file.get('ai_summary')
+                        'content': file.get('content')
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)

@@ -16,9 +16,6 @@ class TicketSummaryVectorIndex(VectorBaseIndex):
             'pk': {
                 'type': 'keyword'
             },
-            'title': {
-                'type': 'keyword'
-            },
             'ai_summary': {
                 'type': 'text'
             },
@@ -54,7 +51,7 @@ class TicketSummaryVectorIndex(VectorBaseIndex):
 
         while True:
             sql = f"""
-                SELECT _pk, title, ai_summary, ai_summary_vector, deleted, modified_time, ai_processed_time
+                SELECT _pk, ai_summary, ai_summary_vector, deleted, modified_time, ai_processed_time
                 FROM `{table_name}`
                 WHERE ai_processed_time IS NOT NULL
                 AND ai_processed_time > '{since}'
@@ -72,7 +69,6 @@ class TicketSummaryVectorIndex(VectorBaseIndex):
                 ai_summary_vector = row.get('ai_summary_vector')
                 deleted = row.get('deleted')
                 modified_time = row.get('modified_time')
-                title = row.get('title')
 
                 if deleted:
                     deleted_index_pk_set.add(pk)
@@ -85,7 +81,6 @@ class TicketSummaryVectorIndex(VectorBaseIndex):
                 index_info = {"index": {"_index": index_name}}
                 doc_info = {
                     "ai_summary": ai_summary,
-                    "title": title,
                     "vec": ai_summary_vector,
                     "project_uuid": project_uuid,
                     "pk": str(pk),
@@ -112,7 +107,7 @@ class TicketSummaryVectorIndex(VectorBaseIndex):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "title", "project_uuid", "pk", "modified_time"],
+            "return_fields": ["ai_summary", "project_uuid", "pk", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -131,7 +126,6 @@ class TicketSummaryVectorIndex(VectorBaseIndex):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
-                'title': fields.get('title', [''])[0],
                 'project_uuid': fields.get('project_uuid')[0],
                 'pk': fields.get('pk')[0],
                 'modified_time': fields.get('modified_time', [None])[0],

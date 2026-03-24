@@ -16,12 +16,6 @@ class ContentVectorIndex(VectorBaseIndex):
             'content': {
                 'type': 'text',
             },
-            'title': {
-                'type': 'keyword'
-            },
-            'ai_summary': {
-                'type': 'keyword'
-            },
             'project_uuid': {
                 'type': 'keyword'
             },
@@ -59,7 +53,7 @@ class ContentVectorIndex(VectorBaseIndex):
         while True:
             if connection_type == ConnectionType.SITE.value:
                 sql = f"""
-                    SELECT _pk, url, title, ai_summary, deleted, outdated, sync_time, modified_time 
+                    SELECT _pk, url, deleted, outdated, sync_time, modified_time 
                     FROM `{table_name}` 
                     WHERE record_modified_time >= '{since}'
                     ORDER BY sync_time 
@@ -74,7 +68,7 @@ class ContentVectorIndex(VectorBaseIndex):
 
             elif connection_type == ConnectionType.SEAFILE.value:
                 sql = f"""
-                    SELECT _pk, content, title, ai_summary, deleted, outdated, sync_time, modified_time
+                    SELECT _pk, content, deleted, outdated, sync_time, modified_time
                     FROM `{table_name}`
                     WHERE record_modified_time >= '{since}'
                     ORDER BY sync_time
@@ -97,8 +91,6 @@ class ContentVectorIndex(VectorBaseIndex):
                 deleted = row.get('deleted')
                 outdated = row.get('outdated')
                 modified_time = row.get('modified_time')
-                ai_summary = row.get('ai_summary')
-                title = row.get('title')
 
                 if deleted or outdated:
                     deleted_index_pk_set.add(pk)
@@ -119,8 +111,6 @@ class ContentVectorIndex(VectorBaseIndex):
                 for i in range(segment_count):
                     index_info = {"index": {"_index": index_name}}
                     doc_info = {
-                        "title": title,
-                        "ai_summary": ai_summary,
                         "content": chunks[i],
                         "vec": embeddings[i].get('embedding', []),
                         "project_uuid": project_uuid,
@@ -155,7 +145,7 @@ class ContentVectorIndex(VectorBaseIndex):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["content", "title", "ai_summary", "project_uuid", "connection_id", "pk", "chunk_index", "modified_time"],
+            "return_fields": ["content", "project_uuid", "connection_id", "pk", "chunk_index", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -174,8 +164,6 @@ class ContentVectorIndex(VectorBaseIndex):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'content': fields.get('content', [''])[0],
-                'title': fields.get('title', [''])[0],
-                'ai_summary': fields.get('ai_summary', [''])[0],
                 'project_uuid': fields.get('project_uuid')[0],
                 'connection_id': fields.get('connection_id')[0],
                 'pk': fields.get('pk')[0],

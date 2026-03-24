@@ -5,11 +5,11 @@ from functools import wraps
 from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
-from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.syncer.sync_manager import ForumNotFoundException, \
     ForumInActiveException
-from seaqa_indexer.utils.constants import ConnectionType, AIScenario
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
+from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.handlers import get_handler
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 
@@ -131,6 +131,56 @@ def github_webhook():
     return jsonify({'success': True}), 200
 
 
+def _remove_deleted_search_results(project_uuid, results):
+    conn_ids_pks = {}
+    conn_ids_type = {}
+    kb_ids = []
+    tk_ids = []
+
+    for result in results:
+        if result.get('type') == 'knowledge_base':
+            kb_ids.append(int(result.get('_id')))
+        elif result.get('type') == 'ticket':
+            tk_ids.append(int(result.get('_id')))
+        else:
+            connection_id = int(result.get('connection_id'))
+            if connection_id not in conn_ids_pks:
+                conn_ids_pks[connection_id] = []
+                conn_ids_type[connection_id] = result.get('type')
+            conn_ids_pks[connection_id].append(int(result.get('_id')))
+
+    seadb_api = SeaDBAPI()
+
+    def get_valid_pks(table_name, pks):
+        sql = f"SELECT `_pk`, `deleted` FROM `{table_name}` WHERE `_pk` IN ({','.join([str(i) for i in pks])})"
+        res = seadb_api.query_rows(project_uuid, sql, convert_keys=True)
+        rows = res.get('results', [])
+        return {row.get('_pk') for row in rows if not row.get('deleted')}
+
+    valid_conn_ids_pks = {}
+    for connection_id, pks in conn_ids_pks.items():
+        handler = get_handler(conn_ids_type[connection_id])
+        if not handler:
+            logger.warning(f'Handler not found for connection {connection_id}')
+            continue
+        valid_conn_ids_pks[connection_id] = get_valid_pks(handler.gen_table_name(connection_id), pks)
+
+    valid_kb_ids = get_valid_pks(KnowledgeBaseTable.gen_table_name(), kb_ids) if kb_ids else []
+    valid_tk_ids = get_valid_pks(TicketsTable.gen_table_name(), tk_ids) if tk_ids else []
+
+    new_results = []
+    for result in results:
+        if result.get('type') == 'ticket':
+            if int(result.get('_id')) in valid_tk_ids:
+                new_results.append(result)
+        elif result.get('type') == 'knowledge_base':
+            if int(result.get('_id')) in valid_kb_ids:
+                new_results.append(result)
+        elif int(result.get('_id')) in valid_conn_ids_pks.get(int(result.get('connection_id')), []):
+             new_results.append(result)
+
+    return new_results
+
 @application.route('/search', methods=['POST'])
 @auth_required
 def search():
@@ -165,27 +215,8 @@ def search():
     else:
         results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count, caller=caller)
 
-    # Skip deleted kb
     if caller != 'seaqa-ai':
-        kb_ids = [
-            int(r.get('_id'))
-            for r in results or [] if r.get('type') == 'knowledge_base'
-        ]
-        if kb_ids:
-            seadb_api = SeaDBAPI()
-            table_name = KnowledgeBaseTable.gen_table_name()
-            ids_str = ','.join([str(i) for i in kb_ids])
-            sql = f"SELECT `_pk`, `deleted` FROM `{table_name}` WHERE `_pk` IN ({ids_str})"
-            try:
-                res = seadb_api.query_rows(project_uuid, sql, convert_keys=False)
-                rows = res.get('results', [])
-                valid_ids = {row.get('_pk') for row in rows if not row.get('deleted')}
-                results = [
-                    r 
-                    for r in results if r.get('type') != 'knowledge_base' or int(r.get('_id'))  in valid_ids
-                ]
-            except Exception:
-                pass
+        results = _remove_deleted_search_results(project_uuid, results)
 
     return {'results': results}, 200
 
@@ -204,6 +235,7 @@ def vector_search():
     connection_ids = data.get('connection_ids')
     extra_sources = data.get('extra_sources', [])
     score_threshold = data.get('score_threshold')
+    caller = request.args.to_dict().get('from')
 
     if not query_vector:
         return {'error_msg': 'query_vector invalid.'}, 400
@@ -223,7 +255,11 @@ def vector_search():
         count = int(data.get('count'))
     except:
         count = 10
-    results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=0.5)
+    results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=score_threshold, caller=caller)
+    
+    if caller != 'seaqa-ai':
+        results = _remove_deleted_search_results(project_uuid, results)
+
     return {'results': results}, 200
 
 
