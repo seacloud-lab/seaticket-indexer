@@ -137,7 +137,7 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
-    def search(self, project_uuid, connection_ids, extra_sources, time_from, time_to, keyword, start=0, size=20):
+    def keyword_search(self, project_uuid, connection_ids, extra_sources, time_from, time_to, keyword, start=0, size=20):
         result_docs = []
         bulk_search_params = self._build_search_params(project_uuid, connection_ids, extra_sources, keyword, start, size, time_from, time_to)
 
@@ -274,7 +274,7 @@ class IndexManager:
 
         return formatted_results
 
-    def semantic_search(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
+    def vector_search_by_text(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
 
         query_vector = generate_embedding(query_text, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
         if not query_vector:
