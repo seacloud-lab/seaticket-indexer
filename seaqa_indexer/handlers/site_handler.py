@@ -53,7 +53,7 @@ class SiteHandler(ConnectionHandler):
             formatted['content'] = result.get('content', '')
         return formatted
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid, mq=None):
+    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
         updates = []
         ai_processing_count = 0

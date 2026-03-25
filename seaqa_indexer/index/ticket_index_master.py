@@ -40,7 +40,7 @@ class TicketIndexMaster(Thread):
 
     def master_handler(self):
         with self.mq.pubsub(ignore_subscribe_messages=True) as p:  # ensure pubsub connection is closed
-            p.subscribe('ticket_update')
+            p.subscribe('data_events')
             logger.info('ticket master starting listen')
 
             message_check_time = time.time()

@@ -68,7 +68,7 @@ class AIProcessTaskWorker(LockingTaskWorker):
 
     def process_tickets_ai_summary(self, project_uuid):
         try:
-            process_ticket_ai(self.seadb_api, project_uuid, mq=self.mq)
+            process_ticket_ai(self.seadb_api, project_uuid)
 
             msg_content = {
                 'project_uuid': project_uuid,

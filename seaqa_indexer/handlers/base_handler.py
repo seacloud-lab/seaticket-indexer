@@ -35,7 +35,7 @@ class ConnectionHandler(ABC):
         pass
 
     @abstractmethod
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid, mq=None) -> int:
+    def process_ai(self, seadb_api, storage, connection_id, project_uuid) -> int:
         pass
 
     @abstractmethod
@@ -73,7 +73,7 @@ class ConnectionHandler(ABC):
 
     @abstractmethod
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
-             connection_status, seaqa_db, sync_logger) -> tuple:
+             connection_status, seaqa_db, sync_logger, mq=None) -> tuple:
         """ Returns: tuple: (sync_count, total_count, is_update_config, config) """
         pass
 

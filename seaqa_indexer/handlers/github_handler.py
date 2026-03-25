@@ -61,7 +61,7 @@ class GithubIssueHandler(ConnectionHandler):
             'url': url,
         }
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid, mq=None):
+    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
         updates = []
         table_name = self.gen_table_name(connection_id)
@@ -91,18 +91,6 @@ class GithubIssueHandler(ConnectionHandler):
                 if len(updates) >= self.BATCH_SIZE:
                     seadb_api.update_rows(project_uuid, table_name, updates)
                     updates = []
-                if mq and pk is not None:
-                    try:
-                        event = json.dumps({
-                            'event_type': 'ai_summary_updated',
-                            'source_type': ConnectionType.GITHUB_ISSUE.value,
-                            'project_uuid': project_uuid,
-                            'connection_id': connection_id,
-                            'record_id': pk,
-                        })
-                        mq.publish('data_events', event)
-                    except Exception as e:
-                        logger.warning('Failed to publish data_events for issue pk=%s: %s', pk, e)
             if updates:
                 seadb_api.update_rows(project_uuid, table_name, updates)
         return ai_processing_count
@@ -134,7 +122,7 @@ class GithubIssueHandler(ConnectionHandler):
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
-             connection_status, seaqa_db, sync_logger):
+             connection_status, seaqa_db, sync_logger, mq=None):
         server_url = config.get('repository')
         installation_id = config.get('installation_id')
 
@@ -155,7 +143,7 @@ class GithubIssueHandler(ConnectionHandler):
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
         sync_count, total_count = self._sync_github_issue(connection_id, since, connection_status,
-                                github_api, seaqa_db, github_seadb_api, repo_owner, repo_name)
+                                github_api, seaqa_db, github_seadb_api, repo_owner, repo_name, mq=mq)
         return sync_count, total_count, False, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
@@ -201,7 +189,7 @@ class GithubIssueHandler(ConnectionHandler):
                 if table['name'] in (issues_table_name, comments_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])
 
-    def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api, repo_owner, repo_name):
+    def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api, repo_owner, repo_name, mq=None):
         page = 1
         per_page = 100  # max 100
         sync_count = 0
@@ -256,6 +244,20 @@ class GithubIssueHandler(ConnectionHandler):
                         break
 
                 github_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
+                if mq:
+                    try:
+                        latest_issue = github_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
+                        record_id = latest_issue.get('_pk') if latest_issue else None
+                        if record_id is not None:
+                            event = json.dumps({
+                                'source_type': ConnectionType.GITHUB_ISSUE.value,
+                                'project_uuid': str(github_seadb_api.base_id),
+                                'connection_id': connection_id,
+                                'record_id': record_id,
+                            })
+                            mq.publish('data_events', event)
+                    except Exception as e:
+                        logger.warning('Failed to publish data_events for synced issue %s: %s', issue_id, e)
 
             if len(issues) < per_page:
                 break
