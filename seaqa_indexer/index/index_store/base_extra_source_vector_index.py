@@ -3,6 +3,9 @@ from seaqa_indexer.index.index_store.base_vector_index import BaseVectorIndex
 class BaseExtraSourceVectorIndex(BaseVectorIndex):
     mapping = {
         'properties': {
+            'project_uuid': {
+                'type': 'keyword'
+            },
             'pk': {
                 'type': 'keyword'
             },
