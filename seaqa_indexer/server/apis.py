@@ -130,57 +130,6 @@ def github_webhook():
 
     return jsonify({'success': True}), 200
 
-
-def _remove_deleted_search_results(project_uuid, results):
-    conn_ids_pks = {}
-    conn_ids_type = {}
-    kb_ids = []
-    tk_ids = []
-
-    for result in results:
-        if result.get('type') == 'knowledge_base':
-            kb_ids.append(int(result.get('_id')))
-        elif result.get('type') == 'ticket':
-            tk_ids.append(int(result.get('_id')))
-        else:
-            connection_id = int(result.get('connection_id'))
-            if connection_id not in conn_ids_pks:
-                conn_ids_pks[connection_id] = []
-                conn_ids_type[connection_id] = result.get('type')
-            conn_ids_pks[connection_id].append(int(result.get('_id')))
-
-    seadb_api = SeaDBAPI()
-
-    def get_valid_pks(table_name, pks):
-        sql = f"SELECT `_pk`, `deleted` FROM `{table_name}` WHERE `_pk` IN ({','.join([str(i) for i in pks])})"
-        res = seadb_api.query_rows(project_uuid, sql, convert_keys=True)
-        rows = res.get('results', [])
-        return {row.get('_pk') for row in rows if not row.get('deleted')}
-
-    valid_conn_ids_pks = {}
-    for connection_id, pks in conn_ids_pks.items():
-        handler = get_handler(conn_ids_type[connection_id])
-        if not handler:
-            logger.warning(f'Handler not found for connection {connection_id}')
-            continue
-        valid_conn_ids_pks[connection_id] = get_valid_pks(handler.gen_table_name(connection_id), pks)
-
-    valid_kb_ids = get_valid_pks(KnowledgeBaseTable.gen_table_name(), kb_ids) if kb_ids else []
-    valid_tk_ids = get_valid_pks(TicketsTable.gen_table_name(), tk_ids) if tk_ids else []
-
-    new_results = []
-    for result in results:
-        if result.get('type') == 'ticket':
-            if int(result.get('_id')) in valid_tk_ids:
-                new_results.append(result)
-        elif result.get('type') == 'knowledge_base':
-            if int(result.get('_id')) in valid_kb_ids:
-                new_results.append(result)
-        elif int(result.get('_id')) in valid_conn_ids_pks.get(int(result.get('connection_id')), []):
-             new_results.append(result)
-
-    return new_results
-
 @application.route('/search', methods=['POST'])
 @auth_required
 def search():
@@ -198,7 +147,6 @@ def search():
     search_type = data.get('search_type', 'normal_search')
     username = data.get('username', '')
     extra_sources = data.get('extra_sources', [])
-    caller = request.args.to_dict().get('from')
 
     if not query:
         return {'error_msg': 'query invalid.'}, 400
@@ -211,12 +159,9 @@ def search():
     except:
         count = 20
     if search_type == 'semantic_search':
-        results = application.app.index_manager.semantic_search(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count, caller=caller)
+        results = application.app.index_manager.semantic_search(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count)
     else:
-        results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count, caller=caller)
-
-    if caller != 'seaqa-ai':
-        results = _remove_deleted_search_results(project_uuid, results)
+        results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
 
     return {'results': results}, 200
 
@@ -235,7 +180,6 @@ def vector_search():
     connection_ids = data.get('connection_ids')
     extra_sources = data.get('extra_sources', [])
     score_threshold = data.get('score_threshold')
-    caller = request.args.to_dict().get('from')
 
     if not query_vector:
         return {'error_msg': 'query_vector invalid.'}, 400
@@ -255,10 +199,7 @@ def vector_search():
         count = int(data.get('count'))
     except:
         count = 10
-    results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=score_threshold, caller=caller)
-    
-    if caller != 'seaqa-ai':
-        results = _remove_deleted_search_results(project_uuid, results)
+    results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=score_threshold)
 
     return {'results': results}, 200
 

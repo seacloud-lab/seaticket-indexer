@@ -3,79 +3,14 @@ import json
 
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT
-from seaqa_indexer.index.index_store.base_index import BaseIndex
+from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
 
 logger = logging.getLogger(__name__)
 
 
-class DiscourseIndex(BaseIndex):
-    mapping = {
-        'properties': {
-            'connection_id': {
-                'type': 'keyword'
-            },
-            'topic_id': {
-                'type': 'long'
-            },
-            'title': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'fields': {
-                    'keyword': {
-                        'type': 'keyword'
-                    }
-                }
-            },
-            'content': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'highlightable': True
-            },
-            'category_id': {
-                'type': 'long'
-            },
-            'slug': {
-                'type': 'keyword'
-            },
-            'modified_time': {
-                'type': 'date'
-            },
-        }
-    }
-
-    def get_search_param(self, index_name, keyword, start, size, time_from, time_to, search_title_only=False):
-        query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
-        searches = self._make_query_searches(keyword, search_title_only)
-        query_map['bool']['should'] = searches
-
-        query_map = self._add_time_range_filter(query_map, time_from, time_to)
-
-        data = {
-            'query': query_map,
-            'from': start,
-            'size': size,
-            '_source': ['connection_id', 'topic_id', 'title', 'content', 'slug', 'modified_time'],
-            'sort': [
-                '_score'
-            ],
-            'highlight': {
-                'pre_tags': ['<mark>'],
-                'post_tags': ['</mark>'],
-                'fields': {
-                    'content': {}
-                }
-            }
-        }
-
-        repo_query_info = {
-            'index': index_name,
-            'query': data
-        }
-
-        return repo_query_info
-
+class DiscourseIndex(BaseConnectionIndex):
     def update(self, index_name, connection_id, connection_status, seaqa_db, discourse_seadb_api, since):
         index_count = 0
         page_size = 1000
@@ -108,11 +43,8 @@ class DiscourseIndex(BaseIndex):
 
                     doc = {
                         'connection_id': str(connection_id),
-                        'topic_id': topic['topic_id'],
                         'title': topic['title'],
                         'content': body_content,
-                        'category_id': topic.get('category_id'),
-                        'slug': topic.get('slug', ''),
                         'modified_time': topic.get('modified_time'),
                     }
 

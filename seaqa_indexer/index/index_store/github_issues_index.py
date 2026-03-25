@@ -3,87 +3,12 @@ import logging
 
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT, SEASEARCH_BULK_OPERATE_LIMIT
-from seaqa_indexer.index.index_store.base_index import BaseIndex
+from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
 
 logger = logging.getLogger(__name__)
 
 
-class GitHubIssuesIndex(BaseIndex):
-    mapping = {
-        'properties': {
-            'connection_id': {
-                'type': 'keyword',
-            },
-            'repo_owner': {
-                'type': 'keyword',
-            },
-            'repo_name': {
-                'type': 'keyword',
-            },
-            'issue_id': {
-                'type': 'long',
-            },
-            'issue_number': {
-                'type': 'integer',
-            },
-            'title': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'fields': {
-                    'keyword': {
-                        'type': 'keyword'
-                    }
-                }
-            },
-            'content': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'highlightable': True
-            },
-            'state': {
-                'type': 'keyword',
-            },
-            'labels': {
-                'type': 'keyword',
-            },
-            'modified_time': {
-                'type': 'date',
-            }
-        }
-    }
-
-    def get_search_param(self, index_name, keyword, start, size, time_from, time_to, search_title_only=False):
-        query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
-        searches = self._make_query_searches(keyword, search_title_only)
-        query_map['bool']['should'] = searches
-
-        query_map = self._add_time_range_filter(query_map, time_from, time_to)
-
-        data = {
-            'query': query_map,
-            'from': start,
-            'size': size,
-            '_source': ['connection_id', 'repo_owner', 'repo_name', 'issue_number', 'title', 'content',
-                        'state', 'labels'],
-            'sort': [
-                '_score'
-            ],
-            'highlight': {
-                'pre_tags': ['<mark>'],
-                'post_tags': ['</mark>'],
-                'fields': {
-                    'content': {}
-                }
-            }
-        }
-
-        repo_query_info = {
-            'index': index_name,
-            'query': data
-        }
-
-        return repo_query_info
-
+class GitHubIssuesIndex(BaseConnectionIndex):
     def update(self, index_name, connection_id, repo_owner, repo_name, connection_status, seaqa_db, github_seadb_api, since):
         index_count = 0
         page_size = 1000
@@ -117,15 +42,9 @@ class GitHubIssuesIndex(BaseIndex):
 
                     doc = {
                         'connection_id': str(connection_id),
-                        'repo_owner': repo_owner,
-                        'repo_name': repo_name,
-                        'issue_id': issue_id,
-                        'issue_number': issue.get('issue_number'),
                         'title': issue.get('title'),
                         'content': content,
-                        'state': issue.get('state'),
-                        'labels': issue.get('labels'),
-                        'modified_time': issue.get('modified_time'),
+                        'modified_time': issue.get('modified_time')
                     }
                     index_info = {'index': {'_index': index_name, '_id': key}}
                     bulk_params.append(index_info)

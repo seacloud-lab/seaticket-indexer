@@ -4,13 +4,13 @@ import json
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.ai_processor.utils import generate_chunks_embedding
-from seaqa_indexer.index.index_store.vector_base_index import VectorBaseIndex
+from seaqa_indexer.index.index_store.base_vector_index import BaseVectorIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType, AIScenario
 
 logger = logging.getLogger(__name__)
 
 
-class ContentVectorIndex(VectorBaseIndex):
+class ContentVectorIndex(BaseVectorIndex):
     mapping = {
         'properties': {
             'content': {

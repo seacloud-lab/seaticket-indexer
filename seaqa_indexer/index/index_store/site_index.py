@@ -4,70 +4,13 @@ import logging
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.seadb_models.models import WebCrawlTable
-from seaqa_indexer.index.index_store.base_index import BaseIndex
+from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
 logger = logging.getLogger(__name__)
 
 
-class SiteIndex(BaseIndex):
-    mapping = {
-        'properties': {
-            'connection_id': {
-                'type': 'keyword'
-            },
-            'url': {
-                'type': 'keyword'
-            },
-            'etag': {
-                'type': 'keyword'
-            },
-            'title': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'fields': {
-                    'keyword': {
-                        'type': 'keyword'
-                    }
-                }
-            },
-            'content': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'highlightable': True
-            },
-            'modified_time': {
-                'type': 'date'
-            },
-        }
-    }
-
-    def get_search_param(self, index_name, keyword, start, size, time_from, time_to, search_title_only=False):
-        query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
-        searches = self._make_query_searches(keyword, search_title_only)
-        query_map['bool']['should'] = searches
-
-        query_map = self._add_time_range_filter(query_map, time_from, time_to)
-
-        data = {
-            'query': query_map,
-            'from': start,
-            'size': size,
-            '_source': ['connection_id', 'url', 'title', 'content'],
-            'sort': ['_score'],
-            'highlight': {
-                'pre_tags': ['<mark>'],
-                'post_tags': ['</mark>'],
-                'fields': {'content': {}},
-            }
-        }
-
-        site_query_info = {
-            'index': index_name,
-            'query': data
-        }
-        return site_query_info
-
+class SiteIndex(BaseConnectionIndex):
     def update(self, index_name, connection_id, project_uuid, connection_status, seaqa_db, seadb_api, storage, since):
         new_index_ids_set = set()
         deleted_index_id_set = set()
@@ -95,7 +38,6 @@ class SiteIndex(BaseIndex):
 
             for row in rows:
                 url = row.get('url')
-                etag = row.get('etag')
                 modified_time = row.get('modified_time')
                 title = row.get('title')
                 deleted = row.get('deleted')
@@ -118,8 +60,6 @@ class SiteIndex(BaseIndex):
                 doc_info = {
                     'connection_id': str(connection_id),
                     'content': content,
-                    'url': url,
-                    'etag': etag,
                     'title': title,
                     'modified_time': modified_time,
                 }

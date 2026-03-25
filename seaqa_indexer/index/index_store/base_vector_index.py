@@ -1,12 +1,13 @@
 import logging
 
+from abc import abstractmethod
 from seaqa_indexer.index.index_store.base_index import BaseIndex
 from seaqa_indexer.utils import time_to_utc_time
 
 logger = logging.getLogger(__name__)
 
 
-class VectorBaseIndex(BaseIndex):
+class BaseVectorIndex(BaseIndex):
 
     def create_index_if_missing(self, index_name):
         if not self.seasearch_api.check_index_mapping(index_name).get('is_exist'):
@@ -62,3 +63,7 @@ class VectorBaseIndex(BaseIndex):
         data = self._ensure_filter_exists(data)
         data['filter_query']['bool']['filter'].append({'range': {'modified_time': search_content}})
         return data
+    
+    @abstractmethod
+    def semantic_search(self, *args, **kwargs):
+        pass

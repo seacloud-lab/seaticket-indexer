@@ -2,13 +2,13 @@ import logging
 import json
 
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.index.index_store.vector_base_index import VectorBaseIndex
+from seaqa_indexer.index.index_store.base_vector_index import BaseVectorIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
 logger = logging.getLogger(__name__)
 
 
-class SummaryVectorIndex(VectorBaseIndex):
+class SummaryVectorIndex(BaseVectorIndex):
     mapping = {
         'properties': {
             'project_uuid': {

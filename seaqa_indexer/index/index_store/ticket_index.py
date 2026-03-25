@@ -1,58 +1,12 @@
 import logging
 
-from seaqa_indexer.index.index_store.base_index import BaseIndex
+from seaqa_indexer.index.index_store.base_extra_source_index import BaseExtraSourceIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
 logger = logging.getLogger(__name__)
 
 
-class TicketIndex(BaseIndex):
-    mapping = {
-        'properties': {
-            'project_uuid': {
-                'type': 'keyword'
-            },
-            'title': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'fields': {
-                    'keyword': {
-                        'type': 'keyword'
-                    }
-                }
-            },
-            'content': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'highlightable': True
-            },
-            'modified_time': {
-                'type': 'date'
-            }
-        }
-    }
-
-    def get_search_param(self, index_name, keyword, start, size, time_from=None, time_to=None, search_title_only=False):
-        query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
-        searches = self._make_query_searches(keyword, search_title_only)
-        query_map['bool']['should'] = searches
-
-        query_map = self._add_time_range_filter(query_map, time_from, time_to)
-
-        data = {
-            'query': query_map,
-            'from': start,
-            'size': size,
-            '_source': ['title', 'content', 'modified_time'],
-            'sort': ['_score'],
-            'highlight': {
-                'pre_tags': ['<mark>'],
-                'post_tags': ['</mark>'],
-                'fields': {'content': {}, 'title': {}},
-            }
-        }
-        return {'index': index_name, 'query': data}
-
+class TicketIndex(BaseExtraSourceIndex):
     def update(self, index_name, project_uuid, ticket_seadb_api, since):
         page_size = 1000
         bulk_params = []
