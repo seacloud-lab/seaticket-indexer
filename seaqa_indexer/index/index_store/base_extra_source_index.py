@@ -3,9 +3,6 @@ from seaqa_indexer.index.index_store.base_index import BaseIndex
 class BaseExtraSourceIndex(BaseIndex):
     mapping = {
         'properties': {
-            'project_uuid': {
-                'type': 'keyword'
-            },
             'title': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',

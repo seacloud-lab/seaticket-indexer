@@ -3,9 +3,6 @@ from seaqa_indexer.index.index_store.base_vector_index import BaseVectorIndex
 class BaseExtraSourceVectorIndex(BaseVectorIndex):
     mapping = {
         'properties': {
-            'project_uuid': {
-                'type': 'keyword'
-            },
             'pk': {
                 'type': 'keyword'
             },
@@ -29,7 +26,7 @@ class BaseExtraSourceVectorIndex(BaseVectorIndex):
         data = {
             "query_field": "vec",
             "k": top_k,
-            "return_fields": ["ai_summary", "project_uuid", "pk", "modified_time"],
+            "return_fields": ["ai_summary", "pk", "modified_time"],
             "vector": query_vector,
             "_source": False
         }
@@ -48,7 +45,6 @@ class BaseExtraSourceVectorIndex(BaseVectorIndex):
             fields = hit.get('fields', {})
             topk_search_results.append({
                 'ai_summary': fields.get('ai_summary', [''])[0],
-                'project_uuid': fields.get('project_uuid')[0],
                 'pk': fields.get('pk')[0],
                 'modified_time': fields.get('modified_time', [None])[0],
                 'score': hit.get('_score', 0),
