@@ -193,7 +193,7 @@ class GithubIssueHandler(ConnectionHandler):
     def _resolve_issue_state_event_type(self, issue, existed_issue):
         """Return the event type that reflects the issue's own state change."""
         if not existed_issue:
-            return DataEventType.GITHUB_ISSUE_CREATED.value
+            return DataEventType.GITHUB_ISSUE_ADDED.value
         new_state = issue.get('state')
         old_state = existed_issue.get('state')
         if new_state == 'closed' and old_state != 'closed':
@@ -271,7 +271,7 @@ class GithubIssueHandler(ConnectionHandler):
                                 'record_id': record_id,
                             }
                             if added_comment_count > 0:
-                                self.mq.publish('data_events', json.dumps({**base_event, 'event_type': DataEventType.GITHUB_ISSUE_COMMENT_CREATED.value}))
+                                self.mq.publish('data_events', json.dumps({**base_event, 'event_type': DataEventType.GITHUB_ISSUE_COMMENT_ADDED.value}))
                             self.mq.publish('data_events', json.dumps({**base_event, 'event_type': issue_state_event_type}))
                     except Exception as e:
                         logger.warning('Failed to publish data_events for synced issue %s: %s', issue_id, e)
