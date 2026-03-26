@@ -84,7 +84,9 @@ class GitHubAPI:
         params = {
             'state': state,
             'per_page': per_page,
-            'page': page
+            'page': page,
+            'sort': 'updated',
+            'direction': 'asc'
         }
         if since:
             params['since'] = since

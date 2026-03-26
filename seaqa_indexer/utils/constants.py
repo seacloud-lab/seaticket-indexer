@@ -54,7 +54,11 @@ class AIScenario(Enum):
         return value in {item.value for item in cls}
 
 class DataEventType(Enum):
-    SYNC_UPDATE = 'sync_update'
+    GITHUB_ISSUE_CREATED = 'github_issue_created'
+    GITHUB_ISSUE_UPDATED = 'github_issue_updated'
+    GITHUB_ISSUE_CLOSED = 'github_issue_closed'
+    GITHUB_ISSUE_REOPENED = 'github_issue_reopened'
+    GITHUB_ISSUE_COMMENT_CREATED = 'github_issue_comment_created'
 
     @classmethod
     def is_valid(cls, value):

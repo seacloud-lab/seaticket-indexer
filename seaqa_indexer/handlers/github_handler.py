@@ -190,6 +190,18 @@ class GithubIssueHandler(ConnectionHandler):
                 if table['name'] in (issues_table_name, comments_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])
 
+    def _resolve_issue_state_event_type(self, issue, existed_issue):
+        """Return the event type that reflects the issue's own state change."""
+        if not existed_issue:
+            return DataEventType.GITHUB_ISSUE_CREATED.value
+        new_state = issue.get('state')
+        old_state = existed_issue.get('state')
+        if new_state == 'closed' and old_state != 'closed':
+            return DataEventType.GITHUB_ISSUE_CLOSED.value
+        if new_state == 'open' and old_state == 'closed':
+            return DataEventType.GITHUB_ISSUE_REOPENED.value
+        return DataEventType.GITHUB_ISSUE_UPDATED.value
+
     def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api, repo_owner, repo_name):
         page = 1
         per_page = 100  # max 100
@@ -219,6 +231,8 @@ class GithubIssueHandler(ConnectionHandler):
                         logger.debug(f'Issue {issue_id} is up to date, skipping sync.')
                         continue
 
+                issue_state_event_type = self._resolve_issue_state_event_type(issue, existed_issue)
+
                 sync_count += 1
                 if existed_issue:
                     updated_count += 1
@@ -244,20 +258,21 @@ class GithubIssueHandler(ConnectionHandler):
                     if not comments or len(comments) < per_page:
                         break
 
-                github_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
+                added_comment_count = github_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
                 if self.mq:
                     try:
                         latest_issue = github_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
                         record_id = latest_issue.get('_pk') if latest_issue else None
                         if record_id is not None:
-                            event = json.dumps({
-                                'event_type': DataEventType.SYNC_UPDATE.value,
+                            base_event = {
                                 'source_type': ConnectionType.GITHUB_ISSUE.value,
                                 'project_uuid': str(github_seadb_api.base_id),
                                 'connection_id': connection_id,
                                 'record_id': record_id,
-                            })
-                            self.mq.publish('data_events', event)
+                            }
+                            if added_comment_count > 0:
+                                self.mq.publish('data_events', json.dumps({**base_event, 'event_type': DataEventType.GITHUB_ISSUE_COMMENT_CREATED.value}))
+                            self.mq.publish('data_events', json.dumps({**base_event, 'event_type': issue_state_event_type}))
                     except Exception as e:
                         logger.warning('Failed to publish data_events for synced issue %s: %s', issue_id, e)
 
