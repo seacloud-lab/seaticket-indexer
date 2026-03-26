@@ -11,7 +11,6 @@ from seaqa_indexer.ai_processor.ai_processor import (
 )
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import ConnectionType
 
 
 logger = logging.getLogger(__name__)

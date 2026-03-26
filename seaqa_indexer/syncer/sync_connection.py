@@ -50,9 +50,10 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             sync_logger.stop_capture()
             return
 
+        conn_handler.mq = mq
         sync_count, total_count, is_update_config, config = conn_handler.sync(
             connection_id, project_uuid, config, old_last_sync_time,
-            connection_status, seaqa_db, sync_logger, mq=mq
+            connection_status, seaqa_db, sync_logger
         )
 
         if sync_count is None:

@@ -6,12 +6,14 @@ from abc import ABC, abstractmethod
 from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary
+from redis import Redis
 
 logger = logging.getLogger(__name__)
 
 
 class ConnectionHandler(ABC):
     connection_type: str = None
+    mq: Redis = None
 
     @abstractmethod
     def gen_table_name(self, connection_id) -> str:
@@ -73,7 +75,7 @@ class ConnectionHandler(ABC):
 
     @abstractmethod
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
-             connection_status, seaqa_db, sync_logger, mq=None) -> tuple:
+             connection_status, seaqa_db, sync_logger) -> tuple:
         """ Returns: tuple: (sync_count, total_count, is_update_config, config) """
         pass
 
