@@ -3,7 +3,6 @@ import json
 import datetime
 
 from seaqa_indexer.utils.constants import CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES
-from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.handlers import get_handler
@@ -115,9 +114,9 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             'project_uuid': project_uuid,
             'type': connection_type,
             'connection_id': int(connection_id),
-            'add': int(sync_changes.get('added', 0) or 0),
-            'delete': int(sync_changes.get('deleted', 0) or 0),
-            'update': int(sync_changes.get('updated', sync_count or 0) or 0),
+            'added': int(sync_changes.get('added', 0) or 0),
+            'deleted': int(sync_changes.get('deleted', 0) or 0),
+            'updated': int(sync_changes.get('updated', sync_count or 0) or 0),
         })
         mq.publish('connection_update', connection_update_message)
     except Exception as e:
