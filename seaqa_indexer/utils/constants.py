@@ -53,6 +53,13 @@ class AIScenario(Enum):
     def is_valid(cls, value):
         return value in {item.value for item in cls}
 
+class DataEventType(Enum):
+    SYNC_UPDATE = 'sync_update'
+
+    @classmethod
+    def is_valid(cls, value):
+        return value in {item.value for item in cls}
+
 text_suffixes = [
     'txt',
     'md',

@@ -14,6 +14,7 @@ from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
+from seaqa_indexer.utils.constants import DataEventType
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +251,7 @@ class GithubIssueHandler(ConnectionHandler):
                         record_id = latest_issue.get('_pk') if latest_issue else None
                         if record_id is not None:
                             event = json.dumps({
-                                'event_type': 'data_update',
+                                'event_type': DataEventType.SYNC_UPDATE.value,
                                 'source_type': ConnectionType.GITHUB_ISSUE.value,
                                 'project_uuid': str(github_seadb_api.base_id),
                                 'connection_id': connection_id,
