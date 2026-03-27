@@ -5,11 +5,11 @@ from functools import wraps
 from flask import request, jsonify, Flask
 
 from seaqa_indexer import config
-from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.syncer.sync_manager import ForumNotFoundException, \
     ForumInActiveException
-from seaqa_indexer.utils.constants import ConnectionType, AIScenario
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable
+from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.handlers import get_handler
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 
@@ -130,10 +130,9 @@ def github_webhook():
 
     return jsonify({'success': True}), 200
 
-
-@application.route('/search', methods=['POST'])
+@application.route('/search/keyword', methods=['POST'])
 @auth_required
-def search():
+def keyword_search():
     try:
         data = json.loads(request.data)
     except Exception as e:
@@ -145,8 +144,6 @@ def search():
     connection_ids = data.get('connection_ids')
     time_from = data.get('time_from')
     time_to = data.get('time_to')
-    search_type = data.get('search_type', 'normal_search')
-    username = data.get('username', '')
     extra_sources = data.get('extra_sources', [])
 
     if not query:
@@ -159,36 +156,12 @@ def search():
         count = int(data.get('count'))
     except:
         count = 20
-    if search_type == 'semantic_search':
-        query_vector = generate_embedding(query, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
-        if not query_vector:
-            return {'error_msg': ('Failed to generate query vector for: %s', query)}, 500
-        results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, time_from, time_to, count)
-    else:
-        results = application.app.index_manager.search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
-        # Skip deleted kb
-        kb_ids = [
-            int(r.get('_id'))
-            for r in results or [] if r.get('type') == 'knowledge_base'
-        ]
-        if kb_ids:
-            seadb_api = SeaDBAPI()
-            table_name = KnowledgeBaseTable.gen_table_name()
-            ids_str = ','.join([str(i) for i in kb_ids])
-            sql = f"SELECT `_pk`, `deleted` FROM `{table_name}` WHERE `_pk` IN ({ids_str})"
-            try:
-                res = seadb_api.query_rows(project_uuid, sql, convert_keys=False)
-                rows = res.get('results', [])
-                deleted_ids = {row.get('_pk') for row in rows if row.get('deleted') is True}
-                if deleted_ids:
-                    results = [r for r in results if not (r.get('type') == 'knowledge_base' and int(r.get('_id'))  in deleted_ids)]
-            except Exception:
-                pass
+
+    results = application.app.index_manager.keyword_search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
 
     return {'results': results}, 200
 
-
-@application.route('/vector_search', methods=['POST'])
+@application.route('/search/vector', methods=['POST'])
 @auth_required
 def vector_search():
     try:
@@ -221,7 +194,39 @@ def vector_search():
         count = int(data.get('count'))
     except:
         count = 10
-    results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=0.5)
+    results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=score_threshold)
+
+    return {'results': results}, 200
+
+@application.route('/search/vector-from-text', methods=['POST'])
+@auth_required
+def vector_search_by_text():
+    try:
+        data = json.loads(request.data)
+    except Exception as e:
+        logger.exception(e)
+        return {'error_msg': 'Bad request.'}, 400
+
+    query = data.get('query').strip()
+    project_uuid = data.get('project_uuid')
+    connection_ids = data.get('connection_ids')
+    time_from = data.get('time_from')
+    time_to = data.get('time_to')
+    username = data.get('username', '')
+    extra_sources = data.get('extra_sources', [])
+
+    if not query:
+        return {'error_msg': 'query invalid.'}, 400
+
+    if not project_uuid:
+        return {'error_msg': 'project_uuid invalid.'}, 400
+
+    try:
+        count = int(data.get('count'))
+    except:
+        count = 20
+    results = application.app.index_manager.vector_search_by_text(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count)
+
     return {'results': results}, 200
 
 

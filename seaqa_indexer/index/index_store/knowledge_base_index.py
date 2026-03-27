@@ -15,14 +15,20 @@ class KnowledgeBaseIndex(BaseIndex):
             'title': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
-                'fields': {'keyword': {'type': 'keyword'}}
+                'fields': {
+                    'keyword': {
+                        'type': 'keyword'
+                    }
+                }
             },
             'content': {
                 'type': 'text',
                 'analyzer': 'gse_standard_analyzer',
                 'highlightable': True
             },
-            'modified_time': {'type': 'date'}
+            'modified_time': {
+                'type': 'date'
+            }
         }
     }
 
@@ -37,12 +43,12 @@ class KnowledgeBaseIndex(BaseIndex):
             'query': query_map,
             'from': start,
             'size': size,
-            '_source': ['title', 'project_uuid', 'content', 'modified_time'],
+            '_source': ['title', 'content', 'modified_time'],
             'sort': ['_score'],
             'highlight': {
                 'pre_tags': ['<mark>'],
                 'post_tags': ['</mark>'],
-                'fields': {'content': {}},
+                'fields': {'content': {}, 'title': {}},
             }
         }
         return {'index': index_name, 'query': data}

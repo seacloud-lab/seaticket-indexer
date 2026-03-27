@@ -1,9 +1,8 @@
 import logging
 import json
-from urllib.parse import urlparse
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES, ConnectionType, REPO_NAME_CACHE_TIME_OUT, AIScenario
+from seaqa_indexer.utils.constants import SUPPORT_VECTOR_RETRIEVAL_TYPES, ConnectionType, AIScenario
 from seaqa_indexer.index.index_store.knowledge_base_index import KnowledgeBaseIndex
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
@@ -17,110 +16,47 @@ from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.index.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, \
     gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name
 from seaqa_indexer.mq import get_mq
-from seaqa_indexer.app.event_redis import redis_cache
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
 from seaqa_indexer.handlers import get_handler
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 
 
 logger = logging.getLogger(__name__)
 
+def format_vector_search_result(result, connection_id_to_connection):
 
-def get_result_related_seadb_records(project_uuid, all_results, connection_id_to_connection, seadb_api):
-    def query_records_by_pks(table_name, pks):
-        pks_str = ','.join(map(str, pks))
-        sql = f"SELECT * FROM `{table_name}` WHERE _pk IN ({pks_str})"
-        res = seadb_api.query_rows(project_uuid, sql)
-        return res.get('results', [])
-
-    connection_id_to_pks = {}  # {connection_id: [pk1, pk2]}
-    kb_pks = set()
-    ticket_pks = set()
-
-    for result in all_results:
-        if result.get('source_type') == 'knowledge_base_summary':
-            kb_pks.add(result.get('pk'))
-        elif result.get('source_type') == 'ticket_summary':
-            ticket_pks.add(result.get('pk'))
-        else:
-            connection_id = int(result.get('connection_id'))
-            if connection_id not in connection_id_to_pks:
-                connection_id_to_pks[connection_id] = []
-            connection_id_to_pks[connection_id].append(result.get('pk'))
-
-    connection_pk_to_record = {}  # {connection_id: {pk: record}}
-    for connection_id, connection_pks in connection_id_to_pks.items():
-        connection = connection_id_to_connection[connection_id]
-        handler = get_handler(connection.type)
-        if not handler:
-            logger.warning(f'Handler not found for connection {connection_id}')
-            continue
-        connection_table_name = handler.gen_table_name(connection_id)
-
-        records = query_records_by_pks(connection_table_name, connection_pks)
-        for record in records:
-            if connection_id not in connection_pk_to_record:
-                connection_pk_to_record[connection_id] = {}
-            connection_pk_to_record[connection_id][record.get('_pk')] = record
-
-    kb_pk_to_record = {}
-    if kb_pks:
-        kb_table_name = KnowledgeBaseTable.gen_table_name()
-        records = query_records_by_pks(kb_table_name, kb_pks)
-        kb_pk_to_record = {record.get('_pk'): record for record in records}
-
-    ticket_pk_to_record = {}
-    if ticket_pks:
-        ticket_table_name = TicketsTable.gen_table_name()
-        records = query_records_by_pks(ticket_table_name, ticket_pks)
-        ticket_pk_to_record = {record.get('_pk'): record for record in records}
-    return connection_pk_to_record, kb_pk_to_record, ticket_pk_to_record
-
-
-def format_vector_search_result(result, connection_id_to_connection, kb_pk_to_record, ticket_pk_to_record, connection_pk_to_record):
     pk = result.get('pk')
     source_type = result.get('source_type')
     score = result.get('score')
     ai_summary = result.get('ai_summary', '')
+    modified_time = result.get('modified_time', '')
 
     formatted_result = {
         '_id': pk,
         'score': score,
-        'content': ai_summary,
+        'ai_summary': ai_summary,
         'source_type': source_type,
+        'modified_time': modified_time
     }
 
     if source_type == 'knowledge_base_summary':
-        record = kb_pk_to_record.get(int(pk))
         formatted_result['type'] = 'knowledge_base'
-        formatted_result['title'] = record.get('title', '')
-        formatted_result['modified_time'] = record.get('modified_time', '')
 
     elif source_type == 'ticket_summary':
-        record = ticket_pk_to_record.get(int(pk))
         formatted_result['type'] = 'ticket'
-        formatted_result['title'] = record.get('title', '')
-        formatted_result['modified_time'] = record.get('modified_time', '')
 
     else:
         # format connection vector search result
         connection_id = result.get('connection_id')
         connection = connection_id_to_connection.get(int(connection_id))
-        record = connection_pk_to_record.get(int(connection_id), {}).get(int(pk))
         connection_type = connection.type
 
         formatted_result['connection_id'] = connection_id
         formatted_result['type'] = connection_type
-        formatted_result['modified_time'] = record.get('modified_time')
 
-        conn_handler = get_handler(connection_type)
-        if not conn_handler:
-            logger.warning(f'Unsupported connection type: {connection_type}')
-            return
-        type_specific_result = conn_handler.format_vector_search_result(record, connection, result)
-        formatted_result.update(type_specific_result)
+        if source_type == 'chunk':
+            formatted_result['snippet'] = result.get('content', '')
 
     return formatted_result
 
@@ -143,7 +79,6 @@ class IndexManager:
 
     def _build_search_params(self, project_uuid, connection_ids, extra_sources, keyword, start, size, time_from, time_to):
         bulk_search_params = []
-        connection_id_to_config = {}
         if connection_ids:
             connection_id_list = connection_ids.split(',')
             project_connections = self.seaqa_db.get_connection_by_ids(project_uuid, connection_id_list)
@@ -152,7 +87,6 @@ class IndexManager:
                 connection_id = project_connection.id
                 index_name = gen_index_name_by_type(connection_id, connection_type)
 
-                connection_id_to_config[str(connection_id)] = json.loads(project_connection.config)
                 conn_handler = get_handler(connection_type)
                 if not conn_handler:
                     logger.warning('Unsupported connection type: %s', connection_type)
@@ -170,7 +104,7 @@ class IndexManager:
             ticket_index_name = gen_ticket_index_name(project_uuid)
             ticket_search_param = self.ticket_index.get_search_param(ticket_index_name, keyword, start, size, time_from, time_to)
             bulk_search_params.append(ticket_search_param)
-        return connection_id_to_config, bulk_search_params
+        return bulk_search_params
 
     def delete_index_by_project(self, project_uuid):
         project_connections = self.seaqa_db.get_connections_by_project_uuid(project_uuid)
@@ -203,9 +137,9 @@ class IndexManager:
         }
         self.mq.lpush('index_task', json.dumps(msg_content))
 
-    def search(self, project_uuid, connection_ids, extra_sources, time_from, time_to, keyword, start=0, size=20):
+    def keyword_search(self, project_uuid, connection_ids, extra_sources, time_from, time_to, keyword, start=0, size=20):
         result_docs = []
-        connection_id_to_config, bulk_search_params = self._build_search_params(project_uuid, connection_ids, extra_sources, keyword, start, size, time_from, time_to)
+        bulk_search_params = self._build_search_params(project_uuid, connection_ids, extra_sources, keyword, start, size, time_from, time_to)
 
         if not bulk_search_params:
             return []
@@ -216,10 +150,11 @@ class IndexManager:
         results = self.seasearch_api.unified_search(query_body)
 
         hits = results.get('hits', []).get('hits', [])
-        total = results.get('hits', {}).get('total', {}).get('value', 0)
 
         if not hits:
             return result_docs
+        
+        all_source_types = ConnectionType.to_list() + ['knowledge_base', 'ticket']
         for hit in hits:
             index_name = hit.get('_index')
             source = hit.get('_source')
@@ -228,125 +163,27 @@ class IndexManager:
                 _id = int(hit.get('_id'))
             except:
                 _id = hit.get('_id')
-            if index_name.startswith(ConnectionType.SEAFILE.value):
-                repo_id = source['repo_id']
-                connection_id = source['connection_id']
-                repo_cache_info = redis_cache.get(repo_id)
-                if not repo_cache_info:
-                    config = connection_id_to_config.get(connection_id)
-                    repo_name = config.get('repo_name')
-                    server_url = config.get('server_url')
-                    repo_cache_info = json.dumps({server_url: repo_name})
-                    redis_cache.set(repo_id, repo_cache_info, REPO_NAME_CACHE_TIME_OUT)
 
-                repo_cache_info = json.loads(repo_cache_info)
-                server_url = list(repo_cache_info.keys())[0]
-                repo_name = list(repo_cache_info.values())[0]
+            s_type = None
+            for source_type in all_source_types:
+                if index_name.startswith(source_type):
+                    s_type = source_type
+                    break
+            
+            if not s_type:
+                continue
 
-                url = server_url.rstrip('/') + '/' + 'lib' + '/' + repo_id + '/file/'
-                if source['path'].strip('/'):
-                    url += source['path'].strip('/') + '/'
-                url += source['title']
-                r = {
-                    'title': source['title'],
-                    'path': source['path'],
-                    'repo_id': source['repo_id'],
-                    'connection_id': source['connection_id'],
-                    'content': source['content'],
-                    'score': score,
-                    'repo_name': repo_name,
-                    'server_url': server_url,
-                    'url': url,
-                    'modified_time': source['modified_time'],
-                    '_id': _id,
-                    'type': 'seafile',
-                }
-                result_docs.append(r)
-            elif index_name.startswith(ConnectionType.SITE.value):
-                r = {
-                    'title': source['title'],
-                    'url': source['url'],
-                    'connection_id': source['connection_id'],
-                    'content': source['content'],
-                    'score': score,
-                    '_id': _id,
-                    'type': ConnectionType.SEAFILE.value,
-                }
-                result_docs.append(r)
-            # TODO other index type
-            elif index_name.startswith(ConnectionType.EMAIL.value):
-                r = {
-                    'title': source['title'],
-                    'connection_id': source['connection_id'],
-                    'content': source['content'],
-                    'score': score,
-                    '_id': _id,
-                    'type': ConnectionType.EMAIL.value,
-                }
-                result_docs.append(r)
-            elif index_name.startswith(ConnectionType.GITHUB_ISSUE.value):
-                config = connection_id_to_config.get(source['connection_id'])
-                server_url = config.get('repository')
-                url_parsed = urlparse(server_url)
-                base_url = url_parsed.scheme + "://" + url_parsed.netloc
-                parts = url_parsed.path.strip("/").split("/")
-                repo_owner, repo_name = parts[0], parts[1]
-                url = f'{base_url}/{repo_owner}/{repo_name}/issues/' + str(source['issue_number'])
-                r = {
-                    'title': source['title'],
-                    'repo_owner': source['repo_owner'],
-                    'repo_name': source['repo_name'],
-                    'issue_number': source['issue_number'],
-                    'connection_id': source['connection_id'],
-                    'content': source['content'],
-                    'state': source['state'],
-                    'labels': source['labels'],
-                    'score': score,
-                    'url': url,
-                    '_id': _id,
-                    'type': ConnectionType.GITHUB_ISSUE.value,
-                }
-
-                result_docs.append(r)
-            elif index_name.startswith(ConnectionType.DISCOURSE_FORUM.value):
-                config = connection_id_to_config.get(source['connection_id'])
-                discourse_forum_url = config.get('url')
-                slug = source['slug']
-                topic_id = source['topic_id']
-                topic_url = discourse_forum_url.rstrip('/') + '/t/' + slug + '/' + str(topic_id)
-                r = {
-                    'title': source['title'],
-                    'topic_id': topic_id,
-                    'connection_id': source['connection_id'],
-                    'content': source['content'],
-                    'slug': slug,
-                    'score': score,
-                    'modified_time': source['modified_time'],
-                    'url': topic_url,
-                    '_id': _id,
-                    'type': ConnectionType.DISCOURSE_FORUM.value,
-                }
-                result_docs.append(r)
-            elif index_name.startswith("knowledge_base_"):
-                r = {
-                    'title': source.get('title'),
-                    'content': source.get('content'),
-                    'modified_time': source.get('modified_time'),
-                    'score': score,
-                    '_id': _id,
-                    'type': 'knowledge_base',
-                }
-                result_docs.append(r)
-            elif index_name.startswith("ticket_"):
-                r = {
-                    'title': source.get('title'),
-                    'content': source.get('content'),
-                    'modified_time': source.get('modified_time'),
-                    'score': score,
-                    '_id': _id,
-                    'type': 'ticket',
-                }
-                result_docs.append(r)
+            r = {
+                '_id': _id,
+                'type': s_type,
+                'score': score,
+                'title': source.get('title', ''),
+                'content': source.get('content', ''),
+                'modified_time': source.get('modified_time')
+            }
+            if s_type not in ('knowledge_base', 'ticket'):
+                r['connection_id'] = source['connection_id']
+            result_docs.append(r)
 
         logger.debug('all type index search keyword: %s, in project: %s , \nsearch result: %s', keyword,
                         project_uuid, result_docs)
@@ -428,18 +265,16 @@ class IndexManager:
         all_results = all_results[:top_k]
 
         connection_id_to_connection = {connection.id: connection for connection in project_connections}
-        connection_pk_to_record, kb_pk_to_record, ticket_pk_to_record = \
-            get_result_related_seadb_records(project_uuid, all_results, connection_id_to_connection, self.seadb_api)
 
         formatted_results = []
         for result in all_results:
-            formatted_result = format_vector_search_result(result, connection_id_to_connection, kb_pk_to_record, ticket_pk_to_record, connection_pk_to_record)
+            formatted_result = format_vector_search_result(result, connection_id_to_connection)
             if formatted_result:
                 formatted_results.append(formatted_result)
 
         return formatted_results
 
-    def semantic_search(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
+    def vector_search_by_text(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
 
         query_vector = generate_embedding(query_text, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
         if not query_vector:

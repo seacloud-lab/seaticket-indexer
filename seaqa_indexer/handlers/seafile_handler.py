@@ -14,7 +14,6 @@ from seaqa_indexer.utils.seahub_api import FileNotFoundException
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.app.event_redis import redis_cache
-from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
@@ -110,8 +109,6 @@ class SeafileHandler(ConnectionHandler):
     def update_index(self, project_connection, seasearch_api, seaqa_db, since):
         connection_id = project_connection.id
         project_uuid = project_connection.project_uuid
-        config = decrypt_config(json.loads(project_connection.config))
-        repo_id = config.get('repo_id')
         connection_type = project_connection.type
         connection_status = json.loads(project_connection.status)
 
@@ -121,7 +118,7 @@ class SeafileHandler(ConnectionHandler):
 
         seafile_index_name = gen_index_name_by_type(connection_id, connection_type)
         seafile_index.create_index_if_missing(seafile_index_name)
-        index_count = seafile_index.update(seafile_index_name, connection_id, repo_id, connection_status, seaqa_db, seafile_seadb_api, since)
+        index_count = seafile_index.update(seafile_index_name, connection_id, connection_status, seaqa_db, seafile_seadb_api, since)
 
         # finish index
         connection_status['last_indexed_count'] = index_count

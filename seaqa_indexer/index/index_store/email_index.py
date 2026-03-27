@@ -4,62 +4,12 @@ import logging
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT, SEASEARCH_BULK_OPERATE_LIMIT
 from seaqa_indexer.index.utils import EmailMessage
-from seaqa_indexer.index.index_store.base_index import BaseIndex
+from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
 
 logger = logging.getLogger(__name__)
 
 
-class EmailIndex(BaseIndex):
-    mapping = {
-        'properties': {
-            'connection_id': {
-                'type': 'keyword',
-            },
-            'title': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'fields': {
-                    'keyword': {
-                        'type': 'keyword'
-                    }
-                }
-            },
-            'content': {
-                'type': 'text',
-                'analyzer': 'gse_standard_analyzer',
-                'highlightable': True
-            },
-            'modified_time': {
-                'type': 'date',
-            },
-        }
-    }
-
-    def get_search_param(self, index_name, keyword, start, size, time_from, time_to, search_filename_only=False):
-        query_map = {'bool': {'should': [], 'minimum_should_match': 1}}
-        searches = self._make_query_searches(keyword, search_filename_only)
-        query_map['bool']['should'] = searches
-
-        query_map = self._add_time_range_filter(query_map, time_from, time_to)
-
-        data = {
-            'query': query_map,
-            'from': start,
-            'size': size,
-            '_source': ['connection_id', 'title', 'content', 'modified_time'],
-            'sort': ['_score'],
-            'highlight': {
-                'pre_tags': ['<mark>'],
-                'post_tags': ['</mark>'],
-                'fields': {'content': {}},
-            }
-        }
-        repo_query_info = {
-            'index': index_name,
-            'query': data
-        }
-        return repo_query_info
-
+class EmailIndex(BaseConnectionIndex):
     def update(self, index_name, connection_id, connection_status, seaqa_db, email_seadb_api, since):
         index_count = 0
         page_size = 1000

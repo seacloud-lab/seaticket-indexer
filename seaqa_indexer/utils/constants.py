@@ -29,6 +29,13 @@ class ConnectionType(Enum):
     SITE = 'site'
     SEAFILE = 'seafile'
 
+    @classmethod
+    def to_list(cls):
+        return [
+            item.value
+            for item in cls
+        ]
+
 
 CONNECTION_TYPE_TO_INDEX_PREFIX = {
     connection_type.value: connection_type.value + '_' for connection_type in ConnectionType

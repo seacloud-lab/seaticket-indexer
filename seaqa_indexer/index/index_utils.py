@@ -78,7 +78,7 @@ def update_knowledge_base_index(project_uuid, db_session_class, is_rebuild=False
         old_indexed_at = project.knowledge_base_indexed_at
         since = get_since_time(old_indexed_at, is_rebuild)
 
-        indexed_count = kb_index.update(index_name, uuid_str_to_32_chars(project_uuid), kb_seadb_api, since)
+        kb_index.update(index_name, uuid_str_to_32_chars(project_uuid), kb_seadb_api, since)
         indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_knowledge_base_indexed_at(project_uuid, indexed_at)
         logger.info('Finish to index knowledge base project_uuid %s', project_uuid)
@@ -103,7 +103,7 @@ def update_ticket_index(project_uuid, db_session_class, is_rebuild=False):
         old_indexed_at = project.ticket_indexed_at
         since = get_since_time(old_indexed_at, is_rebuild)
 
-        indexed_count = ticket_index.update(index_name, uuid_str_to_32_chars(project_uuid), ticket_seadb_api, since)
+        ticket_index.update(index_name, uuid_str_to_32_chars(project_uuid), ticket_seadb_api, since)
         indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_ticket_indexed_at(project_uuid, indexed_at)
         logger.info('Finish to index ticket project_uuid %s', project_uuid)
@@ -155,8 +155,7 @@ def update_connection_content_vector_index(connection_id, db_session_class, is_r
 
         storage = get_storage()
         seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
-        handler.update_content_vector_index(project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api,
-                                            storage, seasearch_api, since)
+        handler.update_content_vector_index(project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api, storage, seasearch_api, since)
     except Exception as e:
         logger.exception('Connection %s update content vector index failed, error: %s', connection_id, e)
         content_vector_status['last_content_vector_index_status'] = IndexStatus.FAILED

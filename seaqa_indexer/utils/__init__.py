@@ -181,8 +181,10 @@ def need_update_connection_last_sync_count(item_count, last_update_time, last_up
 def get_file_suffix(filename):
     return os.path.splitext(filename)[1].strip(".").lower()
 
+def get_unix_epoch():
+    return datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc).isoformat()
 
 def get_since_time(old_indexed_at, is_rebuild=False) -> str:
     if not old_indexed_at or is_rebuild:
-        return datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc).isoformat()
+        return get_unix_epoch()
     return time_to_utc_time(str(old_indexed_at)).isoformat()
