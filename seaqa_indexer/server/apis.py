@@ -172,7 +172,7 @@ def search():
             for r in results or [] if r.get('type') == 'knowledge_base'
         ]
         if kb_ids:
-            seadb_api = SeaDBAPI(username)
+            seadb_api = SeaDBAPI()
             table_name = KnowledgeBaseTable.gen_table_name()
             ids_str = ','.join([str(i) for i in kb_ids])
             sql = f"SELECT `_pk`, `deleted` FROM `{table_name}` WHERE `_pk` IN ({ids_str})"

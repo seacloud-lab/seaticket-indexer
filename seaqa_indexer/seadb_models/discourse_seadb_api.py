@@ -12,9 +12,9 @@ MAX_CONTENT_LENGTH = 10000
 
 
 class DiscourseSeaDBAPI:
-    def __init__(self, base_id, username='', timeout=30):
+    def __init__(self, base_id, timeout=30):
         self.base_id = base_id
-        self.seadb_api = SeaDBAPI(username=username, timeout=timeout)
+        self.seadb_api = SeaDBAPI(timeout=timeout)
 
     # Topics operations
     def insert_topic(self, connection_id, topic_id, topic_data):

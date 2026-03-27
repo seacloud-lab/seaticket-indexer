@@ -17,17 +17,15 @@ def parse_response(response):
 
 
 class SeaDBAPI:
-    def __init__(self, username='', timeout=30):
+    def __init__(self, timeout=30):
         self.timeout = timeout
         self.secret_key = SEADB_SERVER_ACCESS_TOKEN
         self.server_url = SEADB_SERVER_URL
-        self.username = username
 
     def gen_headers(self, base_id):
         payload = {
             'exp': int(time.time()) + 3600,
             'base_id': base_id,
-            'username': self.username
         }
         token = jwt.encode(payload, self.secret_key, algorithm='HS256')
         return {"Authorization": "Bearer %s" % token}
