@@ -183,6 +183,8 @@ class EmailHandler(ConnectionHandler):
 
     def _sync_email(self, connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_sync):
         sync_count = 0
+        added_count = 0
+        updated_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
 
@@ -225,6 +227,10 @@ class EmailHandler(ConnectionHandler):
                 pk = email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email)
                 upload_email_attachment(connection_id, project_uuid, storage, email, pk)
                 email_seadb_api.update_html_content_and_attachments(connection_id, pk, email)
+                if existed_email:
+                    updated_count += 1
+                else:
+                    added_count += 1
 
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count
@@ -239,5 +245,10 @@ class EmailHandler(ConnectionHandler):
             if new_email_list:
                 insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
 
+        connection_status['last_sync_changes'] = {
+            'added': added_count,
+            'deleted': 0,
+            'updated': updated_count,
+        }
         total_count = email_seadb_api.get_email_total_count(connection_id)
         return sync_count, total_count
