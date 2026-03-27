@@ -29,16 +29,17 @@ def format_vector_search_result(result, connection_id_to_connection):
     pk = result.get('pk')
     source_type = result.get('source_type')
     score = result.get('score')
-    ai_summary = result.get('ai_summary', '')
     modified_time = result.get('modified_time', '')
 
     formatted_result = {
         '_id': pk,
         'score': score,
-        'ai_summary': ai_summary,
         'source_type': source_type,
         'modified_time': modified_time
     }
+
+    if 'ai_summary' in result:
+        formatted_result['ai_summary'] = result['ai_summary']
 
     if source_type == 'knowledge_base_summary':
         formatted_result['type'] = 'knowledge_base'
