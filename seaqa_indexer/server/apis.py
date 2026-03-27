@@ -198,9 +198,9 @@ def vector_search():
 
     return {'results': results}, 200
 
-@application.route('/search/vector-with-text', methods=['POST'])
+@application.route('/search/vector-from-text', methods=['POST'])
 @auth_required
-def search():
+def vector_search_by_text():
     try:
         data = json.loads(request.data)
     except Exception as e:
