@@ -120,7 +120,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         })
         mq.publish('connection_update', connection_update_message)
     except Exception as e:
-        logger.warning('Failed to publish connection_update for project %s, connection %s: %s', project_uuid, connection_id, e)
+        logger.error('Failed to publish connection_update for project %s, connection %s: %s', project_uuid, connection_id, e)
 
 
     logger.info('Finish sync connection: %s, last sync count %s', connection_id, sync_count)
