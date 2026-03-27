@@ -130,9 +130,9 @@ def github_webhook():
 
     return jsonify({'success': True}), 200
 
-@application.route('/search', methods=['POST'])
+@application.route('/search/keyword', methods=['POST'])
 @auth_required
-def search():
+def keyword_search():
     try:
         data = json.loads(request.data)
     except Exception as e:
@@ -144,8 +144,6 @@ def search():
     connection_ids = data.get('connection_ids')
     time_from = data.get('time_from')
     time_to = data.get('time_to')
-    search_type = data.get('search_type', 'normal_search')
-    username = data.get('username', '')
     extra_sources = data.get('extra_sources', [])
 
     if not query:
@@ -158,15 +156,12 @@ def search():
         count = int(data.get('count'))
     except:
         count = 20
-    if search_type == 'semantic_search':
-        results = application.app.index_manager.vector_search_by_text(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count)
-    else:
-        results = application.app.index_manager.keyword_search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
+
+    results = application.app.index_manager.keyword_search(project_uuid, connection_ids, extra_sources, time_from, time_to, query, start=0, size=count)
 
     return {'results': results}, 200
 
-
-@application.route('/vector_search', methods=['POST'])
+@application.route('/search/vector', methods=['POST'])
 @auth_required
 def vector_search():
     try:
@@ -200,6 +195,37 @@ def vector_search():
     except:
         count = 10
     results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=score_threshold)
+
+    return {'results': results}, 200
+
+@application.route('/search/vector-with-text', methods=['POST'])
+@auth_required
+def search():
+    try:
+        data = json.loads(request.data)
+    except Exception as e:
+        logger.exception(e)
+        return {'error_msg': 'Bad request.'}, 400
+
+    query = data.get('query').strip()
+    project_uuid = data.get('project_uuid')
+    connection_ids = data.get('connection_ids')
+    time_from = data.get('time_from')
+    time_to = data.get('time_to')
+    username = data.get('username', '')
+    extra_sources = data.get('extra_sources', [])
+
+    if not query:
+        return {'error_msg': 'query invalid.'}, 400
+
+    if not project_uuid:
+        return {'error_msg': 'project_uuid invalid.'}, 400
+
+    try:
+        count = int(data.get('count'))
+    except:
+        count = 20
+    results = application.app.index_manager.vector_search_by_text(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count)
 
     return {'results': results}, 200
 
