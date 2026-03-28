@@ -50,6 +50,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             sync_logger.stop_capture()
             return
 
+        conn_handler.mq = mq
         sync_count, total_count, is_update_config, config = conn_handler.sync(
             connection_id, project_uuid, config, old_last_sync_time,
             connection_status, seaqa_db, sync_logger
@@ -128,8 +129,9 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     sync_logger.stop_capture()
 
     msg_content = {
+        'project_uuid': project_uuid,
         'connection_id': connection_id,
-        'type': 'connection'
+        'type': connection_type
     }
     mq.lpush('index_task', json.dumps(msg_content))
     mq.lpush('ai_process_task', json.dumps(msg_content))

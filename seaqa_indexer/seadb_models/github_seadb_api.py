@@ -147,6 +147,7 @@ class GitHubSeaDBAPI:
                 break
             offset += page_size
 
+        added_comments = []
         for comment in comments:
             comment_id = comment['id']
             new_comment_ids.add(comment_id)
@@ -176,10 +177,18 @@ class GitHubSeaDBAPI:
                 self.seadb_api.update_rows(self.base_id, table_name, update_row)
             else:
                 self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
+                added_comments.append({
+                    GithubIssueCommentsTable.comment_id.name: comment_id,
+                    GithubIssueCommentsTable.author.name: insert_row[GithubIssueCommentsTable.author.name],
+                    GithubIssueCommentsTable.content.name: insert_row[GithubIssueCommentsTable.content.name],
+                    GithubIssueCommentsTable.created_time.name: insert_row[GithubIssueCommentsTable.created_time.name],
+                })
 
         need_deleted_comment_ids = old_comment_ids - new_comment_ids
         for comment_id in need_deleted_comment_ids:
             self.delete_comment_from_db(connection_id, comment_id)
+
+        return added_comments
 
     def add_or_update_issue_label_column_options(self, connection_id, issues_labels):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
