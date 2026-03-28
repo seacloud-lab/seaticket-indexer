@@ -290,6 +290,7 @@ class GithubIssueHandler(ConnectionHandler):
                                 'project_uuid': str(github_seadb_api.base_id),
                                 'connection_id': connection_id,
                                 'record_id': record_id,
+                                'modified_time': time_to_utc_time(latest_issue.get('modified_time')).isoformat(),
                             }
                             if added_comments:
                                 comment_event = {
