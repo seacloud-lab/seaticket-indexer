@@ -37,6 +37,7 @@ class NotionSeaDBAPI:
             NotionTable.last_modifier.name: notion_page.get('last_modifier'),
             NotionTable.page_id.name: notion_page.get('page_id'),
             NotionTable.parent_page_id.name: notion_page.get('parent_page_id'),
+            NotionTable.deleted.name: notion_page.get('in_trash', False),
         }
         table_name = NotionTable.gen_table_name(connection_id)
         if existed_page:
@@ -78,3 +79,28 @@ class NotionSeaDBAPI:
         res = self.seadb_api.query_rows(self.base_id, sql)
         pages = res.get('results', [])
         return pages
+
+    def get_page_id_rows_by_page(self, connection_id, page_size, offset):
+        notion_table_name = NotionTable.gen_table_name(connection_id)
+        sql = f"""
+            SELECT _pk, page_id, deleted FROM `{notion_table_name}`
+            WHERE (deleted IS NULL OR deleted = false)
+            LIMIT {page_size} OFFSET {offset}
+        """
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        pages = res.get('results', [])
+        return pages
+
+    def mark_page_deleted(self, connection_id, pk, modified_time=None):
+        table_name = NotionTable.gen_table_name(connection_id)
+        now_datetime = datetime.datetime.now(datetime.UTC).isoformat()
+        update_row = {
+            "pk": pk,
+            "row": {
+                NotionTable.deleted.name: True,
+                NotionTable.modified_time.name: modified_time,
+                NotionTable.sync_time.name: now_datetime,
+                NotionTable.record_modified_time.name: now_datetime,
+            },
+        }
+        self.seadb_api.update_rows(self.base_id, table_name, [update_row])

@@ -1,7 +1,7 @@
 import time
 import requests
 
-NOTION_VERSION = "2025-09-03"
+NOTION_VERSION = "2026-03-11"
 
 
 class NotionAPI:

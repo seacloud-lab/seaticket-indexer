@@ -82,12 +82,11 @@ class NotionHandler(ConnectionHandler):
                 seadb_api.update_rows(project_uuid, table_name, updates)
         return ai_processing_count
 
-    def update_index(self, project_connection, seasearch_api, seaqa_db):
+    def update_index(self, project_connection, seasearch_api, seaqa_db, since):
         connection_id = project_connection.id
         connection_type = project_connection.type
 
         connection_status = json.loads(project_connection.status)
-        old_indexed_at = project_connection.indexed_at
         project_uuid = project_connection.project_uuid
         notion_seadb_api = NotionSeaDBAPI(project_uuid)
         notion_index = NotionIndex(seasearch_api)
@@ -97,8 +96,6 @@ class NotionHandler(ConnectionHandler):
 
         notion_index_name = gen_index_name_by_type(connection_id, connection_type)
         notion_index.create_index_if_missing(notion_index_name)
-
-        since = get_since_time(old_indexed_at)
 
         index_count = notion_index.update(notion_index_name, connection_id, connection_status,
                                           seaqa_db, notion_seadb_api, since)
@@ -183,11 +180,21 @@ class NotionHandler(ConnectionHandler):
                 if last_sync_time and last_edited_time < last_sync_time:
                     has_more = False
                     break
+                in_trash = page.get('in_trash')
+                existed_page = notion_seadb_api.get_page_by_page_id(page_id, connection_id)
+                if in_trash:
+                    if existed_page:
+                        notion_seadb_api.mark_page_deleted(
+                            connection_id,
+                            existed_page.get('_pk'),
+                            modified_time=last_edited_time,
+                        )
+                    continue
+
                 notion_page = notion_api.fetch_full_page(page)
                 if not notion_page:
                     continue
 
-                existed_page = notion_seadb_api.get_page_by_page_id(notion_page.get('page_id'), connection_id)
                 if existed_page:
                     if last_edited_time <= time_to_utc_time(str(existed_page.get('modified_time'))):
                         logger.debug(f'Notion page {page_id} is up to date, skipping sync.')

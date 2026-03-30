@@ -27,6 +27,7 @@ NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.SEAFILE.value,
     ConnectionType.EMAIL.value,
     ConnectionType.SITE.value,
+    ConnectionType.NOTION.value,
 ]
 
 
