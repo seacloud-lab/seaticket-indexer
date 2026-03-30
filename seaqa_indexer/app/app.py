@@ -32,7 +32,6 @@ class SeaqaIndexerApp(object):
         self._start_worker('seaqa_indexer.ai_processor.ai_process_task_worker', 'ai process worker')
         self._start_worker('seaqa_indexer.index.content_vector_index_task_worker', 'content vector index worker')
         self._start_worker('seaqa_indexer.tasks.deleted_records_cleaner', 'deleted records cleaner')
-        self._start_worker('seaqa_indexer.tasks.project_connection_cleaner', 'project connection cleaner')
 
         self.sync_manager.start()
 

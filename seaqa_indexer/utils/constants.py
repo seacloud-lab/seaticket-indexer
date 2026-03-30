@@ -28,6 +28,10 @@ class ConnectionType(Enum):
     DISCOURSE_FORUM = 'discourse_forum'
     SITE = 'site'
     SEAFILE = 'seafile'
+    
+    @classmethod
+    def is_valid(cls, value):
+        return value in {item.value for item in cls}
 
 
 CONNECTION_TYPE_TO_INDEX_PREFIX = {
