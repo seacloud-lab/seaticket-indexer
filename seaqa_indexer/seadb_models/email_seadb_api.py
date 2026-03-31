@@ -3,6 +3,8 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import EmailTable, ThreadTable
 from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT
 from seaqa_indexer.utils import time_to_utc_time
+import html2text
+from seaqa_indexer.index.utils import EmailMessage
 
 
 class EmailSeaDBAPI:
@@ -11,18 +13,29 @@ class EmailSeaDBAPI:
         self.seadb_api = SeaDBAPI()
 
     def save_or_update_email_to_db(self, connection_id, email, existed_email):
+        if not email['content']:
+            h = html2text.HTML2Text()
+            h.ignore_links = False
+            h.ignore_images = False
+            h.body_width = 0
+            markdown_text = h.handle(email['html_content']).strip().strip('```')
+        else:
+            markdown_text = email['content']
+
+        cleaned_content = EmailMessage().parse_reply(markdown_text) if markdown_text else ''
         insert_row = {
             'email_from': email['email_from'],
             'email_to': email['email_to'],
             'message_id': email['message_id'],
             'title': email['subject'],
             'cc': email['cc'],
-            'content': email['content'][:SEADB_CONTENT_SIZE_LIMIT],
+            'content': cleaned_content[:SEADB_CONTENT_SIZE_LIMIT],
             'reply_to_message_id': email['reply_to_message_id'],
             'is_sender': email['is_sender'],
             'email_id': email.get('email_id'),
             'origin_thread_id': email.get('origin_thread_id'),
             'deleted': False,
+            'text_content': email['content'][:SEADB_CONTENT_SIZE_LIMIT],
         }
 
         table_name = EmailTable.gen_table_name(connection_id)

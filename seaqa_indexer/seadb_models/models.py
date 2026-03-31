@@ -415,6 +415,7 @@ class EmailTable(BaseModel):
     title = MappedColumn('title', PropertyTypes.TEXT)
     cc = MappedColumn('cc', PropertyTypes.TEXT)
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    text_content = MappedColumn('text_content', PropertyTypes.TEXT, {'compressed': True})
     html_content = MappedColumn('html_content', PropertyTypes.TEXT, {'compressed': True})
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
     reply_to_message_id = MappedColumn('reply_to_message_id', PropertyTypes.TEXT)
