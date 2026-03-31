@@ -110,6 +110,31 @@ SECRET_KEY = configs.get('SECRET_KEY', '')
 
 JWT_PRIVATE_KEY = configs.get('JWT_PRIVATE_KEY', '')
 
+GENERAL_TASK_STATUS_MAPPING = configs.get('GENERAL_TASK_STATUS_MAPPING', {
+    'new': {'color': '#1A7F37', 'text_color': '#FFFFFF'},
+    'in_progress': {'color': '#46A1FD', 'text_color': '#FFFFFF'},
+    'done': {'color': '#8250DF', 'text_color': '#FFFFFF'},
+    'canceled': {'color': '#59636E', 'text_color': '#FFFFFF'},
+})
+
+GENERAL_TASK_PRIORITY_MAPPING = configs.get('GENERAL_TASK_PRIORITY_MAPPING', {
+    'high': {'color': '#FF6B6B', 'text_color': '#FFFFFF'},
+    'medium': {'color': '#FFA500', 'text_color': '#FFFFFF'},
+    'low': {'color': '#59CB74', 'text_color': '#FFFFFF'},
+})
+
+GENERAL_TASK_SIZE_MAPPING = configs.get('GENERAL_TASK_SIZE_MAPPING', {
+    'large': {'color': '#FF6B6B', 'text_color': '#FFFFFF'},
+    'medium': {'color': '#FFA500', 'text_color': '#FFFFFF'},
+    'small': {'color': '#59CB74', 'text_color': '#FFFFFF'},
+})
+
+GENERAL_TASK_COLUMN_MAPPINGS = {
+    'status': GENERAL_TASK_STATUS_MAPPING,
+    'priority': GENERAL_TASK_PRIORITY_MAPPING,
+    'size': GENERAL_TASK_SIZE_MAPPING,
+}
+
 REDIS_HOST = configs.get('REDIS_HOST', 'redis')
 REDIS_PORT = configs.get('REDIS_PORT', 6379)
 REDIS_PASSWORD = configs.get('REDIS_PASSWORD', '')

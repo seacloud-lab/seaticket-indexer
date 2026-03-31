@@ -24,6 +24,7 @@ SYNC_CONNECTION_TYPES = [
     ConnectionType.GITHUB_ISSUE.value,
     ConnectionType.EMAIL.value,
     ConnectionType.NOTION.value,
+    ConnectionType.GENERAL_TASK.value,
 ]
 
 

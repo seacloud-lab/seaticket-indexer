@@ -26,6 +26,7 @@ class ConnectionType(Enum):
     EMAIL = 'email'
     GITHUB_ISSUE = 'github_issue'
     DISCOURSE_FORUM = 'discourse_forum'
+    GENERAL_TASK = 'general_task'
     SITE = 'site'
     SEAFILE = 'seafile'
     NOTION = 'notion'
@@ -112,3 +113,58 @@ SUPPORT_VECTOR_RETRIEVAL_TYPES = {
 }
 
 SEASEARCH_BULK_OPERATE_LIMIT = 100
+
+# Connection
+GENERAL_TASK_CONNECTION_SPEC = {
+    "id": {
+        "type": "string",
+        "description": "srouce data id。"
+    },
+    "title": {
+        "type": "string",
+        "description": "task title。"
+    },
+    "status": {
+        "type": "string",
+        "description": "The current life cycle status of the task",
+        "option": ['new', 'in_progress', 'done', 'canceled'],
+    },
+    "priority": {
+        "type": "string",
+        "description": "The urgency or importance level of the task",
+        "option": ['high', 'medium', 'low'],
+    },
+    "assignees": {
+        "type": "list<string>",
+        "description": "List of unique identifiers for task owners."
+    },
+    "participants": {
+        "type": "list<string>",
+        "description": "List of users participating in the task."
+    },
+    "size": {
+        "type": "string",
+        "description": "Task workload evaluation value or complexity measurement",
+        "option": ['large', 'medium', 'small'],
+    },
+    "modified_time": {
+        "type": "string",
+        "description": "The last modified standard UTC time string,"
+    },
+    "created_time": {
+        "type": "string",
+        "description": "The standard UTC time string created by the task."
+    },
+    "due_date": {
+        "type": "string",
+        "description": "The standard UTC time string for the task deadline or planned completion."
+    },
+    "description": {
+        "type": "string",
+        "description": "Detailed description, body or notes of the task."
+    },
+    "others": {
+        "type": "json",
+        "description": "Additional structured data for the task."
+    }
+}

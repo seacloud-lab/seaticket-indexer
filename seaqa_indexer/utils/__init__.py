@@ -13,7 +13,7 @@ from seaqa_indexer.utils.hasher import AESPasswordHasher
 logger = logging.getLogger(__name__)
 pyexec = None
 
-ENCRYPT_KEYS = ['api_token', 'access_token', 'webhook_secret', 'api_key', 'password', 'integration_secret']
+ENCRYPT_KEYS = ['api_token', 'access_token', 'webhook_secret', 'api_key', 'password', 'integration_secret','auth_token']
 
 
 def find_in_path(prog):
@@ -165,6 +165,8 @@ def need_update_connection_last_sync_count(item_count, last_update_time, last_up
     if last_update_time is None:
         last_update_time = now
 
+    if last_update_time and last_update_time.tzinfo is not None:
+        now = now.astimezone(last_update_time.tzinfo)
     delta_count = item_count - last_update_count
     count_ready = delta_count >= CONNECTION_STATUS_MIN_UPDATE_COUNT
 

@@ -29,6 +29,7 @@ class PropertyTypes:
     GEOLOCATION = 'geolocation'
     BUTTON = 'button'
     LIST = 'list'
+    JSON = 'json'
 
 
 class ListTypes:
@@ -468,6 +469,32 @@ class ThreadTable(BaseModel):
     @classmethod
     def gen_table_name(cls, connection_id):
         return ConnectionType.EMAIL.value + '_' + 'thread_' + str(connection_id)
+
+
+class GeneralTaskTable(BaseModel):
+    source_row_id = MappedColumn('source_row_id', PropertyTypes.TEXT)
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    status = MappedColumn('status', PropertyTypes.SINGLE_SELECT)
+    size = MappedColumn('size', PropertyTypes.SINGLE_SELECT)
+    priority = MappedColumn('priority', PropertyTypes.SINGLE_SELECT)
+    assignees = MappedColumn('assignees', PropertyTypes.MULTIPLE_SELECT)
+    participants = MappedColumn('participants', PropertyTypes.MULTIPLE_SELECT)
+    others = MappedColumn('others', PropertyTypes.TEXT, {'compressed': True})
+    content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    due_date = MappedColumn('due_date', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    outdated = MappedColumn('outdated', PropertyTypes.BOOL)
+    record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
+    ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
+    ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
+    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
+    linked_ticket = MappedColumn('linked_ticket', PropertyTypes.INT)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.GENERAL_TASK.value + '_' + str(connection_id)
 
 
 class KnowledgeBaseTable(BaseModel):

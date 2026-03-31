@@ -9,6 +9,7 @@ from seaqa_indexer.handlers.discourse_handler import DiscourseHandler
 from seaqa_indexer.handlers.github_handler import GithubIssueHandler
 from seaqa_indexer.handlers.seafile_handler import SeafileHandler
 from seaqa_indexer.handlers.email_handler import EmailHandler
+from seaqa_indexer.handlers.general_task_handler import GeneralTaskHandler
 
 ConnectionHandlerRegistry.register(SiteHandler)
 ConnectionHandlerRegistry.register(DiscourseHandler)
@@ -16,6 +17,7 @@ ConnectionHandlerRegistry.register(GithubIssueHandler)
 ConnectionHandlerRegistry.register(SeafileHandler)
 ConnectionHandlerRegistry.register(EmailHandler)
 ConnectionHandlerRegistry.register(NotionHandler)
+ConnectionHandlerRegistry.register(GeneralTaskHandler)
 
 
 __all__ = [
@@ -28,4 +30,5 @@ __all__ = [
     'SeafileHandler',
     'EmailHandler',
     'NotionHandler',
+    'GeneralTaskHandler',
 ]
