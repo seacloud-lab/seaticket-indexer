@@ -3,7 +3,6 @@ import logging
 
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT, SEASEARCH_BULK_OPERATE_LIMIT
-from seaqa_indexer.index.utils import EmailMessage
 from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
 
 logger = logging.getLogger(__name__)
@@ -40,8 +39,7 @@ class EmailIndex(BaseConnectionIndex):
                         if not thread_emails:
                             break
                         for email in thread_emails:
-                            email_content = email.get('content')
-                            content += EmailMessage().parse_reply(email.get('content')) if email_content else ''
+                            content += email.get('content')
 
                         if len(content) > INDEX_CONTENT_LIMIT:
                             break
