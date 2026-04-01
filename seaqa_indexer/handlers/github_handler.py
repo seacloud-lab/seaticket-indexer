@@ -20,26 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 
-def build_github_issue_event(event_type, old_row=None, new_row=None):
-    old_row = old_row or {}
-    new_row = new_row or {}
-    old_value = {}
-    new_value = {}
-
-    for field_name, field_value in new_row.items():
-        old_field_value = old_row.get(field_name)
-        if old_field_value == field_value:
-            continue
-        old_value[field_name] = old_field_value
-        new_value[field_name] = field_value
-
-    return {
-        'type': event_type,
-        'old_value': old_value or None,
-        'new_value': new_value or None,
-    }
-
-
 class GithubIssueHandler(ConnectionHandler):
     """Handler for GITHUB_ISSUE connection type."""
 
@@ -292,7 +272,7 @@ class GithubIssueHandler(ConnectionHandler):
                                 'record_id': record_id,
                                 'modified_time': time_to_utc_time(latest_issue.get('modified_time')).isoformat(),
                             }
-                            if added_comments:
+                            if existed_issue and added_comments:
                                 comment_event = {
                                     'type': DataEventType.GITHUB_ISSUE_COMMENT_ADDED.value,
                                     'old_value': None,
@@ -305,7 +285,7 @@ class GithubIssueHandler(ConnectionHandler):
                                     'event': comment_event,
                                 }))
 
-                            issue_event = build_github_issue_event(
+                            issue_event = self.build_event(
                                 issue_state_event_type,
                                 old_row=existed_issue,
                                 new_row=latest_issue,

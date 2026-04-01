@@ -59,6 +59,9 @@ class DataEventType(Enum):
     GITHUB_ISSUE_CLOSED = 'github_issue_closed'
     GITHUB_ISSUE_REOPENED = 'github_issue_reopened'
     GITHUB_ISSUE_COMMENT_ADDED = 'github_issue_comment_added'
+    DISCOURSE_TOPIC_ADDED = 'discourse_topic_added'
+    DISCOURSE_TOPIC_UPDATED = 'discourse_topic_updated'
+    DISCOURSE_TOPIC_REPLY_ADDED = 'discourse_topic_reply_added'
 
     @classmethod
     def is_valid(cls, value):

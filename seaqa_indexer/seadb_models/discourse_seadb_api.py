@@ -169,6 +169,7 @@ class DiscourseSeaDBAPI:
         old_reply_ids = set()
         new_reply_ids = set()
         post_number_to_pk = {}
+        added_replies = []
         while True:
             replies = self.get_topic_replies_by_page(connection_id, topic_id, page_size, offset)
             for reply in replies:
@@ -191,10 +192,18 @@ class DiscourseSeaDBAPI:
                 self.update_reply(connection_id, pk, topic_id, reply)
             else:
                 self.insert_reply(connection_id, topic_id, reply)
+                added_replies.append({
+                    'post_number': post_number,
+                    'author': reply.get('username'),
+                    'content': reply.get('cooked'),
+                    'modified_time': time_to_utc_time(reply.get('updated_at')).isoformat(),
+                })
 
         need_deleted_reply_ids = old_reply_ids - new_reply_ids
         for reply_id in need_deleted_reply_ids:
             self.delete_reply_from_db(connection_id, topic_id, reply_id)
+
+        return added_replies
 
     def delete_reply_from_db(self, connection_id, topic_id, post_number):
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)

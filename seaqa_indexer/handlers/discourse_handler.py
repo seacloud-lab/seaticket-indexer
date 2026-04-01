@@ -15,6 +15,7 @@ from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
+from seaqa_indexer.utils.constants import DataEventType
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,11 @@ class DiscourseHandler(ConnectionHandler):
                         logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
                         continue
 
+                topic_state_event_type = (
+                    DataEventType.DISCOURSE_TOPIC_UPDATED.value
+                    if existing_topic
+                    else DataEventType.DISCOURSE_TOPIC_ADDED.value
+                )
                 primary_key = existing_topic.get('_pk')
                 if primary_key:
                     discourse_seadb_api.update_topic(connection_id, primary_key, topic_data)
@@ -228,7 +234,7 @@ class DiscourseHandler(ConnectionHandler):
 
                 # sync topic replies
                 topic_replies = discourse_forum_api.fetch_topic_replies(topic_id)
-                discourse_seadb_api.update_topic_replies(connection_id, topic_id, topic_replies)
+                added_replies = discourse_seadb_api.update_topic_replies(connection_id, topic_id, topic_replies)
 
                 sync_count += 1
                 should, new_time, new_count = need_update_connection_last_sync_count(
@@ -240,6 +246,47 @@ class DiscourseHandler(ConnectionHandler):
                     _status_last_update_time = new_time
                     _status_last_update_count = new_count
                 time.sleep(1)
+
+                if self.mq:
+                    try:
+                        latest_topic = discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id)
+                        record_id = latest_topic.get('_pk') if latest_topic else None
+                        if record_id is not None:
+                            modified_time_raw = latest_topic.get('modified_time')
+                            modified_time = time_to_utc_time(str(modified_time_raw)).isoformat()
+
+                            base_event = {
+                                'source_type': ConnectionType.DISCOURSE_FORUM.value,
+                                'project_uuid': str(discourse_seadb_api.base_id),
+                                'connection_id': connection_id,
+                                'record_id': record_id,
+                                'modified_time': modified_time,
+                            }
+
+                            if existing_topic and added_replies:
+                                reply_event = {
+                                    'type': DataEventType.DISCOURSE_TOPIC_REPLY_ADDED.value,
+                                    'old_value': None,
+                                    'new_value': {
+                                        'replies': added_replies,
+                                    },
+                                }
+                                self.mq.publish('data_events', json.dumps({
+                                    **base_event,
+                                    'event': reply_event,
+                                }))
+
+                            topic_event = self.build_event(
+                                topic_state_event_type,
+                                old_row=existing_topic,
+                                new_row=latest_topic,
+                            )
+                            self.mq.publish('data_events', json.dumps({
+                                **base_event,
+                                'event': topic_event,
+                            }))
+                    except Exception as e:
+                        logger.warning('Failed to publish data_events for synced topic %s: %s', topic_id, e)
 
             page += 1
             if should_stop:

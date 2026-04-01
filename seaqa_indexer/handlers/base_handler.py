@@ -109,3 +109,22 @@ class ConnectionHandler(ABC):
                               connection_id, tables) -> None:
         """Clean all SeaDB tables and storage associated with a deleted connection."""
         pass
+
+    def build_event(self, event_type, old_row=None, new_row=None):
+        old_row = old_row or {}
+        new_row = new_row or {}
+        old_value = {}
+        new_value = {}
+
+        for field_name, field_value in new_row.items():
+            old_field_value = old_row.get(field_name)
+            if old_field_value == field_value:
+                continue
+            old_value[field_name] = old_field_value
+            new_value[field_name] = field_value
+
+        return {
+            'type': event_type,
+            'old_value': old_value or None,
+            'new_value': new_value or None,
+        }
