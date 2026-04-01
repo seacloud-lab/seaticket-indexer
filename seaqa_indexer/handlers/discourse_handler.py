@@ -247,46 +247,18 @@ class DiscourseHandler(ConnectionHandler):
                     _status_last_update_count = new_count
                 time.sleep(1)
 
-                if self.mq:
-                    try:
-                        latest_topic = discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id)
-                        record_id = latest_topic.get('_pk') if latest_topic else None
-                        if record_id is not None:
-                            modified_time_raw = latest_topic.get('modified_time')
-                            modified_time = time_to_utc_time(str(modified_time_raw)).isoformat()
-
-                            base_event = {
-                                'source_type': ConnectionType.DISCOURSE_FORUM.value,
-                                'project_uuid': str(discourse_seadb_api.base_id),
-                                'connection_id': connection_id,
-                                'record_id': record_id,
-                                'modified_time': modified_time,
-                            }
-
-                            if existing_topic and added_replies:
-                                reply_event = {
-                                    'type': DataEventType.DISCOURSE_TOPIC_REPLY_ADDED.value,
-                                    'old_value': None,
-                                    'new_value': {
-                                        'replies': added_replies,
-                                    },
-                                }
-                                self.mq.publish('data_events', json.dumps({
-                                    **base_event,
-                                    'event': reply_event,
-                                }))
-
-                            topic_event = self.build_event(
-                                topic_state_event_type,
-                                old_row=existing_topic,
-                                new_row=latest_topic,
-                            )
-                            self.mq.publish('data_events', json.dumps({
-                                **base_event,
-                                'event': topic_event,
-                            }))
-                    except Exception as e:
-                        logger.warning('Failed to publish data_events for synced topic %s: %s', topic_id, e)
+                self.publish_synced_record_events(
+                    get_latest_row=lambda: discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id),
+                    project_uuid=discourse_seadb_api.base_id,
+                    connection_id=connection_id,
+                    item_id=topic_id,
+                    old_row=existing_topic,
+                    state_event_type=topic_state_event_type,
+                    additional_items=added_replies,
+                    additional_event_type=DataEventType.DISCOURSE_TOPIC_REPLY_ADDED.value,
+                    additional_items_field='replies',
+                    log_object_name='topic',
+                )
 
             page += 1
             if should_stop:

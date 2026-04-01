@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary
+from seaqa_indexer.utils import time_to_utc_time
 from redis import Redis
 
 logger = logging.getLogger(__name__)
@@ -128,3 +129,59 @@ class ConnectionHandler(ABC):
             'old_value': old_value or None,
             'new_value': new_value or None,
         }
+
+    def publish_synced_record_events(
+        self,
+        *,
+        get_latest_row,
+        project_uuid,
+        connection_id,
+        item_id,
+        old_row,
+        state_event_type,
+        additional_items=None,
+        additional_event_type=None,
+        additional_items_field=None,
+        log_object_name='record',
+    ):
+        if not self.mq:
+            return
+
+        try:
+            latest_row = get_latest_row()
+            record_id = latest_row.get('_pk') if latest_row else None
+            if record_id is None:
+                return
+
+            base_event = {
+                'source_type': self.connection_type,
+                'project_uuid': str(project_uuid),
+                'connection_id': connection_id,
+                'record_id': record_id,
+                'modified_time': time_to_utc_time(str(latest_row.get('modified_time'))).isoformat(),
+            }
+
+            if old_row and additional_items:
+                related_event = {
+                    'type': additional_event_type,
+                    'old_value': None,
+                    'new_value': {
+                        additional_items_field: additional_items,
+                    },
+                }
+                self.mq.publish('data_events', json.dumps({
+                    **base_event,
+                    'event': related_event,
+                }))
+
+            state_event = self.build_event(
+                state_event_type,
+                old_row=old_row,
+                new_row=latest_row,
+            )
+            self.mq.publish('data_events', json.dumps({
+                **base_event,
+                'event': state_event,
+            }))
+        except Exception as e:
+            logger.warning('Failed to publish data_events for synced %s %s: %s', log_object_name, item_id, e)
