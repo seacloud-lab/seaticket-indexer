@@ -43,13 +43,14 @@ def generate_embedding(query_text, project_uuid, username='seaqa-indexer', scena
     headers = {"Authorization": "Token %s" % token}
     url = urljoin(SEAQA_AI_INNER_SERVER_URL, '/generate-embedding')
     resp = requests.post(url, json=params, headers=headers, timeout=30)
-    
+
     if resp.status_code != 200:
         raise Exception('Generate embedding error status: %s body: %s', resp.status_code, resp.text)
-    
+
     resp_json = resp.json()
-    embedding = resp_json.get('embedding', [])
-    return embedding
+    assert 'embedding' in resp_json, 'Generate embedding error: invalid response'
+
+    return resp_json['embedding']
 
 def generate_chunks_embedding(content, project_uuid, username='seaqa-indexer', scenario=AIScenario.SUMMARY.value):
     params = {
