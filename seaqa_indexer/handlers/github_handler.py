@@ -20,26 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 
-def build_github_issue_event(event_type, old_row=None, new_row=None):
-    old_row = old_row or {}
-    new_row = new_row or {}
-    old_value = {}
-    new_value = {}
-
-    for field_name, field_value in new_row.items():
-        old_field_value = old_row.get(field_name)
-        if old_field_value == field_value:
-            continue
-        old_value[field_name] = old_field_value
-        new_value[field_name] = field_value
-
-    return {
-        'type': event_type,
-        'old_value': old_value or None,
-        'new_value': new_value or None,
-    }
-
-
 class GithubIssueHandler(ConnectionHandler):
     """Handler for GITHUB_ISSUE connection type."""
 
@@ -280,42 +260,19 @@ class GithubIssueHandler(ConnectionHandler):
                         break
 
                 added_comments = github_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
-                if self.mq:
-                    try:
-                        latest_issue = github_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
-                        record_id = latest_issue.get('_pk') if latest_issue else None
-                        if record_id is not None:
-                            base_event = {
-                                'source_type': ConnectionType.GITHUB_ISSUE.value,
-                                'project_uuid': str(github_seadb_api.base_id),
-                                'connection_id': connection_id,
-                                'record_id': record_id,
-                                'modified_time': time_to_utc_time(latest_issue.get('modified_time')).isoformat(),
-                            }
-                            if added_comments:
-                                comment_event = {
-                                    'type': DataEventType.GITHUB_ISSUE_COMMENT_ADDED.value,
-                                    'old_value': None,
-                                    'new_value': {
-                                        'comments': added_comments,
-                                    },
-                                }
-                                self.mq.publish('data_events', json.dumps({
-                                    **base_event,
-                                    'event': comment_event,
-                                }))
 
-                            issue_event = build_github_issue_event(
-                                issue_state_event_type,
-                                old_row=existed_issue,
-                                new_row=latest_issue,
-                            )
-                            self.mq.publish('data_events', json.dumps({
-                                **base_event,
-                                'event': issue_event,
-                            }))
-                    except Exception as e:
-                        logger.warning('Failed to publish data_events for synced issue %s: %s', issue_id, e)
+                self.publish_synced_record_events(
+                    get_latest_row=lambda: github_seadb_api.get_issue_by_issue_id(issue_id, connection_id),
+                    project_uuid=github_seadb_api.base_id,
+                    connection_id=connection_id,
+                    item_id=issue_id,
+                    old_row=existed_issue,
+                    state_event_type=issue_state_event_type,
+                    additional_items=added_comments,
+                    additional_event_type=DataEventType.GITHUB_ISSUE_COMMENT_ADDED.value,
+                    additional_items_field='comments',
+                    log_object_name='issue',
+                )
 
             if len(issues) < per_page:
                 break

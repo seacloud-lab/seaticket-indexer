@@ -15,6 +15,7 @@ from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
+from seaqa_indexer.utils.constants import DataEventType
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,11 @@ class DiscourseHandler(ConnectionHandler):
                         logger.debug(f'Topic {topic_id} is up to date, skipping sync.')
                         continue
 
+                topic_state_event_type = (
+                    DataEventType.DISCOURSE_TOPIC_UPDATED.value
+                    if existing_topic
+                    else DataEventType.DISCOURSE_TOPIC_ADDED.value
+                )
                 primary_key = existing_topic.get('_pk')
                 if primary_key:
                     discourse_seadb_api.update_topic(connection_id, primary_key, topic_data)
@@ -228,7 +234,7 @@ class DiscourseHandler(ConnectionHandler):
 
                 # sync topic replies
                 topic_replies = discourse_forum_api.fetch_topic_replies(topic_id)
-                discourse_seadb_api.update_topic_replies(connection_id, topic_id, topic_replies)
+                added_replies = discourse_seadb_api.update_topic_replies(connection_id, topic_id, topic_replies)
 
                 sync_count += 1
                 should, new_time, new_count = need_update_connection_last_sync_count(
@@ -240,6 +246,19 @@ class DiscourseHandler(ConnectionHandler):
                     _status_last_update_time = new_time
                     _status_last_update_count = new_count
                 time.sleep(1)
+
+                self.publish_synced_record_events(
+                    get_latest_row=lambda: discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id),
+                    project_uuid=discourse_seadb_api.base_id,
+                    connection_id=connection_id,
+                    item_id=topic_id,
+                    old_row=existing_topic,
+                    state_event_type=topic_state_event_type,
+                    additional_items=added_replies,
+                    additional_event_type=DataEventType.DISCOURSE_TOPIC_REPLY_ADDED.value,
+                    additional_items_field='replies',
+                    log_object_name='topic',
+                )
 
             page += 1
             if should_stop:
