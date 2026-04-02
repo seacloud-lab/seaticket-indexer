@@ -111,13 +111,16 @@ class ConnectionHandler(ABC):
         """Clean all SeaDB tables and storage associated with a deleted connection."""
         pass
 
-    def build_event(self, event_type, old_row=None, new_row=None):
+    def build_event(self, event_type, old_row=None, new_row=None, ignored_fields=None):
         old_row = old_row or {}
         new_row = new_row or {}
         old_value = {}
         new_value = {}
+        ignored_fields = set(ignored_fields or [])
 
         for field_name, field_value in new_row.items():
+            if field_name in ignored_fields:
+                continue
             old_field_value = old_row.get(field_name)
             if old_field_value == field_value:
                 continue
@@ -142,6 +145,7 @@ class ConnectionHandler(ABC):
         additional_items=None,
         additional_event_type=None,
         additional_items_field=None,
+        state_event_ignored_fields=None,
         log_object_name='record',
     ):
         if not self.mq:
@@ -178,10 +182,12 @@ class ConnectionHandler(ABC):
                 state_event_type,
                 old_row=old_row,
                 new_row=latest_row,
+                ignored_fields=state_event_ignored_fields,
             )
-            self.mq.publish('data_events', json.dumps({
-                **base_event,
-                'event': state_event,
-            }))
+            if state_event.get('old_value') is not None or state_event.get('new_value') is not None:
+                self.mq.publish('data_events', json.dumps({
+                    **base_event,
+                    'event': state_event,
+                }))
         except Exception as e:
             logger.warning('Failed to publish data_events for synced %s %s: %s', log_object_name, item_id, e)
