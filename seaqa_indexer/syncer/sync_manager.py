@@ -29,6 +29,7 @@ NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.GENERAL_TASK.value,
     ConnectionType.SITE.value,
     ConnectionType.NOTION.value,
+    ConnectionType.LINEAR.value,
 ]
 
 
