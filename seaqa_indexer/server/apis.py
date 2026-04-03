@@ -11,6 +11,8 @@ from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.handlers import get_handler
 from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
+from seaqa_indexer.crawler.storage import get_storage
+from seaqa_indexer.handlers import get_handler
 
 
 application = Flask(__name__)
@@ -64,6 +66,70 @@ def add_connection_sync_task():
 
     return jsonify({'success': True}), 200
 
+
+@application.route('/cleanup-deleted-project', methods=['POST'])
+@auth_required
+def cleanup_deleted_project():
+    data = request.get_json(force=True)
+    project_uuid = data.get('project_uuid')
+
+    if not project_uuid:
+        return jsonify({'success': False, 'error_msg': 'Missing project_uuid parameter'}), 400
+
+    try:
+        # delete project index
+        application.app.index_manager.delete_index_by_project(project_uuid)
+
+        storage = get_storage()
+        # delete crawled file folder
+        storage.delete_project_crawl_data(project_uuid)
+        # delete project attachment
+        storage.delete_project_attachment(project_uuid)
+
+        seadb_api = SeaDBAPI()
+        # delete base
+        seadb_api.delete_base(project_uuid)
+    except Exception as e:
+        logger.exception('cleanup deleted project failed: %s', e)
+        return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
+
+    return jsonify({'success': True}), 200
+
+
+@application.route('/cleanup-deleted-connection', methods=['POST'])
+@auth_required
+def cleanup_deleted_connection():
+    data = request.get_json(force=True)
+    project_uuid = data.get('project_uuid')
+    connection_id = data.get('connection_id')
+    connection_type = data.get('connection_type')
+
+    if not project_uuid:
+        return jsonify({'success': False, 'error_msg': 'Missing project_uuid parameter'}), 400
+    if not connection_id:
+        return jsonify({'success': False, 'error_msg': 'Missing connection_id parameter'}), 400
+    if not connection_type:
+        return jsonify({'success': False, 'error_msg': 'Missing connection_type parameter'}), 400
+    if not ConnectionType.is_valid(connection_type):
+        return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
+
+    try:
+        application.app.index_manager.delete_index_by_connection(connection_id, connection_type)
+
+        handler = get_handler(connection_type)
+        if handler:
+            seadb_api = SeaDBAPI()
+            storage = get_storage()
+            base_metadata = seadb_api.get_base_metadata(project_uuid)
+            tables = base_metadata.get('tables')
+            handler.clean_connection_data(storage, seadb_api, project_uuid, connection_id, tables)
+        else:
+            logger.warning('No handler found for connection type: %s', connection_type)
+    except Exception as e:
+        logger.exception('cleanup deleted connection failed: %s', e)
+        return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
+
+    return jsonify({'success': True}), 200
 
 @application.route('/manual-sync-connection', methods=['POST'])
 @auth_required
