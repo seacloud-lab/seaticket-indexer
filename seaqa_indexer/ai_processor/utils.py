@@ -27,7 +27,7 @@ def generate_summary(content, type, project_uuid, username='seaqa-indexer', incl
         raise Exception('generate summary error status: %s body: %s', resp.status_code, resp.text)
     resp_json = resp.json()
     summary = resp_json.get('summary', '')
-    vector = resp_json.get('embedding', [])
+    vector = resp_json.get('embeddings', [])
     return summary, vector
 
 
