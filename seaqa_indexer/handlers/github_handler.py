@@ -271,6 +271,7 @@ class GithubIssueHandler(ConnectionHandler):
                     additional_items=added_comments,
                     additional_event_type=DataEventType.GITHUB_ISSUE_COMMENT_ADDED.value,
                     additional_items_field='comments',
+                    state_event_ignored_fields=('modified_time', 'record_modified_time', 'sync_time'),
                     log_object_name='issue',
                 )
 
