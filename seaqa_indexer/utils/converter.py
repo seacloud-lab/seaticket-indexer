@@ -380,11 +380,9 @@ class _NotionMarkdownRenderer:
         return lines, i
 
 
-_NOTION_RENDERER = _NotionMarkdownRenderer()
-
-
 def notion_page_to_markdown(full_page, include_title=True):
-    return _NOTION_RENDERER.render_page(full_page, include_title=include_title)
+    notion_renderer = _NotionMarkdownRenderer()
+    return notion_renderer.render_page(full_page, include_title=include_title)
 
 
 def _handle_text_style(json_data_text, return_null=False):

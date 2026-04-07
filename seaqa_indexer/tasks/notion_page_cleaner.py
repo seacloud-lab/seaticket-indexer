@@ -47,7 +47,6 @@ class NotionPageCleaner(object):
 
     def cron_clean_notion_pages(self):
         logger.info('Start notion page cleaner timer')
-        # self.clean_notion_pages()
         while not self.should_stop.is_set():
             self.should_stop.wait(self.clear_interval)
 
@@ -102,37 +101,45 @@ class NotionPageCleaner(object):
         now_datetime = datetime.datetime.now(datetime.UTC).isoformat()
         offset = 0
         deleted_count = 0
+        local_page_map = {}
 
         while True:
             rows = notion_seadb_api.get_page_id_rows_by_page(connection_id, self.page_size, offset)
             if not rows:
                 break
-
-            updates = []
             for row in rows:
                 page_id = row.get('page_id')
-                if not page_id:
-                    continue
-                if page_id not in remote_page_ids:
-                    pk = row.get('_pk')
-                    if not pk:
-                        continue
-                    updates.append({
-                        'pk': pk,
-                        'row': {
-                            'deleted': True,
-                            'sync_time': now_datetime,
-                            'record_modified_time': now_datetime,
-                        }
-                    })
-
-            if updates:
-                self.seadb_api.update_rows(project_uuid, table_name, updates)
-                deleted_count += len(updates)
-
+                pk = row.get('_pk')
+                if page_id and pk:
+                    local_page_map[page_id] = pk
             if len(rows) < self.page_size:
                 break
             offset += self.page_size
+
+        stale_page_ids = set(local_page_map.keys()) - set(remote_page_ids)
+
+        if not stale_page_ids:
+            return 0
+
+        updates = []
+        for page_id in stale_page_ids:
+            pk = local_page_map.get(page_id)
+            updates.append({
+                'pk': pk,
+                'row': {
+                    'deleted': True,
+                    'sync_time': now_datetime,
+                    'record_modified_time': now_datetime,
+                }
+            })
+            if len(updates) >= self.page_size:
+                self.seadb_api.update_rows(project_uuid, table_name, updates)
+                deleted_count += len(updates)
+                updates = []
+
+        if updates:
+            self.seadb_api.update_rows(project_uuid, table_name, updates)
+            deleted_count += len(updates)
 
         return deleted_count
 

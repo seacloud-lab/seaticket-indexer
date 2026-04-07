@@ -120,31 +120,6 @@ class NotionHandler(ConnectionHandler):
         )
         return sync_count, total_count, False, config
 
-    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
-        """Clean deleted notion records."""
-        page_size = 1000
-        table_name = self.gen_table_name(connection_id)
-        total_deleted = 0
-
-        while True:
-            sql = f"""
-                SELECT _pk FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
-                LIMIT {page_size}
-            """
-            result = seadb_api.query_rows(project_uuid, sql)
-            rows = result.get('results', [])
-            if not rows:
-                break
-
-            deleted_pks = [row.get('_pk') for row in rows]
-            seadb_api.delete_rows(project_uuid, table_name, deleted_pks)
-            total_deleted += len(deleted_pks)
-
-            if len(rows) < page_size:
-                break
-
-        return total_deleted
 
     def clean_connection_data(self, storage, seadb_api, project_uuid,
                               connection_id, tables):
@@ -191,15 +166,12 @@ class NotionHandler(ConnectionHandler):
                         )
                     continue
 
-                notion_page = notion_api.fetch_full_page(page)
-                if not notion_page:
-                    continue
-
                 if existed_page:
                     if last_edited_time <= time_to_utc_time(str(existed_page.get('modified_time'))):
                         logger.debug(f'Notion page {page_id} is up to date, skipping sync.')
                         continue
 
+                notion_page = notion_api.fetch_full_page(page)
                 sync_count += 1
                 notion_seadb_api.save_or_update_page_to_db(connection_id, notion_page, existed_page)
                 should, new_time, new_count = need_update_connection_last_sync_count(

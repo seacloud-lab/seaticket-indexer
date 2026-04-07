@@ -27,8 +27,7 @@ class NotionIndex(BaseConnectionIndex):
                     need_cleared_pages_index_set.add(key)
                 else:
                     content = notion_page.get('content') or ''
-                    if len(content) > INDEX_CONTENT_LIMIT:
-                        content = content[:INDEX_CONTENT_LIMIT]
+                    content = content[:INDEX_CONTENT_LIMIT]
 
                     doc = {
                         'connection_id': str(connection_id),
