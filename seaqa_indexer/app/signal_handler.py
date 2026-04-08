@@ -49,6 +49,12 @@ def kill_deleted_records_cleaner():
     ]
     run(cmd)
 
+def kill_notion_page_cleaner():
+    cmd = [
+        'pkill', '-f', 'seaqa_indexer.tasks.notion_page_cleaner'
+    ]
+    run(cmd)
+
 
 def signal_term_handler(signal, frame):
     kill_web_crawler_task_worker()

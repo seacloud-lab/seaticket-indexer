@@ -17,7 +17,7 @@ from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.utils.notion_api import NotionAPI
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.seadb_models.models import NotionTable
-
+from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,11 @@ class NotionPageCleaner(object):
     def __init__(self):
         self.db_session_class = init_db_session_class()
         self.seadb_api = SeaDBAPI()
+        self.seaqa_db = SeaqaDB(self.db_session_class)
 
         self.should_stop = threading.Event()
-        self.clear_interval = 30 * 24 * 60 * 60
+        self.clear_interval = 24 * 60 * 60
+        self.recent_days = 30 # Only check connections that are more than 30 days old since the last cleanup.
         self.page_size = 100
         self.set_signal()
 
@@ -57,18 +59,6 @@ class NotionPageCleaner(object):
                 except Exception as e:
                     logger.exception('Cron clean notion pages error: %s', e)
 
-    def get_notion_connections(self):
-        with self.db_session_class() as session:
-            sql = """
-                SELECT pc.id, pc.config, pc.project_uuid
-                FROM project_connection pc
-                INNER JOIN projects p ON p.uuid = pc.project_uuid
-                WHERE p.deleted = false
-                AND pc.deleted = false
-                AND pc.is_active = true
-                AND pc.type = :connection_type
-            """
-            return session.execute(text(sql), {'connection_type': ConnectionType.NOTION.value}).fetchall()
 
     def fetch_remote_page_ids(self, notion_api):
         page_ids = set()
@@ -144,7 +134,7 @@ class NotionPageCleaner(object):
         return deleted_count
 
     def clean_notion_pages(self):
-        connections = self.get_notion_connections()
+        connections = self.seaqa_db.get_notion_connections_to_clean(self.recent_days)
         logger.info('Found %d notion connections to check', len(connections))
 
         for connection in connections:
@@ -168,6 +158,8 @@ class NotionPageCleaner(object):
                     project_uuid,
                     remote_page_ids,
                 )
+                cleaned_at = datetime.datetime.now(datetime.UTC)
+                self.seaqa_db.update_connection_last_cleaned_at(connection_id, cleaned_at)
                 logger.info('Marked %d local notion pages deleted for connection %s', deleted_count, connection_id)
             except Exception as e:
                 logger.exception('Failed to clean notion pages for connection %s: %s', connection_id, e)
