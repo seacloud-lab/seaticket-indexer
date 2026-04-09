@@ -206,3 +206,30 @@ class SeaqaDB(object):
                      AND pc.deleted = false
                      AND pc.last_sync_time >= DATE_SUB(NOW(), INTERVAL :days DAY)"""
             return session.execute(text(sql), {'days': days}).fetchall()
+
+    def get_notion_connections_to_clean(self, recent_days):
+        with self.db_session_class() as session:
+            sql = """
+                SELECT pc.id, pc.config, pc.project_uuid, pc.last_cleaned_at
+                FROM project_connection pc
+                INNER JOIN projects p ON p.uuid = pc.project_uuid
+                WHERE p.deleted = false
+                AND pc.deleted = false
+                AND pc.is_active = true
+                AND pc.type = 'notion'
+                AND (
+                    pc.last_cleaned_at IS NULL
+                    OR pc.last_cleaned_at <= DATE_SUB(NOW(), INTERVAL :recent_days DAY)
+                )
+            """
+            return session.execute(text(sql), {'recent_days': recent_days}).fetchall()
+
+    def update_connection_last_cleaned_at(self, connection_id, cleaned_at):
+        with self.db_session_class() as session:
+            sql = """
+                UPDATE project_connection
+                SET last_cleaned_at = :cleaned_at
+                WHERE id = :connection_id
+            """
+            session.execute(text(sql), {'cleaned_at': cleaned_at, 'connection_id': connection_id})
+            session.commit()

@@ -13,7 +13,7 @@ from seaqa_indexer.utils.hasher import AESPasswordHasher
 logger = logging.getLogger(__name__)
 pyexec = None
 
-ENCRYPT_KEYS = ['api_token', 'access_token', 'webhook_secret', 'api_key', 'password']
+ENCRYPT_KEYS = ['api_token', 'access_token', 'webhook_secret', 'api_key', 'password', 'integration_secret']
 
 
 def find_in_path(prog):

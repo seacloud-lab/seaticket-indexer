@@ -59,7 +59,7 @@ def add_connection_sync_task():
     if connection_type == ConnectionType.SITE.value:
         application.app.web_crawl_manager.add_crawl_site_task(connection_id)
     elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
-                       ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
+                       ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value, ConnectionType.NOTION.value):
         application.app.sync_manager.check_and_sync(connection_id)
     else:
         return jsonify({'success': False, 'error_msg': f'Unsupported type: {connection_type}'}), 400
@@ -146,7 +146,7 @@ def manual_sync_connection():
         if connection_type == ConnectionType.SITE.value:
             application.app.web_crawl_manager.add_crawl_site_task(connection_id)
         elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
-                                 ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value):
+                                 ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value, ConnectionType.NOTION.value):
             application.app.sync_manager.check_and_sync(connection_id)
         else:
             return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400

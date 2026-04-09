@@ -20,6 +20,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTTextContainer, LTChar, LTRect, LTLine
 
+from typing import Any, Dict, List, Optional
+
 
 md_hander = HTML2Text(bodywidth=0)  # no wrapping length
 
@@ -31,6 +33,356 @@ HEADER_LABEL = [
     'header5',
     'header6',
 ]
+
+class _NotionMarkdownRenderer:
+    def __init__(self, indent_size=2):
+        self.indent_size = indent_size
+        self._heading_levels = {'heading_1': 1, 'heading_2': 2, 'heading_3': 3}
+        self._renderers = {
+            'column_list': self._render_container,
+            'column': self._render_container,
+            'paragraph': self._render_paragraph,
+            'heading_1': self._render_heading,
+            'heading_2': self._render_heading,
+            'heading_3': self._render_heading,
+            'bulleted_list_item': self._render_bulleted_list_item,
+            'numbered_list_item': self._render_numbered_list_item,
+            'to_do': self._render_to_do,
+            'toggle': self._render_toggle,
+            'quote': self._render_quote,
+            'code': self._render_code,
+            'divider': self._render_divider,
+            'callout': self._render_callout,
+            'image': self._render_image,
+            'bookmark': self._render_url_block,
+            'embed': self._render_url_block,
+            'link_preview': self._render_url_block,
+            'file': self._render_media_link,
+            'pdf': self._render_media_link,
+            'video': self._render_media_link,
+            'audio': self._render_media_link,
+            'child_page': self._render_child_page,
+            'table': self._render_table,
+        }
+
+    def _escape_md(self, text):
+        if not text:
+            return ''
+        return text.replace('\\', '\\\\')
+
+    def _apply_annotations(self, text, annotations):
+        if text is None:
+            return ''
+        if annotations.get('code'):
+            text = f"`{text}`"
+        if annotations.get('bold'):
+            text = f"**{text}**"
+        if annotations.get('italic'):
+            text = f"_{text}_"
+        if annotations.get('strikethrough'):
+            text = f"~~{text}~~"
+        return text
+
+    def _rich_text_to_md(self, rich_text):
+        if not rich_text:
+            return ''
+        parts = []
+        for rt in rich_text:
+            plain = rt.get('plain_text')
+            if plain is None:
+                if rt.get('type') == 'text':
+                    plain = (rt.get('text') or {}).get('content', '')
+                else:
+                    plain = ''
+            text = self._escape_md(plain)
+            text = self._apply_annotations(text, rt.get('annotations') or {})
+            href = rt.get('href')
+            if not href and rt.get('type') == 'text':
+                href = (rt.get('text') or {}).get('link', {}) or None
+                if isinstance(href, dict):
+                    href = href.get('url')
+            if href:
+                text = f"[{text}]({href})"
+            parts.append(text)
+        return ''.join(parts)
+
+    def _get_block_rich_text(self, block):
+        block_type = block.get('type')
+        if not block_type:
+            return []
+        data = block.get(block_type)
+        if not isinstance(data, dict):
+            return []
+        rich_text = data.get('rich_text')
+        if isinstance(rich_text, list):
+            return rich_text
+        return []
+
+    def _get_block_text(self, block):
+        return self._rich_text_to_md(self._get_block_rich_text(block))
+
+    def _render_line_with_children(self, line, children, indent, child_indent=None):
+        if not children:
+            return [line] if line else []
+        rendered_children = self.render_blocks(
+            children,
+            indent=indent + 1 if child_indent is None else child_indent,
+        )
+        if line:
+            return [line] + rendered_children
+        return rendered_children
+
+    def _prefix_lines(self, lines, prefix):
+        return [prefix + line if line.strip() else line for line in lines]
+
+    def _render_blockquote_lines(self, text, indent):
+        prefix = self._prefix(indent) + '> '
+        base_lines = [l for l in (text.split('\n') if text else ['']) if l.strip()]
+        return self._prefix_lines(base_lines, prefix)
+
+    def _extract_file_url(self, file_obj):
+        if not file_obj:
+            return ''
+        if file_obj.get('type') == 'external':
+            return (file_obj.get('external') or {}).get('url', '')
+        if file_obj.get('type') == 'file':
+            return (file_obj.get('file') or {}).get('url', '')
+        return file_obj.get('url', '')
+
+    def _render_table_block(self, block, indent):
+        table = block.get('table') or {}
+        children = block.get('children') or []
+        has_row_header = bool(table.get('has_row_header'))
+
+        rows = [
+            [
+                self._rich_text_to_md(cell).replace('\n', ' ')
+                for cell in (row.get('table_row') or {}).get('cells') or []
+            ]
+            for row in children
+            if row.get('type') == 'table_row'
+        ]
+        if not rows:
+            return []
+
+        max_cols = max((len(r) for r in rows), default=0)
+        if max_cols == 0:
+            return []
+
+        def pad_row(r):
+            return [(r[i] if i < len(r) and r[i] else ' ') for i in range(max_cols)]
+
+        rows = [pad_row(r) for r in rows]
+
+        header_row = rows[0]
+        start_idx = 1
+
+        prefix = self._prefix(indent)
+        lines = [
+            prefix + '| ' + ' | '.join(header_row) + ' |',
+            prefix + '| ' + ' | '.join(['---'] * max_cols) + ' |',
+        ]
+
+        for r in rows[start_idx:]:
+            if has_row_header and r:
+                r = [f"**{r[0]}**"] + r[1:]
+            lines.append(prefix + '| ' + ' | '.join(r) + ' |')
+        return lines
+
+    def render_page(self, full_page, include_title=True):
+        title = (full_page or {}).get('title') or ''
+        blocks = (full_page or {}).get('blocks') or []
+
+        out_lines = []
+        if include_title and title:
+            out_lines.append('# ' + self._escape_md(title))
+            out_lines.append('')
+
+        out_lines.extend(self.render_blocks(blocks, indent=0))
+        return '\n'.join(out_lines).strip() + '\n'
+
+    def render_blocks(self, blocks, indent=0):
+        lines = []
+        lines_append = lines.append
+        lines_extend = lines.extend
+        i = 0
+        while i < len(blocks):
+            block = blocks[i]
+            t = block.get('type')
+
+            if t in ('numbered_list_item', 'bulleted_list_item'):
+                group_lines, i = self._render_list_group(blocks, indent, i, t)
+                lines_extend(group_lines)
+                continue
+
+            lines_extend(self.render_block(block, indent=indent))
+            lines_append('')
+            i += 1
+
+        while lines and lines[-1] == '':
+            lines.pop()
+        return lines
+
+    def render_block(self, block, indent, list_number=None):
+        block_type = block.get('type')
+        if not block_type:
+            return []
+
+        renderer = self._renderers.get(block_type, self._render_default)
+        if block_type == 'numbered_list_item':
+            return renderer(block, indent, list_number)
+        return renderer(block, indent)
+
+    def _prefix(self, indent):
+        return ' ' * (indent * self.indent_size)
+
+    def _render_container(self, block, indent):
+        children = block.get('children') or []
+        if not children:
+            return []
+        return self.render_blocks(children, indent=indent)
+
+    def _render_paragraph(self, block, indent):
+        text = self._get_block_text(block)
+        line = self._prefix(indent) + text if text else ''
+        return self._render_line_with_children(line, block.get('children') or [], indent, child_indent=indent)
+
+    def _render_heading(self, block, indent):
+        block_type = block.get('type')
+        level = self._heading_levels[block_type]
+        text = self._get_block_text(block)
+        return [self._prefix(indent) + ('#' * level) + ' ' + text]
+
+    def _render_bulleted_list_item(self, block, indent):
+        text = self._get_block_text(block)
+        line = self._prefix(indent) + '- ' + text
+        return self._render_line_with_children(line, block.get('children') or [], indent)
+
+    def _render_numbered_list_item(self, block, indent, list_number):
+        text = self._get_block_text(block)
+        number = list_number if list_number is not None else 1
+        line = self._prefix(indent) + f"{number}. " + text
+        return self._render_line_with_children(line, block.get('children') or [], indent)
+
+    def _render_to_do(self, block, indent):
+        todo = block.get('to_do') or {}
+        text = self._get_block_text(block)
+        checked = bool(todo.get('checked'))
+        mark = 'x' if checked else ' '
+        line = self._prefix(indent) + f"- [{mark}] " + text
+        return self._render_line_with_children(line, block.get('children') or [], indent)
+
+    def _render_toggle(self, block, indent):
+        text = self._get_block_text(block)
+        line = self._prefix(indent) + '<details>'
+        summary = self._prefix(indent) + f"<summary>{text}</summary>"
+        children = block.get('children') or []
+        rendered_children = self.render_blocks(children, indent=indent + 1) if children else []
+        end = self._prefix(indent) + '</details>'
+        return [line, summary] + rendered_children + [end]
+
+    def _render_quote(self, block, indent):
+        text = self._get_block_text(block)
+        prefix = self._prefix(indent)
+        lines = self._render_blockquote_lines(text, indent)
+        children = block.get('children') or []
+        if children:
+            child_lines = self.render_blocks(children, indent=indent)
+            child_lines = self._prefix_lines(child_lines, prefix + '> ')
+            return lines + child_lines
+        return lines
+
+    def _render_code(self, block, indent):
+        code = block.get('code') or {}
+        lang = code.get('language') or ''
+        text = self._get_block_text(block)
+        prefix = self._prefix(indent)
+        return [prefix + f"```{lang}", text, prefix + "```"]
+
+    def _render_divider(self, block, indent):
+        return [self._prefix(indent) + '---']
+
+    def _render_callout(self, block, indent):
+        callout = block.get('callout') or {}
+        icon = callout.get('icon') or {}
+        icon_text = ''
+        if icon.get('type') == 'emoji':
+            icon_text = icon.get('emoji', '')
+        text = self._get_block_text(block)
+        head = (icon_text + ' ' if icon_text else '') + text
+        prefix = self._prefix(indent)
+        line = prefix + '> ' + head if head else (prefix + '>')
+        children = block.get('children') or []
+        rendered_children = self.render_blocks(children, indent=indent) if children else []
+        rendered_children = self._prefix_lines(rendered_children, prefix + '> ')
+        return [line] + rendered_children
+
+    def _render_image(self, block, indent):
+        img = block.get('image') or {}
+        url = self._extract_file_url(img)
+        caption = self._rich_text_to_md(img.get('caption'))
+        alt = caption or 'image'
+        if url:
+            return [self._prefix(indent) + f"![{alt}]({url})"]
+        return []
+
+    def _render_url_block(self, block, indent):
+        block_type = block.get('type')
+        data = block.get(block_type)
+        if not isinstance(data, dict):
+            return []
+        url = data.get('url') or ''
+        if url:
+            return [self._prefix(indent) + url]
+        return []
+
+    def _render_media_link(self, block, indent):
+        block_type = block.get('type')
+        data = block.get(block_type)
+        if not isinstance(data, dict):
+            return []
+        url = self._extract_file_url(data)
+        caption = self._rich_text_to_md(data.get('caption'))
+        label = caption or block_type
+        if url:
+            return [self._prefix(indent) + f"[{label}]({url})"]
+        return []
+
+    def _render_child_page(self, block, indent):
+        title = (block.get('child_page') or {}).get('title', '')
+        if title:
+            return [self._prefix(indent) + '## ' + self._escape_md(title)]
+        return []
+
+    def _render_table(self, block, indent):
+        return self._render_table_block(block, indent)
+
+    def _render_default(self, block, indent):
+        text = self._rich_text_to_md(self._get_block_rich_text(block))
+        if text:
+            return [self._prefix(indent) + text]
+        return []
+
+    def _render_list_group(self, blocks, indent, start_index, block_type):
+        lines = []
+        i = start_index
+        if block_type == 'numbered_list_item':
+            n = 1
+            while i < len(blocks) and blocks[i].get('type') == block_type:
+                lines.extend(self.render_block(blocks[i], indent=indent, list_number=n))
+                n += 1
+                i += 1
+        else:
+            while i < len(blocks) and blocks[i].get('type') == block_type:
+                lines.extend(self.render_block(blocks[i], indent=indent))
+                i += 1
+        lines.append('')
+        return lines, i
+
+
+def notion_page_to_markdown(full_page, include_title=True):
+    notion_renderer = _NotionMarkdownRenderer()
+    return notion_renderer.render_page(full_page, include_title=include_title)
 
 
 def _handle_text_style(json_data_text, return_null=False):

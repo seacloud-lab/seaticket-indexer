@@ -28,7 +28,8 @@ class ConnectionType(Enum):
     DISCOURSE_FORUM = 'discourse_forum'
     SITE = 'site'
     SEAFILE = 'seafile'
-    
+    NOTION = 'notion'
+
     @classmethod
     def is_valid(cls, value):
         return value in {item.value for item in cls}
