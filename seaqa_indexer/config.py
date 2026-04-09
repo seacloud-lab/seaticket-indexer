@@ -108,13 +108,13 @@ REDIS_HOST = configs.get('REDIS_HOST', 'redis')
 REDIS_PORT = configs.get('REDIS_PORT', 6379)
 REDIS_PASSWORD = configs.get('REDIS_PASSWORD', '')
 
-S3_HOST = configs.get('S3_HOST')
-S3_FILE_BUCKET = configs.get('S3_FILE_BUCKET')
-S3_WEB_CRAWL_BUCKET = configs.get('S3_WEB_CRAWL_BUCKET')
-S3_KEY_ID = configs.get('S3_KEY_ID')
-S3_SECRET_KEY = configs.get('S3_SECRET_KEY')
+S3_HOST = configs.get('S3_HOST', '')
+S3_FILE_BUCKET = configs.get('S3_FILE_BUCKET', '')
+S3_WEB_CRAWL_BUCKET = configs.get('S3_WEB_CRAWL_BUCKET', '')
+S3_KEY_ID = configs.get('S3_KEY_ID', '')
+S3_SECRET_KEY = configs.get('S3_SECRET_KEY', '')
 
-GITHUB_APP_ID = configs.get('GITHUB_APP_ID')
+GITHUB_APP_ID = configs.get('GITHUB_APP_ID', '')
 GITHUB_PRIVATE_KEY_PATH = configs.get('GITHUB_PRIVATE_KEY_PATH', '')
 
 try:
