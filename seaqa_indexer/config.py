@@ -30,7 +30,8 @@ def _check_type(func):
     def wrapper(self, key, default=None, check_type=True):
         result = func(self, key, default)
         if check_type:
-            if (need_type := type(default)) in (int, float):
+            need_type = type(default)
+            if need_type in (int, float):
                 try:
                     result = need_type(result)
                 except:
@@ -40,6 +41,8 @@ def _check_type(func):
                     result = result.lower() in ('true', '1')
                 else:
                     result = bool(result)
+            elif need_type in (str, list, dict):
+                result = need_type(result)
         return result
     return wrapper
 
