@@ -155,16 +155,7 @@ class NotionHandler(ConnectionHandler):
                 if last_sync_time and last_edited_time < last_sync_time:
                     has_more = False
                     break
-                in_trash = page.get('in_trash')
                 existed_page = notion_seadb_api.get_page_by_page_id(page_id, connection_id)
-                if in_trash:
-                    if existed_page:
-                        notion_seadb_api.mark_page_deleted(
-                            connection_id,
-                            existed_page.get('_pk'),
-                            modified_time=last_edited_time,
-                        )
-                    continue
 
                 if existed_page:
                     if last_edited_time <= time_to_utc_time(str(existed_page.get('modified_time'))):

@@ -6,17 +6,13 @@ import threading
 import signal
 import datetime
 
-from sqlalchemy.sql import text
-
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.utils.notion_api import NotionAPI
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
-from seaqa_indexer.seadb_models.models import NotionTable
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 logger = logging.getLogger(__name__)
@@ -59,7 +55,6 @@ class NotionPageCleaner(object):
                 except Exception as e:
                     logger.exception('Cron clean notion pages error: %s', e)
 
-
     def fetch_remote_page_ids(self, notion_api):
         page_ids = set()
         cursor = None
@@ -86,11 +81,8 @@ class NotionPageCleaner(object):
 
         return page_ids
 
-    def mark_deleted_local_pages(self, notion_seadb_api, connection_id, project_uuid, remote_page_ids):
-        table_name = NotionTable.gen_table_name(connection_id)
-        now_datetime = datetime.datetime.now(datetime.UTC).isoformat()
+    def get_local_page_ids(self, notion_seadb_api, connection_id):
         offset = 0
-        deleted_count = 0
         local_page_map = {}
 
         while True:
@@ -105,33 +97,7 @@ class NotionPageCleaner(object):
             if len(rows) < self.page_size:
                 break
             offset += self.page_size
-
-        stale_page_ids = set(local_page_map.keys()) - set(remote_page_ids)
-
-        if not stale_page_ids:
-            return 0
-
-        updates = []
-        for page_id in stale_page_ids:
-            pk = local_page_map.get(page_id)
-            updates.append({
-                'pk': pk,
-                'row': {
-                    'deleted': True,
-                    'sync_time': now_datetime,
-                    'record_modified_time': now_datetime,
-                }
-            })
-            if len(updates) >= self.page_size:
-                self.seadb_api.update_rows(project_uuid, table_name, updates)
-                deleted_count += len(updates)
-                updates = []
-
-        if updates:
-            self.seadb_api.update_rows(project_uuid, table_name, updates)
-            deleted_count += len(updates)
-
-        return deleted_count
+        return local_page_map
 
     def clean_notion_pages(self):
         connections = self.seaqa_db.get_notion_connections_to_clean(self.recent_days)
@@ -142,7 +108,7 @@ class NotionPageCleaner(object):
             project_uuid = connection.project_uuid
 
             try:
-                connection_config =  decrypt_config(json.loads(connection.config))
+                connection_config = decrypt_config(json.loads(connection.config))
                 token = connection_config.get('integration_secret')
                 if not token:
                     logger.warning('Notion token missing for connection %s, skipping', connection_id)
@@ -152,15 +118,15 @@ class NotionPageCleaner(object):
                 notion_seadb_api = NotionSeaDBAPI(project_uuid)
 
                 remote_page_ids = self.fetch_remote_page_ids(notion_api)
-                deleted_count = self.mark_deleted_local_pages(
-                    notion_seadb_api,
-                    connection_id,
-                    project_uuid,
-                    remote_page_ids,
-                )
+                local_page_map = self.get_local_page_ids(notion_seadb_api, connection_id)
+
+                stale_page_ids = set(local_page_map.keys()) - set(remote_page_ids)
+
+                notion_seadb_api.mark_pages_deleted(connection_id, stale_page_ids, local_page_map)
+
                 cleaned_at = datetime.datetime.now(datetime.UTC)
                 self.seaqa_db.update_connection_last_cleaned_at(connection_id, cleaned_at)
-                logger.info('Marked %d local notion pages deleted for connection %s', deleted_count, connection_id)
+                logger.info('Marked %d local notion pages deleted for connection %s', len(stale_page_ids), connection_id)
             except Exception as e:
                 logger.exception('Failed to clean notion pages for connection %s: %s', connection_id, e)
 

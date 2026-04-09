@@ -104,3 +104,25 @@ class NotionSeaDBAPI:
             },
         }
         self.seadb_api.update_rows(self.base_id, table_name, [update_row])
+
+    def mark_pages_deleted(self, connection_id, stale_page_ids, local_page_map):
+        batch_size_limit = 100
+        table_name = NotionTable.gen_table_name(connection_id)
+        now_datetime = datetime.datetime.now(datetime.UTC).isoformat()
+        updates = []
+        for page_id in stale_page_ids:
+            pk = local_page_map.get(page_id)
+            updates.append({
+                'pk': pk,
+                'row': {
+                    'deleted': True,
+                    'sync_time': now_datetime,
+                    'record_modified_time': now_datetime,
+                }
+            })
+            if len(updates) >= batch_size_limit:
+                self.seadb_api.update_rows(self.base_id, table_name, updates)
+                updates = []
+
+        if updates:
+            self.seadb_api.update_rows(self.base_id, table_name, updates)
