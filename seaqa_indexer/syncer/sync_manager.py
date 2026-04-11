@@ -10,7 +10,7 @@ from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,12 @@ class SyncManager(Thread):
                 connection_type = connection.type
 
                 logger.info(f"Add recovering sync task for connection {connection_id}")
+
+                connection_status = json.loads(connection.status)
+                # reset sync status
+                connection_status['last_sync_status'] = CrawlStatus.PENDING
+                self.seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+
                 if connection_type == ConnectionType.SITE.value:
                     msg_content = {
                         'site_id': connection_id,
@@ -63,7 +69,7 @@ class SyncManager(Thread):
                     self.mq.lpush('web_crawl_task', json.dumps(msg_content))
                     continue
 
-                self.add_sync_task(connection_id)
+                self.check_and_sync(connection_id)
 
         except Exception as e:
             logger.exception(f"Error during task recovery: {e}")
