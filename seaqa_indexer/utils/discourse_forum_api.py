@@ -48,7 +48,7 @@ class DiscourseForumAPI:
         }
 
     @retry_with_exponential_backoff()
-    def fetch_latest_topics_page(self, page):
+    def fetch_latest_topics_by_page(self, page):
         url = urljoin(self.forum_url, f"latest.json?page={page}")
         response = requests.get(url, headers=self.headers, timeout=self.timeout)
         response.raise_for_status()
