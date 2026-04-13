@@ -83,11 +83,9 @@ class GitHubSeaDBAPI:
         if state_reason:
             insert_row[GithubIssuesTable.state_reason.name] = state_reason
 
-        if label_names:
-            insert_row[GithubIssuesTable.labels.name] = label_names
+        insert_row[GithubIssuesTable.labels.name] = label_names
 
-        if type_name:
-            insert_row[GithubIssuesTable.issue_type.name] = type_name
+        insert_row[GithubIssuesTable.issue_type.name] = type_name
 
         table_name = GithubIssuesTable.gen_table_name(connection_id)
         if existed_issue:
