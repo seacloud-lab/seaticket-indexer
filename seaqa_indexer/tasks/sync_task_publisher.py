@@ -23,6 +23,7 @@ SYNC_CONNECTION_TYPES = [
     ConnectionType.DISCOURSE_FORUM.value,
     ConnectionType.GITHUB_ISSUE.value,
     ConnectionType.EMAIL.value,
+    ConnectionType.NOTION.value,
 ]
 
 
