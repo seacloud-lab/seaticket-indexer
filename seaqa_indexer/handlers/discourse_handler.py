@@ -191,7 +191,7 @@ class DiscourseHandler(ConnectionHandler):
             last_sync_time = time_to_utc_time(str(last_sync_time))
 
         while True:
-            topics = discourse_forum_api.fetch_latest_topics_page(page)
+            topics = discourse_forum_api.fetch_latest_topics_by_page(page)
 
             if not topics:
                 break
