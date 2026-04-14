@@ -249,6 +249,9 @@ class SelectTypes:
       "options": []
     }
 
+    jira_assignee = {
+      "options": []
+    }
 
 
 class MappedColumn(object):
@@ -399,7 +402,7 @@ class JiraIssuesTable(BaseModel):
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
     status = MappedColumn('status', PropertyTypes.SINGLE_SELECT, SelectTypes.jira_status)
     priority = MappedColumn('priority', PropertyTypes.SINGLE_SELECT, SelectTypes.jira_priority)
-    assignees = MappedColumn('assignees', PropertyTypes.TEXT)
+    assignees = MappedColumn('assignees', PropertyTypes.SINGLE_SELECT, SelectTypes.jira_assignee)
     issue_type = MappedColumn('issue_type', PropertyTypes.SINGLE_SELECT, SelectTypes.jira_issue_type)
     due_date = MappedColumn('due_date', PropertyTypes.DATETIME)
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)

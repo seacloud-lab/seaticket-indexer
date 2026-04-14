@@ -122,6 +122,7 @@ class JiraIssueHandler(ConnectionHandler):
         sync_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
+        table_metadata = jira_seadb_api.get_table_metadata(connection_id)
 
         while True:
             data = jira_api.search_issues(space_key, old_last_sync_time, start_at, page_size)
@@ -130,6 +131,8 @@ class JiraIssueHandler(ConnectionHandler):
 
             if not issues:
                 break
+
+            jira_seadb_api.add_or_update_jira_assignee_options(table_metadata, issues)
 
             for issue in issues:
                 fields_data = issue.get('fields', {}) or {}

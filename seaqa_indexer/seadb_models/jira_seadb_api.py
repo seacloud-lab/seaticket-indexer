@@ -121,6 +121,24 @@ class JiraSeaDBAPI:
             })
         self._upsert_select_column_options(table_metadata, JiraIssuesTable.issue_type.name, options)
 
+    def add_or_update_jira_assignee_options(self, table_metadata, issues):
+        names = set()
+        for issue in issues or []:
+            fields_data = issue.get('fields', {}) or {}
+            assignee_name = (fields_data.get('assignee') or {}).get('displayName')
+            if assignee_name:
+                names.add(assignee_name)
+
+        options = [
+            {
+                'name': name,
+                'color': '#FFFFFF',
+                'text_color': '#000000'
+            }
+            for name in sorted(names)
+        ]
+        self._upsert_select_column_options(table_metadata, JiraIssuesTable.assignees.name, options)
+
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = JiraIssuesTable.gen_table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE `issue_id` = {issue_id}"
