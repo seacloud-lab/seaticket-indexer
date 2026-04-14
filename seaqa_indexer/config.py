@@ -13,8 +13,8 @@ def _read_yaml(yaml_file_path=None, component_name=None):
         configs = {}
         try:
             with open(yaml_file_path, 'r', encoding='utf-8') as yaml_file:
-                current_yaml_config = yaml.safe_load(yaml_file)
-                configs = current_yaml_config.get('global', {}) or {}
+                current_yaml_config = yaml.safe_load(yaml_file)  or {}
+                configs = current_yaml_config.get('global', {})
                 if component_name:
                     component_config = current_yaml_config.get(component_name, {})
                     configs.update(component_config)
