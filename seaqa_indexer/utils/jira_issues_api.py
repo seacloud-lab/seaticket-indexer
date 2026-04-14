@@ -43,7 +43,7 @@ class JiraAPI:
         else:
             jql = f'project = \"{space_key}\" ORDER BY created ASC'
 
-        fields = 'summary,issuetype,status,priority,assignees,duedate,description,comment,updated,created'
+        fields = 'summary,issuetype,status,priority,assignee,duedate,description,comment,updated,created'
 
         url = f'{self.base_url}/rest/api/3/search/jql'
         params = {

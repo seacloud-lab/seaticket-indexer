@@ -145,7 +145,7 @@ class JiraSeaDBAPI:
             JiraIssuesTable.content.name:content,
             JiraIssuesTable.status.name: (fields_data.get('status') or {}).get('name'),
             JiraIssuesTable.priority.name: (fields_data.get('priority') or {}).get('name'),
-            JiraIssuesTable.assignees.name: (fields_data.get('assignees') or {}).get('displayName'),
+            JiraIssuesTable.assignees.name: (fields_data.get('assignee') or {}).get('displayName'),
             JiraIssuesTable.issue_type.name: (fields_data.get('issuetype') or {}).get('name'),
             JiraIssuesTable.due_date.name: fields_data.get('duedate'),
             JiraIssuesTable.created_time.name: time_to_utc_time(fields_data.get('created')).isoformat(),
