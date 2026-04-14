@@ -7,22 +7,24 @@ import logging
 basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, basedir)
 logger = logging.getLogger(__name__)
+
 def _read_yaml(yaml_file_path=None, component_name=None):
     if yaml_file_path:
+        if not os.path.isfile(yaml_file_path) or (not yaml_file_path.endswith('yml') and not yaml_file_path.endswith('yaml')):
+            logger.warning(f'{yaml_file_path} is not existed or not a valid YAML file')
+            return {}
+
         # first read, get vars from global
         configs = {}
-        try:
-            with open(yaml_file_path, 'r', encoding='utf-8') as yaml_file:
-                current_yaml_config = yaml.safe_load(yaml_file) or {}
-                configs = current_yaml_config.get('global', {})
-                if component_name:
-                    component_config = current_yaml_config.get(component_name, {})
-                    configs.update(component_config)
-                    if 'from_yaml' in component_config:
-                        del configs['from_yaml']
-                        configs.update(_read_yaml(component_config['from_yaml']))
-        except Exception as e:
-            logger.warning(f'Failure to read YAML config file: {e}')
+        with open(yaml_file_path, 'r', encoding='utf-8') as yaml_file:
+            current_yaml_config = yaml.safe_load(yaml_file) or {}
+            configs = current_yaml_config.get('global', {})
+            if component_name:
+                component_config = current_yaml_config.get(component_name, {})
+                configs.update(component_config)
+                if 'from_yaml' in component_config:
+                    del configs['from_yaml']
+                    configs.update(_read_yaml(component_config['from_yaml']))
         return configs
     return {}
 
@@ -54,7 +56,11 @@ class _ConfigParser(object):
     def refresh_yaml_configs(self, yaml_file_path=None, component_name=None):
         self.yaml_file_path = yaml_file_path or self.yaml_file_path
         self.component_name = component_name or self.component_name
-        self.yaml_configs = _read_yaml(self.yaml_file_path, self.component_name)
+        try:
+            self.yaml_configs = _read_yaml(self.yaml_file_path, self.component_name)
+        except Exception as e:
+            logger.error(f'Failure to read YAML config file: {e}')
+            raise
 
     @_check_type
     def get(self, key, default=None):
@@ -66,7 +72,7 @@ class _ConfigParser(object):
                 pass
             return value
         return self.yaml_configs.get(key, default)
-
+    
 # init configs reader
 CONF_DIR = os.environ.get('CONF_PATH', '/opt/seaqa/conf/')
 yaml_file_path = os.path.join(CONF_DIR, os.environ.get('SEAQA_CONFIG_NAME', 'seaqa_config.yaml'))
