@@ -12,7 +12,7 @@ from seaqa_indexer.utils.imap_mail import ImapMail
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.index.utils import gen_index_name_by_type
-from seaqa_indexer.utils.constants import IndexStatus
+from seaqa_indexer.utils.constants import IndexStatus, DataEventType
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.email_index import EmailIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
@@ -221,6 +221,7 @@ class EmailHandler(ConnectionHandler):
                     'email_date': email.get('email_date'),
                     'subject': email.get('subject'),
                     'is_sender': email.get('is_sender'),
+                    'email_from': email.get('email_from'),
                 }
                 new_email_list.append(email_info)
 
@@ -243,7 +244,13 @@ class EmailHandler(ConnectionHandler):
                     _status_last_update_count = new_count
                 sync_count += 1
             if new_email_list:
+                old_thread_rows_by_id = self._get_old_thread_rows_by_id(
+                    email_seadb_api, connection_id, new_email_list
+                )
                 insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
+                self._publish_thread_events(
+                    email_seadb_api, connection_id, new_email_list, old_thread_rows_by_id
+                )
 
         connection_status['last_sync_changes'] = {
             'added': added_count,
@@ -252,3 +259,58 @@ class EmailHandler(ConnectionHandler):
         }
         total_count = email_seadb_api.get_email_total_count(connection_id)
         return sync_count, total_count
+
+    def _get_old_thread_rows_by_id(self, email_seadb_api, connection_id, email_list):
+        old_thread_rows_by_id = {}
+        for email in email_list:
+            reply_to_message_id = email.get('reply_to_message_id')
+            if not reply_to_message_id:
+                continue
+
+            replied_email = email_seadb_api.get_email_by_message_id(connection_id, reply_to_message_id)
+            thread_id = replied_email.get('thread_id')
+            if not thread_id or thread_id in old_thread_rows_by_id:
+                continue
+
+            old_thread = email_seadb_api.get_thread_by_pk(connection_id, thread_id)
+            if old_thread:
+                old_thread_rows_by_id[thread_id] = old_thread
+        return old_thread_rows_by_id
+
+    def _publish_thread_events(self, email_seadb_api, connection_id, email_list, old_thread_rows_by_id):
+        published_thread_ids = set()
+        for email in email_list:
+            message_id = email.get('message_id')
+            if not message_id:
+                continue
+
+            latest_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
+            thread_id = latest_email.get('thread_id')
+            if not thread_id or thread_id in published_thread_ids:
+                continue
+
+            old_thread = old_thread_rows_by_id.get(thread_id)
+            state_event_type = (
+                DataEventType.EMAIL_THREAD_UPDATED.value
+                if old_thread is not None
+                else DataEventType.EMAIL_THREAD_ADDED.value
+            )
+
+            self.publish_synced_record_events(
+                get_latest_row=lambda tid=thread_id: email_seadb_api.get_thread_by_pk(connection_id, tid),
+                project_uuid=email_seadb_api.base_id,
+                connection_id=connection_id,
+                item_id=thread_id,
+                old_row=old_thread,
+                state_event_type=state_event_type,
+                additional_items=[{
+                    'message_id': message_id,
+                    'email_from': email.get('email_from'),
+                    'modified_time': email.get('email_date'),
+                }] if old_thread is not None else None,
+                additional_event_type=DataEventType.EMAIL_MESSAGE_ADDED.value,
+                additional_items_field='emails',
+                state_event_ignored_fields=('modified_time', 'record_modified_time', 'sync_time'),
+                log_object_name='email thread',
+            )
+            published_thread_ids.add(thread_id)
