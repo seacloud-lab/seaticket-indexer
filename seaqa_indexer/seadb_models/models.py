@@ -186,30 +186,6 @@ class SelectTypes:
       ]
     }
 
-    issue_type = {
-      "options": [
-        {
-          "id": "0001",
-          "name": "Bug",
-          "color": "#ffebe9",
-          "text_color": "#d1242f"
-        },
-        {
-          "id": "0002",
-          "name": "Feature",
-          "color": "#ddf4ff",
-          "text_color": "#0969da"
-        },
-        {
-          "id": "0003",
-          "name": "Task",
-          "color": "#fff8c5",
-          "text_color": "#9a6700"
-        }
-      ]
-    }
-
-
 
 class MappedColumn(object):
     def __init__(self, name, type, data=None):
@@ -317,7 +293,7 @@ class GithubIssuesTable(BaseModel):
     state = MappedColumn('state', PropertyTypes.SINGLE_SELECT, SelectTypes.state)
     state_reason = MappedColumn('state_reason', PropertyTypes.SINGLE_SELECT, SelectTypes.state_reason)
     labels = MappedColumn('labels', PropertyTypes.MULTIPLE_SELECT)
-    issue_type = MappedColumn('issue_type', PropertyTypes.SINGLE_SELECT, SelectTypes.issue_type)
+    issue_type = MappedColumn('issue_type', PropertyTypes.SINGLE_SELECT)
     author = MappedColumn('author', PropertyTypes.TEXT)
     assignees = MappedColumn('assignees', PropertyTypes.TEXT)
     url = MappedColumn('url', PropertyTypes.TEXT)
