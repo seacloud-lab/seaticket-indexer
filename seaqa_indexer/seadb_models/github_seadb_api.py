@@ -188,14 +188,15 @@ class GitHubSeaDBAPI:
 
         return added_comments
 
-    def add_or_update_issue_label_column_options(self, connection_id, issues_labels):
+    def get_table_metadata(self, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
         metadata = self.seadb_api.get_base_metadata(self.base_id)
-        table_info = {}
         for table in metadata.get('tables', []):
             if table['name'] == table_name:
                 table_info = table
-                break
+                return table_info
+
+    def add_or_update_issue_label_column_options(self, issue_labels, table_info):
         table_id = table_info.get('id')
         columns = table_info.get("columns", [])
         label_column = {}
@@ -213,17 +214,17 @@ class GitHubSeaDBAPI:
 
         label_column_key = label_column.get('key')
         new_label_names = set()
-        for issues_label in issues_labels:
-            label_name = issues_label.get('name')
+        for issue_label in issue_labels:
+            label_name = issue_label.get('name')
             new_label_names.add(label_name)
             if label_name not in old_label_names:
-                column_key = label_column.get('key')
+                column_key = label_column_key
                 column_option = {
                     'table_id': table_id,
                     'column_key': column_key,
-                    'option_name': issues_label.get('name'),
+                    'option_name': label_name,
                     'option_data': {
-                        'color': '#' + f"{issues_label.get('color')}",
+                        'color': '#' + f"{issue_label.get('color')}",
                     },
                 }
                 self.seadb_api.add_column_option(self.base_id, column_option)
@@ -231,6 +232,73 @@ class GitHubSeaDBAPI:
         if need_deleted_labels:
             need_deleted_option_ids = [label_name_to_option_id[label_name] for label_name in need_deleted_labels]
             self.seadb_api.delete_column_option(self.base_id, table_id, label_column_key, option_ids=need_deleted_option_ids)
+
+    def add_or_update_issue_type_column_options(self, issues_types, table_info):
+        color_name_to_color = {
+            'gray': '#5A5F66',
+            'blue': '#E0F0FF',
+            'green': '#E0F9E5',
+            'yellow': '#FFF9D0',
+            'orange': '#FFE8D6',
+            'red': '#FFE8E8',
+            'pink': '#FADADD',
+            'purple': '#F3E5F5',
+        }
+        table_id = table_info.get('id')
+        columns = table_info.get("columns", [])
+        issue_type_column = {}
+        for column in columns:
+            if column.get('name') == GithubIssuesTable.issue_type.name:
+                issue_type_column = column
+                break
+
+        old_issue_type_id_to_option = {}
+        if issue_type_column.get('data'):
+            for option in issue_type_column.get('data')['options']:
+                type_id = option.get('type_id')
+                old_issue_type_id_to_option[type_id] = option
+
+        column_key = issue_type_column.get('key')
+        new_issue_type_ids = set()
+        for issue_type in issues_types:
+            issue_type_name = issue_type.get('name')
+            issue_type_id = issue_type.get('id')
+            issue_type_color = issue_type.get('color').lower()
+
+            new_issue_type_ids.add(issue_type_id)
+            old_option = old_issue_type_id_to_option.get(issue_type_id)
+            if not old_option:
+                column_option = {
+                    'table_id': table_id,
+                    'column_key': column_key,
+                    'option_name': issue_type_name,
+                    'option_data': {
+                        'color': color_name_to_color.get(issue_type_color),
+                        'type_id': issue_type_id,
+                    },
+                }
+                self.seadb_api.add_column_option(self.base_id, column_option)
+            else:
+                old_issue_type_name = old_option.get('name')
+                old_issue_type_color = old_option.get('color')
+                option_id = old_option.get('id')
+                if issue_type_name != old_issue_type_name or issue_type_color != old_issue_type_color:
+                    update_option_data = {
+                        'color': color_name_to_color.get(issue_type_color),
+                        'type_id': issue_type_id,
+                    }
+                    if issue_type_name == old_issue_type_name:
+                        issue_type_name = None
+                    if issue_type_color == old_issue_type_color:
+                        update_option_data = None
+
+                    self.seadb_api.update_column_option(self.base_id, table_id, column_key, option_id,
+                                                        new_option_name=issue_type_name, update_option_data=update_option_data)
+
+        need_deleted_issue_type_ids = set(old_issue_type_id_to_option.keys()) - new_issue_type_ids
+        if need_deleted_issue_type_ids:
+            need_deleted_option_ids = [old_issue_type_id_to_option[issue_type_id].get('id') for issue_type_id in need_deleted_issue_type_ids]
+            self.seadb_api.delete_column_option(self.base_id, table_id, column_key, option_ids=need_deleted_option_ids)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
