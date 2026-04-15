@@ -254,7 +254,8 @@ class GitHubSeaDBAPI:
 
         old_issue_type_id_to_option = {}
         if issue_type_column.get('data'):
-            for option in issue_type_column.get('data')['options']:
+            issue_options = issue_type_column.get('data')['options'] or []
+            for option in issue_options:
                 type_id = option.get('type_id')
                 old_issue_type_id_to_option[type_id] = option
 
