@@ -64,6 +64,7 @@ def signal_term_handler(signal, frame):
     kill_summary_index_task_worker()
     kill_content_vector_index_task_worker()
     kill_deleted_records_cleaner()
+    kill_notion_page_cleaner()
     os._exit(0)
 
 
