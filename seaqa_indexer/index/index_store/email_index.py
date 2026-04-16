@@ -39,7 +39,7 @@ class EmailIndex(BaseConnectionIndex):
                         if not thread_emails:
                             break
                         for email in thread_emails:
-                            content += email.get('content')
+                            content += email.get('content') or ''
 
                         if len(content) > INDEX_CONTENT_LIMIT:
                             break
