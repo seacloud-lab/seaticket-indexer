@@ -63,7 +63,7 @@ class SeafileSeaDBAPI:
 
     def get_files_by_page(self, connection_id, since, page_size, offset):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"""SELECT * FROM `{table_name}` 
+        sql = f"""SELECT `_pk`, `title`, `deleted`, `outdated`, `modified_time`, `content` FROM `{table_name}` 
                 WHERE record_modified_time >= '{since}' 
                 LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
@@ -84,7 +84,7 @@ class SeafileSeaDBAPI:
     def get_need_ai_files_by_page(self, connection_id, page_size):
         table_name = SeafileTable.gen_table_name(connection_id)
         sql = f"""
-            SELECT * FROM `{table_name}`
+            SELECT `_pk`, `title`, `content` FROM `{table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """

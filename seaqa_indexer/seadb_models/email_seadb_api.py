@@ -124,7 +124,7 @@ class EmailSeaDBAPI:
 
     def get_threads_by_page(self, connection_id, since, page_size, offset):
         table_name = ThreadTable.gen_table_name(connection_id)
-        sql = f"""SELECT * FROM `{table_name}` 
+        sql = f"""SELECT `_pk`, `deleted`, `outdated`, `title`, `modified_time` FROM `{table_name}` 
                 WHERE record_modified_time >= '{since}' 
                 LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
@@ -171,7 +171,7 @@ class EmailSeaDBAPI:
     def get_need_ai_emails_by_page(self, connection_id, page_size):
         thread_table_name = ThreadTable.gen_table_name(connection_id)
         sql = f"""
-            SELECT * FROM `{thread_table_name}`
+            SELECT `_pk`, `title` FROM `{thread_table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < modified_time) 
             AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}

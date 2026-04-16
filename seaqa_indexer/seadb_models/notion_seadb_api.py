@@ -53,7 +53,7 @@ class NotionSeaDBAPI:
 
     def get_page_by_page_id(self, page_id, connection_id):
         table_name = NotionTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE page_id='{page_id}'"
+        sql = f"SELECT `_pk`, `modified_time` FROM `{table_name}` WHERE page_id='{page_id}'"
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
@@ -61,7 +61,7 @@ class NotionSeaDBAPI:
 
     def get_notion_pages_by_page(self, connection_id, last_indexed_at, page_size, offset):
         notion_table_name = NotionTable.gen_table_name(connection_id)
-        sql = f"""SELECT * FROM `{notion_table_name}` 
+        sql = f"""SELECT `_pk`, `title`, `content`, `modified_time`, `deleted`, `outdated` FROM `{notion_table_name}` 
                 WHERE record_modified_time >= '{last_indexed_at}' 
                 LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
@@ -72,7 +72,7 @@ class NotionSeaDBAPI:
     def get_need_ai_notion_pages_by_page(self, connection_id, page_size):
         notion_table_name = NotionTable.gen_table_name(connection_id)
         sql = f"""
-            SELECT * FROM `{notion_table_name}`
+            SELECT `_pk`, `title`, `content` FROM `{notion_table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """
