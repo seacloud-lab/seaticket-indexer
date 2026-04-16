@@ -22,7 +22,7 @@ class EmailSeaDBAPI:
         else:
             markdown_text = email['content']
 
-        cleaned_content = EmailMessage().parse_reply(markdown_text) if markdown_text else ''
+        cleaned_content = EmailMessage().parse_reply(markdown_text.encode('utf-8').decode('unicode_escape')) if markdown_text else ''
         insert_row = {
             'email_from': email['email_from'],
             'email_to': email['email_to'],
