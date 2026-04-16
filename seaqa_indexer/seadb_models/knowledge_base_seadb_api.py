@@ -9,7 +9,8 @@ class KnowledgeBaseSeaDBAPI:
 
     def get_knowledge_bases_by_page(self, since, page_size, offset):
         table_name = KnowledgeBaseTable.gen_table_name()
-        sql = f"SELECT * FROM `{table_name}` WHERE modified_time >= '{since}' LIMIT {page_size} OFFSET {offset}"
+        sql = f"""SELECT `_pk`, `title`, `content`, `deleted`, `modified_time` FROM `{table_name}`
+                WHERE modified_time >= '{since}' LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results
@@ -17,7 +18,7 @@ class KnowledgeBaseSeaDBAPI:
     def get_need_ai_knowledge_bases_by_page(self, page_size):
         table_name = KnowledgeBaseTable.gen_table_name()
         sql = f"""
-            SELECT * FROM `{table_name}`
+            SELECT `_pk`, `title`, `content` FROM `{table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < modified_time) 
             AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}

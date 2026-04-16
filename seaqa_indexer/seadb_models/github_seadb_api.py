@@ -248,7 +248,7 @@ class GitHubSeaDBAPI:
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
         issues_table_name = GithubIssuesTable.gen_table_name(connection_id)
-        sql = f"""SELECT * FROM `{issues_table_name}` 
+        sql = f"""SELECT `_pk`, `issue_id`, `deleted`, `outdated`, `content`, `title`, `modified_time` FROM `{issues_table_name}` 
                 WHERE record_modified_time >= '{last_indexed_at}' 
                 LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)

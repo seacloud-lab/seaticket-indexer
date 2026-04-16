@@ -45,7 +45,7 @@ class DiscourseSeaDBAPI:
 
     def get_topics_by_page(self, connection_id, since, page_size, offset):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"""SELECT * FROM `{table_name}` 
+        sql = f"""SELECT `_pk`, `topic_id`, `deleted`, `outdated`, `title`, `modified_time` FROM `{table_name}` 
                 WHERE record_modified_time >= '{since}' 
                 LIMIT {page_size} OFFSET {offset}"""
         response = self.seadb_api.query_rows(self.base_id, sql)
@@ -54,7 +54,9 @@ class DiscourseSeaDBAPI:
 
     def get_topic_by_topic_id(self, connection_id, topic_id):
         table_name = DiscourseTopicsTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id}"
+        sql = f"""SELECT `_pk`, `topic_id`, `title`, `slug`, `views`, `category_id`, `modified_time`, `resolved`,
+                `deleted`, `outdated`, `record_modified_time`, `sync_time`, `created_time`, `ai_processed_time`
+                FROM `{table_name}` WHERE `topic_id` = {topic_id}"""
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
