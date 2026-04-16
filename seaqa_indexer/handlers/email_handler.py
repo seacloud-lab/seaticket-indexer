@@ -64,7 +64,7 @@ class EmailHandler(ConnectionHandler):
                 pk = row.get('_pk')
                 title = row.get('title', '')
                 result = email_seadb_api.get_first_email(connection_id, pk)
-                content = result.get('content', '')
+                content = result.get('content') or ''
 
                 full_content = f"Title: {title}\n\nBody: {content}\n"
                 summary, vector = generate_summary(full_content, ConnectionType.EMAIL.value, project_uuid)
