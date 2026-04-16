@@ -58,7 +58,7 @@ def add_connection_sync_task():
 
     if connection_type == ConnectionType.SITE.value:
         application.app.web_crawl_manager.add_crawl_site_task(connection_id)
-    elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
+    elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.GITHUB_PR.value, ConnectionType.DISCOURSE_FORUM.value,
                        ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value, ConnectionType.NOTION.value):
         application.app.sync_manager.check_and_sync(connection_id)
     else:
@@ -145,7 +145,7 @@ def manual_sync_connection():
     try:
         if connection_type == ConnectionType.SITE.value:
             application.app.web_crawl_manager.add_crawl_site_task(connection_id)
-        elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
+        elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.GITHUB_PR.value, ConnectionType.DISCOURSE_FORUM.value,
                                  ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value, ConnectionType.NOTION.value):
             application.app.sync_manager.check_and_sync(connection_id)
         else:
@@ -177,6 +177,11 @@ def github_webhook():
 
     issue_id = ''
     if event == 'issues':
+        try:
+            issue_id = update_data['id']
+        except KeyError as e:
+            return jsonify({'error_msg': 'Missing expected field in webhook payload'}), 400
+    elif event == 'pull_request':
         try:
             issue_id = update_data['id']
         except KeyError as e:

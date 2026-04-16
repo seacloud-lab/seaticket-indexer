@@ -285,7 +285,7 @@ class WebCrawlTable(BaseModel):
         return ConnectionType.SITE.value + '_' + str(connection_id)
 
 
-class GithubIssuesTable(BaseModel):
+class GitHubIssuesTable(BaseModel):
     issue_id = MappedColumn('issue_id', PropertyTypes.INT)
     issue_number = MappedColumn('issue_number', PropertyTypes.INT)
     title = MappedColumn('title', PropertyTypes.TEXT)
@@ -315,7 +315,7 @@ class GithubIssuesTable(BaseModel):
         return ConnectionType.GITHUB_ISSUE.value + '_' + str(connection_id)
 
 
-class GithubIssueCommentsTable(BaseModel):
+class GitHubIssueCommentsTable(BaseModel):
     comment_id = MappedColumn('comment_id', PropertyTypes.INT)
     issue_id = MappedColumn('issue_id', PropertyTypes.INT)
     author = MappedColumn('author', PropertyTypes.TEXT)
@@ -464,3 +464,44 @@ class NotionTable(BaseModel):
     @classmethod
     def gen_table_name(cls, connection_id):
         return ConnectionType.NOTION.value + '_' + str(connection_id)
+
+
+class GitHubPullRequestsTable(BaseModel):
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    pr_id = MappedColumn('pr_id', PropertyTypes.INT)
+    pr_number = MappedColumn('pr_number', PropertyTypes.INT)
+    state = MappedColumn('state', PropertyTypes.SINGLE_SELECT)
+    merged = MappedColumn('merged', PropertyTypes.BOOL)
+    labels = MappedColumn('labels', PropertyTypes.MULTIPLE_SELECT)
+    author = MappedColumn('author', PropertyTypes.TEXT)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    closed_time = MappedColumn('closed_time', PropertyTypes.DATETIME)
+    merged_time = MappedColumn('merged_time', PropertyTypes.DATETIME)
+    html_url = MappedColumn('html_url', PropertyTypes.TEXT)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    outdated = MappedColumn('outdated', PropertyTypes.BOOL)
+    record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
+    sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
+    ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
+    ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
+    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
+    linked_ticket = MappedColumn('linked_ticket', PropertyTypes.INT)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.GITHUB_PR.value + '_' + str(connection_id)
+
+
+class GitHubPullRequestCommentsTabel(BaseModel):
+    comment_id = MappedColumn('comment_id', PropertyTypes.INT)
+    pr_id = MappedColumn('pr_id', PropertyTypes.INT)
+    author = MappedColumn('author', PropertyTypes.TEXT)
+    content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.GITHUB_PR.value + '_comments' + '_' + str(connection_id)

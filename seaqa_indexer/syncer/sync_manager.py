@@ -23,6 +23,7 @@ class ForumInActiveException(Exception):
 
 NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.GITHUB_ISSUE.value,
+    ConnectionType.GITHUB_PR.value,
     ConnectionType.DISCOURSE_FORUM.value,
     ConnectionType.SEAFILE.value,
     ConnectionType.EMAIL.value,
@@ -105,7 +106,7 @@ class SyncManager(Thread):
             logger.warning(f"Unknown event type: {event_type}")
 
     def update_github_issues_by_webhook(self, installation_id, update_data, issue_id, action, event, repository_html_url):
-        if event not in ('issues', 'issue_comment', 'installation'):
+        if event not in ('issues', 'pull_request', 'issue_comment', 'installation'):
             return
 
         if event == 'installation' and action != 'deleted':
@@ -114,10 +115,15 @@ class SyncManager(Thread):
         for connection in project_connections:
             project_uuid = connection.project_uuid
             connection_id = connection.id
+            connection_type = connection.type
             if not connection.is_active:
                 continue
             connection_config = json.loads(connection.config)
             if connection_config.get('repository').strip('/') != repository_html_url:
+                continue
+            if event in ("issues", "issue_comment") and connection_type != ConnectionType.GITHUB_ISSUE.value and connection_type != ConnectionType.GITHUB_PR.value:
+                continue
+            if event == "pull_request" and connection_type != ConnectionType.GITHUB_PR.value:
                 continue
             github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
@@ -127,6 +133,9 @@ class SyncManager(Thread):
                 if action == 'deleted':
                     github_seadb_api.update_issue_record(connection_id, issue_id, modified_time, deleted=True)
                     continue
+
+            elif event == "pull_request":
+                logger.info(f"Received webhook for pull_request #{issue_id}, action: {action}, event: {event}")
 
             elif event == "issue_comment":
                 logger.info(f"Received webhook for issue_comment #{issue_id}, action: {action}, event: {event}")

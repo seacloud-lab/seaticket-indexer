@@ -25,6 +25,7 @@ class AIStatus:
 class ConnectionType(Enum):
     EMAIL = 'email'
     GITHUB_ISSUE = 'github_issue'
+    GITHUB_PR = 'github_pr'
     DISCOURSE_FORUM = 'discourse_forum'
     SITE = 'site'
     SEAFILE = 'seafile'

@@ -1,5 +1,3 @@
-import logging
-
 import requests
 import time
 import jwt
@@ -86,6 +84,19 @@ class GitHubAPI:
         response.raise_for_status()
         return response.json()
 
+    def list_pull_requests(self, repo_owner, repo_name, since, state='all', per_page=30, page=1):
+        url = f'{self.base_url}/repos/{repo_owner}/{repo_name}/pulls'
+        params = {
+            'state': state,
+            'per_page': per_page,
+            'page': page,
+            'sort': 'updated',
+            'direction': 'asc'
+        }
+        if since:
+            params['since'] = since
+        return self._request(url, params=params)
+
     def get_issue_comments(self, repo_owner, repo_name, issue_number, per_page=100, page=1):
 
         url = f'{self.base_url}/repos/{repo_owner}/{repo_name}/issues/{issue_number}/comments'
@@ -97,9 +108,18 @@ class GitHubAPI:
         response.raise_for_status()
         return response.json()
 
+    def get_pull_request_comments(self, repo_owner, repo_name, pull_number, per_page=100, page=1):
+        # PR conversation comments are fetched from the issues comments endpoint.
+        return self.get_issue_comments(repo_owner, repo_name, pull_number, per_page=per_page, page=page)
+
+
     def get_all_issue_labels(self, repo_owner, repo_name, per_page=100, page=1):
         url = f'{self.base_url}/repos/{repo_owner}/{repo_name}/labels'
-        response = requests.get(url, headers=self.headers, timeout=self.timeout)
+        params = {
+            'per_page': per_page,
+            'page': page,
+        }
+        response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
         response.raise_for_status()
         return response.json()
 
@@ -147,3 +167,17 @@ class GitHubAPI:
 
         return issue_types
 
+    def list_all_issues_labels(self, repo_owner, repo_name, per_page=100):
+        labels = []
+        page = 1
+        while True:
+            current_page_labels = self.get_issue_labels(
+                repo_owner, repo_name, per_page=per_page, page=page
+            )
+            if not current_page_labels:
+                break
+            labels.extend(current_page_labels)
+            if len(current_page_labels) < per_page:
+                break
+            page += 1
+        return labels
