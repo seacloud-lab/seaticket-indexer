@@ -68,7 +68,6 @@ class DataEventType(Enum):
     DISCOURSE_TOPIC_UPDATED = 'discourse_topic_updated'
     DISCOURSE_TOPIC_REPLY_ADDED = 'discourse_topic_reply_added'
     EMAIL_THREAD_ADDED = 'email_thread_added'
-    EMAIL_THREAD_UPDATED = 'email_thread_updated'
     EMAIL_MESSAGE_ADDED = 'email_message_added'
 
     @classmethod

@@ -290,11 +290,10 @@ class EmailHandler(ConnectionHandler):
                 continue
 
             old_thread = old_thread_rows_by_id.get(thread_id)
-            state_event_type = (
-                DataEventType.EMAIL_THREAD_UPDATED.value
-                if old_thread is not None
-                else DataEventType.EMAIL_THREAD_ADDED.value
-            )
+            if old_thread is None:
+                state_event_type = DataEventType.EMAIL_THREAD_ADDED.value
+            else:
+                state_event_type = DataEventType.EMAIL_MESSAGE_ADDED.value
 
             self.publish_synced_record_events(
                 get_latest_row=lambda tid=thread_id: email_seadb_api.get_thread_by_pk(connection_id, tid),
@@ -303,14 +302,6 @@ class EmailHandler(ConnectionHandler):
                 item_id=thread_id,
                 old_row=old_thread,
                 state_event_type=state_event_type,
-                additional_items=[{
-                    'message_id': message_id,
-                    'email_from': email.get('email_from'),
-                    'modified_time': email.get('email_date'),
-                }] if old_thread is not None else None,
-                additional_event_type=DataEventType.EMAIL_MESSAGE_ADDED.value,
-                additional_items_field='emails',
-                state_event_ignored_fields=('modified_time', 'record_modified_time', 'sync_time'),
                 log_object_name='email thread',
             )
             published_thread_ids.add(thread_id)

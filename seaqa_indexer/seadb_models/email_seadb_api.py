@@ -165,7 +165,7 @@ class EmailSeaDBAPI:
 
     def get_thread_by_pk(self, connection_id, thread_id):
         table_name = ThreadTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE `_pk` = {thread_id} LIMIT 1"
+        sql = f"SELECT _pk, title, modified_time, unread, linked_ticket, deleted, tags FROM `{table_name}` WHERE `_pk` = {thread_id} LIMIT 1"
         res = self.seadb_api.query_rows(self.base_id, sql)
         result = res.get('results', [])
         return result[0] if result else {}
