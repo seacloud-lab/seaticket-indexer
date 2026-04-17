@@ -36,9 +36,12 @@ class JiraSeaDBAPI:
         column_key = column.get('key')
         existing_options = (column.get('data') or {}).get('options') or []
         existing_map = {opt.get('name'): opt for opt in existing_options if opt.get('name')}
+        existing_names = set(existing_map.keys())
+        new_names = set()
 
         for option in options:
             name = option.get('name')
+            new_names.add(name)
             if not name:
                 continue
             color = option.get('color')
@@ -75,6 +78,15 @@ class JiraSeaDBAPI:
                     'update_option_data': update_data,
                 }
                 self.seadb_api.update_column_option(self.base_id, payload)
+        need_deleted_names = existing_names - new_names
+        if need_deleted_names:
+            need_deleted = {
+                table_id: [{
+                    column_key: list(need_deleted_names)
+                }]
+            }
+            return need_deleted
+        return {}
 
     def add_or_update_jira_priority_options(self, table_metadata, priorities):
         options = []
@@ -84,9 +96,10 @@ class JiraSeaDBAPI:
                 continue
             options.append({
                 'name': name,
-                'color': priority.get('statusColor')
+                'color': '#FFFFFF',
+                'text_color': '#000000'
             })
-        self._upsert_select_column_options(table_metadata, JiraIssuesTable.priority.name, options)
+        return self._upsert_select_column_options(table_metadata, JiraIssuesTable.priority.name, options)
 
     def add_or_update_jira_status_options(self, table_metadata, statuses):
         category_colors = {
@@ -106,7 +119,7 @@ class JiraSeaDBAPI:
                 option['color'] = color
                 option['text_color'] = '#FFFFFF'
             options.append(option)
-        self._upsert_select_column_options(table_metadata, JiraIssuesTable.status.name, options)
+        return self._upsert_select_column_options(table_metadata, JiraIssuesTable.status.name, options)
 
     def add_or_update_jira_issue_type_options(self, table_metadata, issue_types):
         options = []
@@ -119,7 +132,7 @@ class JiraSeaDBAPI:
                 'color': '#FFFFFF',
                 'text_color': '#000000'
             })
-        self._upsert_select_column_options(table_metadata, JiraIssuesTable.issue_type.name, options)
+        return self._upsert_select_column_options(table_metadata, JiraIssuesTable.issue_type.name, options)
 
     def add_or_update_jira_assignee_options(self, table_metadata, issues):
         names = set()
@@ -137,7 +150,7 @@ class JiraSeaDBAPI:
             }
             for name in sorted(names)
         ]
-        self._upsert_select_column_options(table_metadata, JiraIssuesTable.assignees.name, options)
+        return self._upsert_select_column_options(table_metadata, JiraIssuesTable.assignees.name, options)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = JiraIssuesTable.gen_table_name(connection_id)

@@ -24,17 +24,42 @@ class JiraAPI:
             raise JiraAPIException(f'Jira API error {response.status_code}: {response.text}')
         return response.json()
 
-    def get_priorities(self):
-        url = f'{self.base_url}/rest/api/2/priority'
-        return self._request(url) or []
+    def get_createmeta(self, space_key):
+        url = f'{self.base_url}/rest/api/3/issue/createmeta'
+        params = {
+            'projectKeys': space_key,
+            'expand': 'projects.issuetypes.fields',
+        }
+        metadata = self._request(url, params=params) or {}
+        projects = metadata.get('projects', [])
+        if not projects:
+            return [], []
+        project = projects[0]
+        issue_types = project.get('issuetypes', [])
+        priorities = []
+        seen_priority_ids = set()
+        for issue_type in issue_types:
+            fields = issue_type.get('fields', {})
+            priority_field = fields.get('priority', {})
+            for av in priority_field.get('allowedValues', []):
+                p_id = av.get('id')
+                if p_id and p_id not in seen_priority_ids:
+                    priorities.append(av)
+                    seen_priority_ids.add(p_id)
+        return priorities, issue_types
 
-    def get_statuses(self):
-        url = f'{self.base_url}/rest/api/2/status'
-        return self._request(url) or []
-
-    def get_issue_types(self):
-        url = f'{self.base_url}/rest/api/2/issuetype'
-        return self._request(url) or []
+    def get_statuses(self, space_key):
+        url = f'{self.base_url}/rest/api/2/project/{space_key}/statuses/'
+        metadata = self._request(url) or []
+        seen_ids = set()
+        unique_statuses = []
+        for entry in metadata:
+            for status in entry.get('statuses', []):
+                s_id = status['id']
+                if s_id not in seen_ids:
+                    unique_statuses.append(status)
+                    seen_ids.add(s_id)
+        return unique_statuses
 
     def search_issues(self, space_key, old_last_sync_time, start_at=0, max_results=50):
         if old_last_sync_time:
