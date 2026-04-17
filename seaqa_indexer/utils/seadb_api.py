@@ -16,6 +16,12 @@ def parse_response(response):
             pass
 
 
+class OptionValueInvalidException(Exception):
+    def __init__(self, message="option value invalid"):
+        self.message = message
+        super().__init__(self.message)
+
+
 class SeaDBAPI:
     def __init__(self, timeout=30):
         self.timeout = timeout
@@ -96,6 +102,8 @@ class SeaDBAPI:
                 'rows': rows
             }
         response = requests.post(url, json=data, headers=headers, timeout=self.timeout)
+        if response.status_code == 400 and 'row[0]: column' in response.text:
+            raise OptionValueInvalidException(response.text)
         return parse_response(response)
 
     def update_rows(self, base_id, table_name, rows):
@@ -107,6 +115,8 @@ class SeaDBAPI:
                 'updates': rows
             }
         response = requests.put(url, json=data, headers=headers, timeout=self.timeout)
+        if response.status_code == 400 and 'row[0]: column' in response.text:
+            raise OptionValueInvalidException(response.text)
         return parse_response(response)
 
     def delete_rows(self, base_id, table_name, row_ids):
@@ -192,15 +202,19 @@ class SeaDBAPI:
         response = requests.post(url, json=option_data, headers=headers, timeout=self.timeout)
         return parse_response(response)
 
-    def update_column_option(self, base_id, table_id, column_key, option_id, new_option_name=None, update_option_data=None):
+    def update_column_option(self, base_id, table_id, column_key, option_id=None, option_name=None, new_option_name=None, update_option_data=None):
         base_id = uuid_str_to_36_chars(base_id)
         headers = self.gen_headers(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/column-options'
         data = {
             'table_id': table_id,
             'column_key': column_key,
-            'option_id': option_id,
         }
+
+        if option_id:
+            data['option_id'] = option_id
+        if option_name:
+            data['option_name'] = option_name
         if new_option_name:
             data['new_option_name'] = new_option_name
         if update_option_data:
