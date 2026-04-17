@@ -3,6 +3,8 @@ import datetime
 import logging
 from urllib.parse import urlparse
 
+from sqlalchemy import table
+
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import GitHubPullRequestsTable, GitHubPullRequestCommentsTabel
 from seaqa_indexer.utils.constants import ConnectionType
@@ -199,8 +201,10 @@ class GithubPullRequestHandler(ConnectionHandler):
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
 
-        labels = github_api.list_all_issues_labels(repo_owner, repo_name, per_page=per_page)
-        github_seadb_api.add_or_update_pull_request_label_column_options(connection_id, labels)
+        table_name = GitHubPullRequestsTable.gen_table_name(connection_id)
+        table_metadata = github_seadb_api.get_table_metadata(table_name)
+        pr_labels = github_api.get_all_issue_labels(repo_owner, repo_name, per_page=per_page)
+        github_seadb_api.add_or_update_issue_label_column_options(pr_labels, table_metadata)
 
         while True:
             prs = github_api.list_pull_requests(repo_owner, repo_name, since=since, state='all',

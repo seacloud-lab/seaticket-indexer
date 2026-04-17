@@ -212,9 +212,10 @@ class GithubIssueHandler(ConnectionHandler):
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
 
-        table_metadata = github_seadb_api.get_table_metadata(connection_id)
+        table_name = GitHubIssuesTable.gen_table_name(connection_id)
+        table_metadata = github_seadb_api.get_table_metadata(table_name)
         # sync issue label
-        issue_labels = github_api.list_all_issues_labels(repo_owner, repo_name, per_page=per_page)
+        issue_labels = github_api.get_all_issue_labels(repo_owner, repo_name, per_page=per_page)
         github_seadb_api.add_or_update_issue_label_column_options(issue_labels, table_metadata)
 
         # sync issue type

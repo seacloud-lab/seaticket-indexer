@@ -193,8 +193,7 @@ class GitHubSeaDBAPI:
 
         return added_comments
 
-    def get_table_metadata(self, connection_id):
-        table_name = GitHubIssuesTable.gen_table_name(connection_id)
+    def get_table_metadata(self, table_name):
         metadata = self.seadb_api.get_base_metadata(self.base_id)
         for table in metadata.get('tables', []):
             if table['name'] == table_name:
@@ -206,7 +205,7 @@ class GitHubSeaDBAPI:
         columns = table_info.get("columns", [])
         label_column = {}
         for column in columns:
-            if column.get('name') == label_column_name:
+            if column.get('name') == GitHubIssuesTable.labels.name:
                 label_column = column
                 break
 
@@ -308,10 +307,6 @@ class GitHubSeaDBAPI:
         if need_deleted_issue_type_ids:
             need_deleted_option_ids = [old_issue_type_id_to_option[issue_type_id].get('id') for issue_type_id in need_deleted_issue_type_ids]
             self.seadb_api.delete_column_option(self.base_id, table_id, column_key, option_ids=need_deleted_option_ids)
-
-    def add_or_update_pull_request_label_column_options(self, connection_id, pull_request_labels):
-        table_name = GitHubPullRequestsTable.gen_table_name(connection_id)
-        self._add_or_update_label_column_options(table_name, GitHubPullRequestsTable.labels.name, pull_request_labels)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = GitHubIssuesTable.gen_table_name(connection_id)

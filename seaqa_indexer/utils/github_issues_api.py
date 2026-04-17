@@ -95,7 +95,9 @@ class GitHubAPI:
         }
         if since:
             params['since'] = since
-        return self._request(url, params=params)
+        response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+        response.raise_for_status()
+        return response.json()
 
     def get_issue_comments(self, repo_owner, repo_name, issue_number, per_page=100, page=1):
 
@@ -114,14 +116,25 @@ class GitHubAPI:
 
 
     def get_all_issue_labels(self, repo_owner, repo_name, per_page=100, page=1):
+        labels = []
         url = f'{self.base_url}/repos/{repo_owner}/{repo_name}/labels'
-        params = {
-            'per_page': per_page,
-            'page': page,
-        }
-        response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
-        response.raise_for_status()
-        return response.json()
+        while True:
+            params = {
+                'per_page': per_page,
+                'page': page,
+            }
+            response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            current_page_labels = response.json()
+            if not current_page_labels:
+                break
+
+            labels.extend(current_page_labels)
+            if len(current_page_labels) < per_page:
+                break
+            page += 1
+
+        return labels
 
     def get_all_issue_types(self, repo_owner, repo_name):
         access_token = self.get_installation_access_token(self.installation_id)
@@ -166,18 +179,3 @@ class GitHubAPI:
         issue_types = result["data"]["repository"]["issueTypes"]["nodes"]
 
         return issue_types
-
-    def list_all_issues_labels(self, repo_owner, repo_name, per_page=100):
-        labels = []
-        page = 1
-        while True:
-            current_page_labels = self.get_issue_labels(
-                repo_owner, repo_name, per_page=per_page, page=page
-            )
-            if not current_page_labels:
-                break
-            labels.extend(current_page_labels)
-            if len(current_page_labels) < per_page:
-                break
-            page += 1
-        return labels
