@@ -199,41 +199,103 @@ class GitHubSeaDBAPI:
     def add_or_update_issue_label_column_options(self, issue_labels, table_info):
         table_id = table_info.get('id')
         columns = table_info.get("columns", [])
-        label_column = {}
+        issue_label_column = {}
         for column in columns:
             if column.get('name') == GithubIssuesTable.labels.name:
-                label_column = column
+                issue_label_column = column
                 break
 
+        old_issue_label_id_to_option = {}
         old_label_names = set()
-        label_name_to_option_id = {}
-        if label_column.get('data'):
-            for option in label_column.get('data')['options']:
-                old_label_names.add(option['name'])
-                label_name_to_option_id[option['name']] = option['id']
+        if issue_label_column.get('data'):
+            issue_options = issue_label_column.get('data')['options'] or []
+            for option in issue_options:
+                label_id = option.get('label_id')
+                label_name = option.get('name')
+                old_label_names.add(label_name)
+                old_issue_label_id_to_option[label_id] = option
 
-        label_column_key = label_column.get('key')
-        new_label_names = set()
+        column_key = issue_label_column.get('key')
+        new_issue_label_ids = set()
+        need_added_options = []
+        need_updated_options = []
         for issue_label in issue_labels:
-            label_name = issue_label.get('name')
-            new_label_names.add(label_name)
-            if label_name not in old_label_names:
-                column_key = label_column_key
+            new_issue_label_name = issue_label.get('name')
+            new_issue_label_id = issue_label.get('id')
+            issue_label_color = '#' + issue_label.get('color')
+
+            new_issue_label_ids.add(new_issue_label_id)
+            old_option = old_issue_label_id_to_option.get(new_issue_label_id)
+            if not old_option:
                 column_option = {
                     'table_id': table_id,
                     'column_key': column_key,
-                    'option_name': label_name,
+                    'option_name': new_issue_label_name,
                     'option_data': {
-                        'color': '#' + f"{issue_label.get('color')}",
+                        'color': issue_label_color,
+                        'label_id': new_issue_label_id,
                     },
                 }
-                self.seadb_api.add_column_option(self.base_id, column_option)
-        need_deleted_labels = old_label_names - new_label_names
-        if need_deleted_labels:
-            need_deleted_option_ids = [label_name_to_option_id[label_name] for label_name in need_deleted_labels]
-            self.seadb_api.delete_column_option(self.base_id, table_id, label_column_key, option_ids=need_deleted_option_ids)
+                need_added_options.append(column_option)
+            else:
+                old_issue_label_name = old_option.get('name')
+                old_issue_label_color = old_option.get('color')
+                option_id = old_option.get('id')
+                if new_issue_label_name != old_issue_label_name or issue_label_color != old_issue_label_color:
+                    update_option_data = {
+                        'color': issue_label_color,
+                        'label_id': new_issue_label_id,
+                    }
+                    if new_issue_label_name == old_issue_label_name:
+                        new_issue_label_name = None
+                    if issue_label_color == old_issue_label_color:
+                        update_option_data = None
 
-    def add_or_update_issue_type_column_options(self, issues_types, table_info):
+                    need_updated_options.append((option_id, new_issue_label_name, update_option_data, old_issue_label_name))
+
+        # delete deleted option first
+        need_deleted_issue_label_ids = set(old_issue_label_id_to_option.keys()) - new_issue_label_ids
+        if need_deleted_issue_label_ids:
+            need_deleted_option_ids = [old_issue_label_id_to_option[issue_label_id].get('id') for issue_label_id in need_deleted_issue_label_ids]
+            need_deleted_option_names = {old_issue_label_id_to_option[issue_label_id].get('name') for issue_label_id in need_deleted_issue_label_ids}
+            old_label_names = old_label_names - set(need_deleted_option_names)
+            self.seadb_api.delete_column_option(self.base_id, table_id, column_key, option_ids=need_deleted_option_ids)
+
+        # update option
+        conflict_label_updated_options = []
+        for updated_option in need_updated_options:
+            option_id, new_issue_label_name, update_option_data, old_issue_label_name = updated_option
+            if new_issue_label_name in old_label_names:
+                conflict_label_updated_options.append(updated_option)
+                continue
+            self.seadb_api.update_column_option(self.base_id, table_id, column_key, option_id,
+                                                new_option_name=new_issue_label_name, update_option_data=update_option_data)
+
+        # An example of conflict_type_updated_options is as follows: 
+        # [('9Glw', 'test1112', None, 'test666'), ('oh77', 'test666', None, 'test888'), 
+        # ('76I0', 'test888', None, 'test999'), ('7Gs0', 'test999', None, 'test1112')]
+        already_update_option_names = set()
+        temp_prefix = 'tmp'
+        for updated_option in conflict_label_updated_options:
+            option_id, new_issue_label_name, update_option_data, old_issue_label_name = updated_option
+            if new_issue_label_name not in already_update_option_names \
+                    and old_issue_label_name not in already_update_option_names:
+                temp_name = f"{temp_prefix}{option_id}"
+                self.seadb_api.update_column_option(self.base_id, table_id, column_key, option_name=new_issue_label_name,
+                                                    new_option_name=temp_name, update_option_data=update_option_data)
+                already_update_option_names.add(new_issue_label_name)
+
+            self.seadb_api.update_column_option(self.base_id, table_id, column_key, option_id=option_id,
+                                                new_option_name=new_issue_label_name, update_option_data=update_option_data)
+
+            # can't revert the changes that have already been corrected.
+            already_update_option_names.add(old_issue_label_name)
+
+        # add added options
+        for added_option in need_added_options:
+            self.seadb_api.add_column_option(self.base_id, added_option)
+
+    def add_or_update_issue_type_column_options(self, issue_types, table_info):
         color_name_to_color = {
             'gray': '#5A5F66',
             'blue': '#E0F0FF',
@@ -253,15 +315,20 @@ class GitHubSeaDBAPI:
                 break
 
         old_issue_type_id_to_option = {}
+        old_type_names = set()
         if issue_type_column.get('data'):
             issue_options = issue_type_column.get('data')['options'] or []
             for option in issue_options:
                 type_id = option.get('type_id')
+                type_name = option.get('name')
+                old_type_names.add(type_name)
                 old_issue_type_id_to_option[type_id] = option
 
         column_key = issue_type_column.get('key')
         new_issue_type_ids = set()
-        for issue_type in issues_types:
+        need_added_options = []
+        need_updated_options = []
+        for issue_type in issue_types:
             issue_type_name = issue_type.get('name')
             issue_type_id = issue_type.get('id')
             issue_type_color = issue_type.get('color').lower()
@@ -278,7 +345,7 @@ class GitHubSeaDBAPI:
                         'type_id': issue_type_id,
                     },
                 }
-                self.seadb_api.add_column_option(self.base_id, column_option)
+                need_added_options.append(column_option)
             else:
                 old_issue_type_name = old_option.get('name')
                 old_issue_type_color = old_option.get('color')
@@ -293,13 +360,50 @@ class GitHubSeaDBAPI:
                     if issue_type_color == old_issue_type_color:
                         update_option_data = None
 
-                    self.seadb_api.update_column_option(self.base_id, table_id, column_key, option_id,
-                                                        new_option_name=issue_type_name, update_option_data=update_option_data)
+                    need_updated_options.append((option_id, issue_type_name, update_option_data, old_issue_type_name))
 
+        # delete deleted option first
         need_deleted_issue_type_ids = set(old_issue_type_id_to_option.keys()) - new_issue_type_ids
         if need_deleted_issue_type_ids:
             need_deleted_option_ids = [old_issue_type_id_to_option[issue_type_id].get('id') for issue_type_id in need_deleted_issue_type_ids]
+            need_deleted_option_names = {old_issue_type_id_to_option[issue_type_id].get('name') for issue_type_id in need_deleted_issue_type_ids}
+            old_type_names = old_type_names - set(need_deleted_option_names)
             self.seadb_api.delete_column_option(self.base_id, table_id, column_key, option_ids=need_deleted_option_ids)
+
+        # update option
+        conflict_type_updated_options = []
+        for updated_option in need_updated_options:
+            option_id, new_issue_type_name, update_option_data, old_issue_type_name = updated_option
+            if new_issue_type_name in old_type_names:
+                conflict_type_updated_options.append(updated_option)
+                continue
+            self.seadb_api.update_column_option(self.base_id, table_id, column_key, option_id, new_option_name=new_issue_type_name, update_option_data=update_option_data)
+
+        # Update conflicting options
+        already_update_option_names = set()
+        # An example of conflict_type_updated_options is as follows: 
+        # [('9Glw', 'test1112', None, 'test666'), ('oh77', 'test666', None, 'test888'), 
+        # ('76I0', 'test888', None, 'test999'), ('7Gs0', 'test999', None, 'test1112')]
+        temp_prefix = 'tmp'
+        for updated_option in conflict_type_updated_options:
+            option_id, new_issue_type_name, update_option_data, old_issue_type_name = updated_option
+            if new_issue_type_name not in already_update_option_names \
+                    and old_issue_type_name not in already_update_option_names:
+                temp_name = f"{temp_prefix}{option_id}"
+                self.seadb_api.update_column_option(self.base_id, table_id, column_key, option_name=new_issue_type_name,
+                                                    new_option_name=temp_name, update_option_data=update_option_data)
+
+                already_update_option_names.add(new_issue_type_name)
+
+            self.seadb_api.update_column_option(self.base_id, table_id, column_key, option_id=option_id,
+                                                new_option_name=new_issue_type_name, update_option_data=update_option_data)
+
+            # can't revert the changes that have already been corrected.
+            already_update_option_names.add(old_issue_type_name)
+
+        # add added options
+        for added_option in need_added_options:
+            self.seadb_api.add_column_option(self.base_id, added_option)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)

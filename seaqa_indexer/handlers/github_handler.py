@@ -15,6 +15,7 @@ from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_
 from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesIndex
 from seaqa_indexer.ai_processor.utils import generate_summary
 from seaqa_indexer.utils.constants import DataEventType
+from seaqa_indexer.utils.seadb_api import OptionValueInvalidException
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,10 @@ class GithubIssueHandler(ConnectionHandler):
             sync_logger.log(f"Github repository is invalid")
             return None, None, None, None
 
+        is_first_sync = False
+        if not old_last_sync_time:
+            is_first_sync = True
+
         since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
         try:
             github_api = GitHubAPI(installation_id)
@@ -145,7 +150,7 @@ class GithubIssueHandler(ConnectionHandler):
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
         sync_count, total_count = self._sync_github_issue(connection_id, since, connection_status,
-                                github_api, seaqa_db, github_seadb_api, repo_owner, repo_name)
+                                github_api, seaqa_db, github_seadb_api, repo_owner, repo_name, is_first_sync)
         return sync_count, total_count, False, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
@@ -203,7 +208,17 @@ class GithubIssueHandler(ConnectionHandler):
             return DataEventType.GITHUB_ISSUE_REOPENED.value
         return DataEventType.GITHUB_ISSUE_UPDATED.value
 
-    def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api, repo_owner, repo_name):
+    def sync_github_options(self, connection_id, github_seadb_api, github_api, repo_owner, repo_name):
+        table_metadata = github_seadb_api.get_table_metadata(connection_id)
+        # sync issue label
+        issue_labels = github_api.get_all_issue_labels(repo_owner, repo_name)
+        github_seadb_api.add_or_update_issue_label_column_options(issue_labels, table_metadata)
+
+        # sync issue type
+        issue_types = github_api.get_all_issue_types(repo_owner, repo_name)
+        github_seadb_api.add_or_update_issue_type_column_options(issue_types, table_metadata)
+
+    def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api, repo_owner, repo_name, is_first_sync):
         page = 1
         per_page = 100  # max 100
         sync_count = 0
@@ -212,14 +227,8 @@ class GithubIssueHandler(ConnectionHandler):
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
 
-        table_metadata = github_seadb_api.get_table_metadata(connection_id)
-        # sync issue label
-        issue_labels = github_api.get_all_issue_labels(repo_owner, repo_name, page, per_page)
-        github_seadb_api.add_or_update_issue_label_column_options(issue_labels, table_metadata)
-
-        # sync issue type
-        issue_types = github_api.get_all_issue_types(repo_owner, repo_name)
-        github_seadb_api.add_or_update_issue_type_column_options(issue_types, table_metadata)
+        if is_first_sync:
+            self.sync_github_options(connection_id, github_seadb_api, github_api, repo_owner, repo_name)
 
         while True:
             issues = github_api.list_issues(repo_owner, repo_name, since=since, state='all', per_page=per_page, page=page)
@@ -245,7 +254,13 @@ class GithubIssueHandler(ConnectionHandler):
                     updated_count += 1
                 else:
                     added_count += 1
-                github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+                try:
+                    github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+                except OptionValueInvalidException as e:
+                    logger.warning('The option name may not exist; resynchronize it. exception info is: %s', e)
+                    self.sync_github_options(connection_id, github_seadb_api, github_api, repo_owner, repo_name)
+                    github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count
                 )

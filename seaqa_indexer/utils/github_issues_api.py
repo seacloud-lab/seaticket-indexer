@@ -51,7 +51,7 @@ class GitHubAPI:
         try:
             response = requests.post(url, headers=headers)
         except requests.exceptions.RequestException as e:
-            raise GitHubAPIException(f'Failed to obtain installation token: {response.status_code}: {response.text}')
+            raise GitHubAPIException(f'Failed to obtain installation token, error: {e}')
         except Exception as e:
             raise GitHubAPIException(f'An exception occurred while obtaining the installation token.: {e}')
         if response.status_code == 404:
