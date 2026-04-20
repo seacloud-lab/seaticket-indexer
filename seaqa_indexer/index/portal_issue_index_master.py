@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 class PortalIssueIndexMaster(Thread):
     """
-    AI master for portal issue updates.
-    Listens on the portal_issue_update channel and adds tasks to ai_process_task.
+    Index master for portal issue updates.
+    Listens on the portal_issue_update channel and adds tasks to index_task and ai_process_task.
     """
 
     def __init__(self):
@@ -82,5 +82,6 @@ class PortalIssueIndexMaster(Thread):
             'project_uuid': project_uuid,
             'type': 'portal_issue',
         })
+        self.mq.lpush('index_task', msg_data)
         self.mq.lpush('ai_process_task', msg_data)
-        logger.info('%s has been add to ai_process_task queue', msg_data)
+        logger.info('%s has been add to task queue', msg_data)

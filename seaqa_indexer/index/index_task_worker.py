@@ -4,7 +4,8 @@ from seaqa_indexer.workers.base_task_worker import LockingTaskWorker, run_worker
 from seaqa_indexer.index.index_utils import (
     update_connection_index,
     update_knowledge_base_index,
-    update_ticket_index
+    update_ticket_index,
+    update_portal_issue_index,
 )
 from seaqa_indexer.db import init_db_session_class
 
@@ -35,6 +36,9 @@ class IndexTaskWorker(LockingTaskWorker):
         elif task_type == 'ticket':
             project_uuid = data.get('project_uuid')
             self.ticket_task_handler(project_uuid)
+        elif task_type == 'portal_issue':
+            project_uuid = data.get('project_uuid')
+            self.portal_issue_task_handler(project_uuid)
         else:
             connection_id = data.get('connection_id')
             self.connection_task_handler(connection_id)
@@ -58,6 +62,14 @@ class IndexTaskWorker(LockingTaskWorker):
         self.execute_with_lock(
             f'ticket_{project_uuid}',
             update_ticket_index,
+            project_uuid,
+            self.db_session_class
+        )
+
+    def portal_issue_task_handler(self, project_uuid):
+        self.execute_with_lock(
+            f'portal_issue_{project_uuid}',
+            update_portal_issue_index,
             project_uuid,
             self.db_session_class
         )

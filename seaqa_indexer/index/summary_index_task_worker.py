@@ -8,7 +8,8 @@ from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.index.index_utils import (
     update_tickets_summary_index,
     update_connection_summary_index,
-    update_knowledge_base_summary_index
+    update_knowledge_base_summary_index,
+    update_portal_issues_summary_index,
 )
 from seaqa_indexer.config import SEASEARCH_URL, SEASEARCH_TOKEN
 
@@ -39,6 +40,9 @@ class SummaryIndexTaskWorker(LockingTaskWorker):
         elif task_type == 'ticket':
             project_uuid = data.get('project_uuid')
             self.tickets_task_handler(project_uuid)
+        elif task_type == 'portal_issue':
+            project_uuid = data.get('project_uuid')
+            self.portal_issues_task_handler(project_uuid)
         elif task_type == 'connection':
             connection_id = data.get('connection_id')
             self.work_task_handler(connection_id)
@@ -65,11 +69,25 @@ class SummaryIndexTaskWorker(LockingTaskWorker):
             self.update_tickets_ai_index,
             project_uuid
         )
+
+    def portal_issues_task_handler(self, project_uuid):
+        self.execute_with_lock(
+            f'portal_issue_{project_uuid}',
+            self.update_portal_issues_ai_index,
+            project_uuid
+        )
+
     def update_tickets_ai_index(self, project_uuid):
         try:
             update_tickets_summary_index(project_uuid, self.db_session_class)
         except Exception as e:
             logger.exception('Summary index tickets: %s failed, error: %s', project_uuid, e)
+
+    def update_portal_issues_ai_index(self, project_uuid):
+        try:
+            update_portal_issues_summary_index(project_uuid, self.db_session_class)
+        except Exception as e:
+            logger.exception('Summary index portal issues: %s failed, error: %s', project_uuid, e)
 
     def update_ai_index(self, connection_id):
         try:

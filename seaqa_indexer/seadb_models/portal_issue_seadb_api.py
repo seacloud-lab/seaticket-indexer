@@ -17,3 +17,10 @@ class PortalIssueSeaDBAPI:
         """
         res = self.seadb_api.query_rows(self.base_id, sql)
         return res.get('results', [])
+
+    def get_portal_issues_by_page(self, since, page_size, offset):
+        table_name = PortalIssuesTable.gen_table_name()
+        sql = f"""SELECT `_pk`, `title`, `content`, `deleted`, `modified_time` FROM `{table_name}`
+                WHERE modified_time >= '{since}' LIMIT {page_size} OFFSET {offset}"""
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        return res.get('results', [])

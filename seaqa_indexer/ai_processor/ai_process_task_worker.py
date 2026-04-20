@@ -91,6 +91,12 @@ class AIProcessTaskWorker(LockingTaskWorker):
     def process_portal_issues_ai_summary(self, project_uuid):
         try:
             process_portal_issue_ai(self.seadb_api, project_uuid)
+
+            msg_content = {
+                'project_uuid': project_uuid,
+                'type': 'portal_issue',
+            }
+            self.mq.lpush('summary_index_task', json.dumps(msg_content))
         except Exception as e:
             logger.exception('AI process portal issues of project: %s failed, error: %s', project_uuid, e)
 
