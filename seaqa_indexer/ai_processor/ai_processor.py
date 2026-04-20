@@ -5,11 +5,13 @@ import json
 from seaqa_indexer.ai_processor.utils import generate_summary
 from seaqa_indexer.seadb_models.models import (
     KnowledgeBaseTable,
-    TicketsTable
+    TicketsTable,
+    PortalIssuesTable,
 )
 from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
 from seaqa_indexer.utils.constants import AIStatus
 from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
+from seaqa_indexer.seadb_models.portal_issue_seadb_api import PortalIssueSeaDBAPI
 from seaqa_indexer.handlers import get_handler
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,44 @@ def process_knowledge_base_ai(seadb_api, project_uuid):
             seadb_api.update_rows(project_uuid, table_name, updates)
 
     logger.info('Finish AI process knowledge base of project: %s', project_uuid)
+
+    return ai_processing_count
+
+
+def process_portal_issue_ai(seadb_api, project_uuid):
+    page_size = 100
+    updates = []
+    table_name = PortalIssuesTable.gen_table_name()
+    portal_issue_seadb_api = PortalIssueSeaDBAPI(project_uuid)
+
+    logger.info('Start AI process portal issues of project: %s', project_uuid)
+    ai_processing_count = 0
+    while True:
+        rows = portal_issue_seadb_api.get_need_ai_portal_issues_by_page(page_size)
+        if not rows:
+            break
+        for row in rows:
+            pk = row.get('_pk')
+            title = row.get('title', '')
+            content = row.get('content', '')
+            full_content = f"Title: {title}\n\nContent: {content}\n"
+            summary, vector = generate_summary(full_content, 'portal_issue', project_uuid)
+            updates.append({
+                "pk": pk,
+                "row": {
+                    "ai_summary": summary,
+                    "ai_summary_vector": vector,
+                    "ai_processed_time": datetime.datetime.now(datetime.UTC).isoformat()
+                }
+            })
+            ai_processing_count += 1
+            if len(updates) >= BATCH_SIZE:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+                updates = []
+        if updates:
+            seadb_api.update_rows(project_uuid, table_name, updates)
+
+    logger.info('Finish AI process portal issues of project: %s', project_uuid)
 
     return ai_processing_count
 

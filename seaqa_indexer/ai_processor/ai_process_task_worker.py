@@ -7,7 +7,8 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.ai_processor.ai_processor import (
     generate_summaries_and_vectors,
     process_knowledge_base_ai,
-    process_ticket_ai
+    process_ticket_ai,
+    process_portal_issue_ai,
 )
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -40,6 +41,9 @@ class AIProcessTaskWorker(LockingTaskWorker):
         elif task_type == 'ticket':
             project_uuid = data.get('project_uuid')
             self.tickets_task_handler(project_uuid)
+        elif task_type == 'portal_issue':
+            project_uuid = data.get('project_uuid')
+            self.portal_issues_task_handler(project_uuid)
         else:
             connection_id = data.get('connection_id')
             self.work_task_handler(connection_id)
@@ -65,6 +69,13 @@ class AIProcessTaskWorker(LockingTaskWorker):
             project_uuid
         )
 
+    def portal_issues_task_handler(self, project_uuid):
+        self.execute_with_lock(
+            f'portal_issue_{project_uuid}',
+            self.process_portal_issues_ai_summary,
+            project_uuid
+        )
+
     def process_tickets_ai_summary(self, project_uuid):
         try:
             process_ticket_ai(self.seadb_api, project_uuid)
@@ -76,6 +87,12 @@ class AIProcessTaskWorker(LockingTaskWorker):
             self.mq.lpush('summary_index_task', json.dumps(msg_content))
         except Exception as e:
             logger.exception('AI process tickets of project: %s failed, error: %s', project_uuid, e)
+
+    def process_portal_issues_ai_summary(self, project_uuid):
+        try:
+            process_portal_issue_ai(self.seadb_api, project_uuid)
+        except Exception as e:
+            logger.exception('AI process portal issues of project: %s failed, error: %s', project_uuid, e)
 
     def process_ai_summary(self, connection_id):
         try:
