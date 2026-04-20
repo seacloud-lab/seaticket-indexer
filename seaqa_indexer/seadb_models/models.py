@@ -421,6 +421,7 @@ class ThreadTable(BaseModel):
     ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
     ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
     ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
+    linked_ticket = MappedColumn('linked_ticket', PropertyTypes.INT)
 
     @classmethod
     def gen_table_name(cls, connection_id):

@@ -162,6 +162,13 @@ class EmailSeaDBAPI:
         result = res.get('results', [])
         return result[0] if result else {}
 
+    def get_thread_by_pk(self, connection_id, thread_id):
+        table_name = ThreadTable.gen_table_name(connection_id)
+        sql = f"SELECT _pk, title, modified_time, unread, linked_ticket, deleted, tags FROM `{table_name}` WHERE `_pk` = {thread_id} LIMIT 1"
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        result = res.get('results', [])
+        return result[0] if result else {}
+
     def get_thread_emails_by_page(self, connection_id, thread_id, page_size, offset):
         email_table_name = EmailTable.gen_table_name(connection_id)
         sql_comments = f"SELECT * FROM `{email_table_name}` WHERE thread_id = {thread_id} LIMIT {page_size} OFFSET {offset}"
@@ -190,4 +197,3 @@ class EmailSeaDBAPI:
         if result:
             return result[0]
         return {}
-
