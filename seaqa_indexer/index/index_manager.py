@@ -10,15 +10,18 @@ from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIn
 from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
+from seaqa_indexer.index.index_store.portal_issue_summary_vector_index import PortalIssueSummaryVectorIndex
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.index.utils import gen_index_name_by_type, gen_conn_summary_index_name, gen_content_vector_index_name, \
-    gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name
+    gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name, \
+    gen_portal_issue_index_name, gen_portal_issue_summary_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.ai_processor.utils import generate_embedding
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
+from seaqa_indexer.index.index_store.portal_issue_index import PortalIssueIndex
 from seaqa_indexer.handlers import get_handler
 
 
@@ -47,6 +50,9 @@ def format_vector_search_result(result, connection_id_to_connection):
     elif source_type == 'ticket_summary':
         formatted_result['type'] = 'ticket'
 
+    elif source_type == 'portal_issue_summary':
+        formatted_result['type'] = 'portal_issue'
+
     else:
         # format connection vector search result
         connection_id = result.get('connection_id')
@@ -68,6 +74,7 @@ class IndexManager:
         self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
         self.knowledge_base_index = KnowledgeBaseIndex(self.seasearch_api)
         self.ticket_index = TicketIndex(self.seasearch_api)
+        self.portal_issue_index = PortalIssueIndex(self.seasearch_api)
 
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
@@ -77,6 +84,7 @@ class IndexManager:
         self.content_vector_index = ContentVectorIndex(self.seasearch_api)
         self.kb_summary_vector_index = KnowledgeBaseSummaryVectorIndex(self.seasearch_api)
         self.ticket_summary_vector_index = TicketSummaryVectorIndex(self.seasearch_api)
+        self.portal_issue_summary_vector_index = PortalIssueSummaryVectorIndex(self.seasearch_api)
 
     def _build_search_params(self, project_uuid, connection_ids, extra_sources, keyword, start, size, time_from, time_to):
         bulk_search_params = []
@@ -105,6 +113,13 @@ class IndexManager:
             ticket_index_name = gen_ticket_index_name(project_uuid)
             ticket_search_param = self.ticket_index.get_search_param(ticket_index_name, keyword, start, size, time_from, time_to)
             bulk_search_params.append(ticket_search_param)
+
+        if extra_sources and "portal_issue" in extra_sources:
+            portal_issue_index_name = gen_portal_issue_index_name(project_uuid)
+            portal_issue_search_param = self.portal_issue_index.get_search_param(
+                portal_issue_index_name, keyword, start, size, time_from, time_to
+            )
+            bulk_search_params.append(portal_issue_search_param)
         return bulk_search_params
 
     def delete_index_by_project(self, project_uuid):
@@ -123,6 +138,11 @@ class IndexManager:
         self.ticket_index.delete_index_by_index_name(ticket_index_name)
         ticket_summary_index_name = gen_ticket_summary_index_name(project_uuid)
         self.seasearch_api.delete_index_by_name(ticket_summary_index_name)
+
+        portal_issue_index_name = gen_portal_issue_index_name(project_uuid)
+        self.portal_issue_index.delete_index_by_index_name(portal_issue_index_name)
+        portal_issue_summary_index_name = gen_portal_issue_summary_index_name(project_uuid)
+        self.seasearch_api.delete_index_by_name(portal_issue_summary_index_name)
 
     def delete_index_by_connection(self, connection_id, connection_type):
         conn_handler = get_handler(connection_type)
@@ -155,7 +175,7 @@ class IndexManager:
         if not hits:
             return result_docs
 
-        all_source_types = ConnectionType.to_list() + ['knowledge_base', 'ticket']
+        all_source_types = ConnectionType.to_list() + ['knowledge_base', 'ticket', 'portal_issue']
         for hit in hits:
             index_name = hit.get('_index')
             source = hit.get('_source')
@@ -182,7 +202,7 @@ class IndexManager:
                 'content': source.get('content', ''),
                 'modified_time': source.get('modified_time')
             }
-            if s_type not in ('knowledge_base', 'ticket'):
+            if s_type not in ('knowledge_base', 'ticket', 'portal_issue'):
                 r['connection_id'] = source['connection_id']
             result_docs.append(r)
 
@@ -196,6 +216,7 @@ class IndexManager:
         content_index_names = []
         kb_summary_index_name = None
         ticket_summary_index_name = None
+        portal_issue_summary_index_name = None
 
         for project_connection in project_connections:
             connection_type = project_connection.type
@@ -212,6 +233,8 @@ class IndexManager:
             kb_summary_index_name = gen_kb_summary_index_name(project_uuid)
         if extra_sources and 'ticket' in extra_sources:
             ticket_summary_index_name = gen_ticket_summary_index_name(project_uuid)
+        if extra_sources and 'portal_issue' in extra_sources:
+            portal_issue_summary_index_name = gen_portal_issue_summary_index_name(project_uuid)
 
         all_results = []
         if summary_index_names:
@@ -248,6 +271,15 @@ class IndexManager:
                 all_results.extend(ticket_summary_results)
             except Exception as e:
                 logger.warning('Ticket summary semantic search failed: %s', e)
+
+        if portal_issue_summary_index_name:
+            try:
+                portal_issue_summary_results = self.portal_issue_summary_vector_index.semantic_search(
+                    portal_issue_summary_index_name, query_vector, count, time_from=time_from, time_to=time_to
+                )
+                all_results.extend(portal_issue_summary_results)
+            except Exception as e:
+                logger.warning('Portal issue summary semantic search failed: %s', e)
 
         return all_results
 
