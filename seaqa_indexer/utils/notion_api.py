@@ -108,8 +108,11 @@ class NotionAPI:
 
     def get_user_info(self, user_id):
         url = f"{self.base_url}/users/{user_id}"
-        resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
-        resp.raise_for_status()
-        data = resp.json()
-        name = data.get('name')
+        try:
+            resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            name = data.get('name')
+        except requests.exceptions.HTTPError:
+            name = ''
         return name
