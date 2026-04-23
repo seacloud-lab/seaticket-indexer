@@ -2,7 +2,7 @@ import logging
 import datetime
 import json
 
-from seaqa_indexer.ai_processor.utils import generate_summary
+from seaqa_indexer.ai_processor.utils import SeaQAAIAPI
 from seaqa_indexer.seadb_models.models import (
     KnowledgeBaseTable,
     TicketsTable
@@ -71,6 +71,7 @@ def process_knowledge_base_ai(seadb_api, project_uuid):
     updates = []
     table_name = KnowledgeBaseTable.gen_table_name()
     knowledge_base_seadb_api = KnowledgeBaseSeaDBAPI(project_uuid)
+    seaqa_ai_api = SeaQAAIAPI()
 
     logger.info('Start AI process knowledge base of project: %s', project_uuid)
     ai_processing_count = 0
@@ -83,7 +84,8 @@ def process_knowledge_base_ai(seadb_api, project_uuid):
             title = row.get('title', '')
             content = row.get('content', '')
             full_content = f"Title: {title}\n\nContent: {content}\n"
-            summary, vector = generate_summary(full_content, 'knowledge_base', project_uuid)
+            summary = seaqa_ai_api.generate_summary(full_content, 'knowledge_base', project_uuid)
+            vector = seaqa_ai_api.generate_embedding(summary, project_uuid)
             updates.append({
                 "pk": pk,
                 "row": {
@@ -109,6 +111,7 @@ def process_ticket_ai(seadb_api, project_uuid):
     updates = []
     table_name = TicketsTable.gen_table_name()
     ticket_seadb_api = TicketSeaDBAPI(project_uuid)
+    seaqa_ai_api = SeaQAAIAPI()
 
     logger.info('Start AI process tickets of project: %s', project_uuid)
     ai_processing_count = 0
@@ -121,7 +124,8 @@ def process_ticket_ai(seadb_api, project_uuid):
             title = row.get('title', '')
             content = row.get('content', '')
             full_content = f"Title: {title}\n\nContent: {content}\n"
-            summary, vector = generate_summary(full_content, 'ticket', project_uuid)
+            summary = seaqa_ai_api.generate_summary(full_content, 'ticket', project_uuid)
+            vector = seaqa_ai_api.generate_embedding(summary, project_uuid)
             updates.append({
                 "pk": pk,
                 "row": {

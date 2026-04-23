@@ -9,8 +9,7 @@ from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time, get_since_time
-from seaqa_indexer.ai_processor.utils import generate_summary
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils.notion_api import NotionAPI
 
 logger = logging.getLogger(__name__)
@@ -64,8 +63,8 @@ class NotionHandler(ConnectionHandler):
                 content = row.get('content', '')
 
                 full_content = f"Title: {title}\n\nBody: {content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.NOTION.value, project_uuid)
-
+                summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.NOTION.value, project_uuid)
+                vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
                     "pk": pk,
                     "row": {

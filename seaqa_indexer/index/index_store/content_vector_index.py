@@ -3,7 +3,7 @@ import json
 
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.utils import url_to_filename
-from seaqa_indexer.ai_processor.utils import generate_chunks_embedding
+from seaqa_indexer.ai_processor.utils import SeaQAAIAPI
 from seaqa_indexer.index.index_store.base_vector_index import BaseVectorIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType, AIScenario
 
@@ -41,6 +41,7 @@ class ContentVectorIndex(BaseVectorIndex):
         }
     }
 
+
     def update(self, table_name, index_name, connection_id, project_uuid,
                content_vector_status, seaqa_db, seadb_api, storage, since, connection_type):
 
@@ -49,6 +50,8 @@ class ContentVectorIndex(BaseVectorIndex):
         offset = 0
         deleted_index_pk_set = set()
         bulk_params = []
+
+        seaqa_ai_api = SeaQAAIAPI()
 
         while True:
             if connection_type == ConnectionType.SITE.value:
@@ -102,21 +105,19 @@ class ContentVectorIndex(BaseVectorIndex):
                     continue
 
                 # Chunk the content
-                chunks, embeddings = generate_chunks_embedding(content, project_uuid, scenario=AIScenario.SUMMARY.value)
+                chunks, embeddings = seaqa_ai_api.generate_chunks_embedding(content, project_uuid, scenario=AIScenario.SUMMARY.value)
                 # Delete old chunks for this document before adding new ones
                 self.delete_indexes_by_pks(index_name, [pk])
 
-                # Index each chunk
-                segment_count = min(len(chunks), len(embeddings))
-                for i in range(segment_count):
+                for i in range(len(chunks)):
                     index_info = {"index": {"_index": index_name}}
                     doc_info = {
                         "content": chunks[i],
-                        "vec": embeddings[i].get('embedding', []),
+                        "vec": embeddings[i],
                         "project_uuid": project_uuid,
                         "connection_id": str(connection_id),
                         "pk": str(pk),
-                        "chunk_index": embeddings[i].get('index'),
+                        "chunk_index": i,
                         "modified_time": modified_time
                     }
                     bulk_params.append(index_info)

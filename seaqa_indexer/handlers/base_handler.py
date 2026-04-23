@@ -3,6 +3,7 @@ import json
 import datetime
 
 from abc import ABC, abstractmethod
+from seaqa_indexer.ai_processor.utils import SeaQAAIAPI
 from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary
@@ -15,6 +16,9 @@ logger = logging.getLogger(__name__)
 class ConnectionHandler(ABC):
     connection_type: str = None
     mq: Redis = None
+
+    def __init__(self):
+        self.seaqa_ai_api = SeaQAAIAPI()
 
     @abstractmethod
     def gen_table_name(self, connection_id) -> str:
