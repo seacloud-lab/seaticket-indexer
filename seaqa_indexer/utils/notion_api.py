@@ -4,6 +4,10 @@ import requests
 NOTION_VERSION = "2026-03-11"
 
 
+class UserNotFoundException(Exception):
+    pass
+
+
 class NotionAPI:
     def __init__(self, token, timeout=60):
         self.token = token
@@ -84,11 +88,17 @@ class NotionAPI:
 
         created_by = page.get("created_by").get("id")
         last_edited_by = page.get("last_edited_by").get("id")
-        creator = self.get_user_info(created_by) if created_by else None
+        try:
+            creator = self.get_user_info(created_by)
+        except UserNotFoundException:
+            creator = ''
         if last_edited_by == created_by:
             last_modifier = creator
         else:
-            last_modifier = self.get_user_info(last_edited_by) if last_edited_by else None
+            try:
+                last_modifier = self.get_user_info(last_edited_by)
+            except UserNotFoundException:
+                last_modifier = ''
 
         parent = page.get("parent") or {}
         parent_page_id = parent.get("page_id") if parent.get("type") == "page_id" else None
@@ -105,14 +115,12 @@ class NotionAPI:
             "blocks": blocks,
         }
 
-
     def get_user_info(self, user_id):
         url = f"{self.base_url}/users/{user_id}"
-        try:
-            resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
-            resp.raise_for_status()
-            data = resp.json()
-            name = data.get('name')
-        except requests.exceptions.HTTPError:
-            name = ''
+        resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
+        if resp.status_code == 404:
+            raise UserNotFoundException()
+        resp.raise_for_status()
+        data = resp.json()
+        name = data.get('name')
         return name
