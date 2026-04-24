@@ -11,7 +11,6 @@ from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.index.index_store.site_index import SiteIndex
 from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
-from seaqa_indexer.ai_processor.utils import generate_summary
 from seaqa_indexer.crawler.utils import url_to_filename
 
 logger = logging.getLogger(__name__)
@@ -75,7 +74,8 @@ class SiteHandler(ConnectionHandler):
                 filename = url_to_filename(url)
                 file_json = storage.read_json(connection_id, project_uuid, filename)
                 content = file_json.get('content', '')
-                summary, vector = generate_summary(content, ConnectionType.SITE.value, project_uuid)
+                summary = self.seaqa_ai_api.generate_summary(content, ConnectionType.SITE.value, project_uuid)
+                vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
                     "pk": pk,
                     "row": {

@@ -6,11 +6,13 @@ import os
 import sys
 
 from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX, AIScenario
-from seaqa_indexer.ai_processor.utils import generate_embedding
+from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.utils import uuid_str_to_32_chars
 
 
 logger = logging.getLogger(__name__)
+
+BATCH_SIZE = 50
 
 def gen_index_name_by_type(connection_id, connection_type):
     return CONNECTION_TYPE_TO_INDEX_PREFIX.get(connection_type) + str(connection_id)
@@ -46,6 +48,7 @@ def fix_summary(project_uuid, table_name, seadb_api):
     logger.info('Start fixing AI summary embeddings for table %s', table_name)
 
     try:
+        seaqa_ai_api = SeaQAAIAPI()
         page_size = 100
         fixed_count = 0
         updates = []
@@ -66,11 +69,35 @@ def fix_summary(project_uuid, table_name, seadb_api):
             if not rows:
                 break
 
+            rows_to_update = []
+            summaries = []
             for row in rows:
                 pk = row.get('_pk')
                 ai_summary = row.get('ai_summary')
+                if not ai_summary:
+                    logger.warning('Skip empty ai_summary for pk=%s', pk)
+                    continue
 
-                embedding = generate_embedding(ai_summary, project_uuid, scenario=AIScenario.SUMMARY.value)
+                rows_to_update.append(row)
+                summaries.append(ai_summary)
+
+            if not summaries:
+                continue
+
+            embeddings = []
+            idx = 0
+            while idx < len(summaries):
+                batch_summaries = summaries[idx:idx + BATCH_SIZE]
+                batch_embeddings = seaqa_ai_api.batch_generate_embeddings(
+                    batch_summaries,
+                    project_uuid,
+                    scenario=AIScenario.SUMMARY.value,
+                )
+                embeddings.extend(batch_embeddings)
+                idx += BATCH_SIZE
+
+            for row, embedding in zip(rows_to_update, embeddings):
+                pk = row.get('_pk')
                 if not embedding:
                     logger.warning('Failed to generate embedding for pk=%s', pk)
                     continue
@@ -84,7 +111,7 @@ def fix_summary(project_uuid, table_name, seadb_api):
                 }
 
                 updates.append(update_data)
-                if len(updates) >= 50:
+                if len(updates) >= BATCH_SIZE:
                     seadb_api.update_rows(project_uuid, table_name, updates)
                     updates = []
 

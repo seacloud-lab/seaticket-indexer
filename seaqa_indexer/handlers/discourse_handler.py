@@ -14,7 +14,6 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
-from seaqa_indexer.ai_processor.utils import generate_summary
 from seaqa_indexer.utils.constants import DataEventType
 
 logger = logging.getLogger(__name__)
@@ -77,7 +76,8 @@ class DiscourseHandler(ConnectionHandler):
                 result = discourse_seadb_api.get_topic_first_reply(connection_id, topic_id)
                 first_content = result.get('content', '')
                 full_content = f"Title: {title}\n\nBody: {first_content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.DISCOURSE_FORUM.value, project_uuid)
+                summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.DISCOURSE_FORUM.value, project_uuid)
+                vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
                     "pk": pk,
                     "row": {

@@ -15,7 +15,6 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus, DataEventType
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.email_index import EmailIndex
-from seaqa_indexer.ai_processor.utils import generate_summary
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +66,8 @@ class EmailHandler(ConnectionHandler):
                 content = result.get('content') or ''
 
                 full_content = f"Title: {title}\n\nBody: {content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.EMAIL.value, project_uuid)
+                summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.EMAIL.value, project_uuid)
+                vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
                     "pk": pk,
                     "row": {

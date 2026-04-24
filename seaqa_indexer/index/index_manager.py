@@ -17,7 +17,7 @@ from seaqa_indexer.index.utils import gen_index_name_by_type, gen_conn_summary_i
     gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.ai_processor.utils import generate_embedding
+from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
 from seaqa_indexer.handlers import get_handler
 
@@ -66,6 +66,7 @@ class IndexManager:
     def __init__(self):
         self.db_session_class = init_db_session_class()
         self.seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
+        self.seaqa_ai_api = SeaQAAIAPI()
         self.knowledge_base_index = KnowledgeBaseIndex(self.seasearch_api)
         self.ticket_index = TicketIndex(self.seasearch_api)
 
@@ -277,7 +278,7 @@ class IndexManager:
 
     def vector_search_by_text(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
 
-        query_vector = generate_embedding(query_text, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
+        query_vector = self.seaqa_ai_api.generate_embedding(query_text, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
         if not query_vector:
             logger.warning('Failed to generate query vector for: %s', query_text)
             return []
