@@ -17,7 +17,7 @@ from seaqa_indexer.index.utils import gen_index_name_by_type, gen_conn_summary_i
     gen_kb_index_name, gen_kb_summary_index_name, gen_ticket_index_name, gen_ticket_summary_index_name
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.ai_processor.utils import SeaQAAIAPI
+from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
 from seaqa_indexer.handlers import get_handler
 

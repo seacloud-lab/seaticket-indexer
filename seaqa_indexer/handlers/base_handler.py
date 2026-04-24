@@ -3,7 +3,7 @@ import json
 import datetime
 
 from abc import ABC, abstractmethod
-from seaqa_indexer.ai_processor.utils import SeaQAAIAPI
+from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary

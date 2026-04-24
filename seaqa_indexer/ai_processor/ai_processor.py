@@ -2,7 +2,7 @@ import logging
 import datetime
 import json
 
-from seaqa_indexer.ai_processor.utils import SeaQAAIAPI
+from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.seadb_models.models import (
     KnowledgeBaseTable,
     TicketsTable

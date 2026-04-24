@@ -3,7 +3,7 @@ import json
 
 from seaqa_indexer.utils import need_update_connection_status
 from seaqa_indexer.crawler.utils import url_to_filename
-from seaqa_indexer.ai_processor.utils import SeaQAAIAPI
+from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.index.index_store.base_vector_index import BaseVectorIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType, AIScenario
 

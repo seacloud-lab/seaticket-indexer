@@ -6,7 +6,7 @@ import os
 import sys
 
 from seaqa_indexer.utils.constants import CONNECTION_TYPE_TO_INDEX_PREFIX, AIScenario
-from seaqa_indexer.ai_processor.utils import SeaQAAIAPI
+from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.utils import uuid_str_to_32_chars
 
 
