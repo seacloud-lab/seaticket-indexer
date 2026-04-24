@@ -64,7 +64,7 @@ class SeaQAAIAPI:
 
     def batch_generate_embeddings(self, texts, project_uuid, username='seaqa-indexer', scenario=AIScenario.SUMMARY.value):
         params = {
-            'content': texts,
+            'contents': texts,
             'username': username,
             'project_uuid': project_uuid,
             'scenario': scenario,
