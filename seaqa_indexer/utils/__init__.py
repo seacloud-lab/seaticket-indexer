@@ -188,3 +188,31 @@ def get_since_time(old_indexed_at, is_rebuild=False) -> str:
     if not old_indexed_at or is_rebuild:
         return get_unix_epoch()
     return time_to_utc_time(str(old_indexed_at)).isoformat()
+
+
+def get_no_duplicate_obj_name(obj_name, exist_obj_names):
+
+    def no_duplicate(obj_name):
+        for exist_obj_name in exist_obj_names:
+            if exist_obj_name == obj_name:
+                return False
+        return True
+
+    def make_new_name(obj_name, i):
+        base, ext = os.path.splitext(obj_name)
+        if ext:
+            new_base = "%s (%d)" % (base, i)
+            return new_base + ext
+        else:
+            return "%s (%d)" % (obj_name, i)
+
+    if no_duplicate(obj_name):
+        return obj_name
+    else:
+        i = 1
+        while True:
+            new_name = make_new_name(obj_name, i)
+            if no_duplicate(new_name):
+                return new_name
+            else:
+                i += 1

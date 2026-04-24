@@ -5,7 +5,9 @@ from imapclient.imapclient import SENT
 from email.parser import Parser
 from email.header import decode_header
 from datetime import datetime
+from charset_normalizer import from_bytes
 from email.utils import parseaddr, parsedate_to_datetime
+from seaqa_indexer.utils import get_no_duplicate_obj_name
 
 logger = logging.getLogger(__name__)
 
@@ -60,24 +62,10 @@ class ImapMail(object):
 
     @staticmethod
     def parse_content(part):
-        content = ''
-        charset = part.get_content_charset()
-        if charset:
-            if charset.lower() in ['gb2312', 'gbk', 'gb18030']:
-                charset = 'gb18030'
-            try:
-                content = part.get_payload(decode=True).decode(charset)
-            except LookupError:
-                content = part.get_payload()
-                logger.info('unknown encoding: %s' % charset)
-            except UnicodeDecodeError:
-                content = part.get_payload()
-                logger.info('%s can\'t decode unicode' % charset)
-            except Exception as e:
-                logger.error(e)
-        else:
-            content = part.get_payload()
-        return content
+        payload = part.get_payload(decode=True)
+        # The encoding obtained by `part.get_content_charset()` may be incorrect.
+        guess = from_bytes(payload).best()
+        return str(guess) if guess else payload.decode('utf-8', errors='replace')
 
     def get_content(self, msg):
         plain_content = ''
@@ -100,6 +88,7 @@ class ImapMail(object):
     def get_attachments(self, msg):
         file_list = []
         filename2content_id = {}
+        exist_file_names = set()
         for part in msg.walk():
             disposition = part.get_content_disposition()
             content_id = part.get('Content-ID')
@@ -110,10 +99,12 @@ class ImapMail(object):
             if filename is not None or (content_id is not None and 'image' in content_type):
                 data = part.get_payload(decode=True)
                 filename = self.decode_str(filename) if filename else content_id[1:-1] + '.' + content_type[6:]
+                filename = get_no_duplicate_obj_name(filename, exist_file_names)
+                exist_file_names.add(filename)
                 file_list.append({'file_name': filename, 'file_data': data, 'content_disposition': disposition})
 
-            if content_id is not None and 'image' in content_type:
-                filename2content_id[filename] = content_id[1:-1]
+                if content_id is not None and 'image' in content_type:
+                    filename2content_id[filename] = content_id[1:-1]
         return file_list, filename2content_id
 
     def parse_addr(self, addr):
