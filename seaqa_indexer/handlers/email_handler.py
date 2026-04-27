@@ -1,6 +1,7 @@
 import json
 import logging
 import datetime
+from email.utils import parseaddr
 
 from dateutil.relativedelta import relativedelta
 
@@ -130,7 +131,7 @@ class EmailHandler(ConnectionHandler):
             return None, None, None, None
 
         sync_count, total_count = self._sync_email(connection_id, project_uuid, connection_status, since,
-                         imap, seaqa_db, email_seadb_api, storage, is_first_update)
+                         imap, seaqa_db, email_seadb_api, storage, is_first_update, email_user)
         return sync_count, total_count, False, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
@@ -181,7 +182,7 @@ class EmailHandler(ConnectionHandler):
                 if table['name'] in (email_table_name, thread_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])
 
-    def _sync_email(self, connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_sync):
+    def _sync_email(self, connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_sync, sender_username):
         sync_count = 0
         added_count = 0
         updated_count = 0
@@ -249,7 +250,7 @@ class EmailHandler(ConnectionHandler):
                     email_seadb_api, connection_id, changed_email_list
                 )
                 insert_and_update_thread_rows(email_seadb_api, connection_id, since, changed_email_list, is_first_sync)
-                self._publish_thread_events(email_seadb_api, connection_id, changed_email_list, old_thread_rows_by_id)
+                self._publish_thread_events(email_seadb_api, connection_id, changed_email_list, old_thread_rows_by_id, sender_username)
 
         connection_status['last_sync_changes'] = {
             'added': added_count,
@@ -276,11 +277,28 @@ class EmailHandler(ConnectionHandler):
                 old_thread_rows_by_id[thread_id] = old_thread
         return old_thread_rows_by_id
 
-    def _publish_thread_events(self, email_seadb_api, connection_id, email_list, old_thread_rows_by_id):
+    @staticmethod
+    def _normalize_email_address(value):
+        _, address = parseaddr(str(value or ''))
+        return (address or str(value or '')).strip().lower()
+
+    def _is_new_email_from_connection_user(self, email, sender_username):
+        if not email.get('_is_new_email'):
+            return False
+
+        sender_address = self._normalize_email_address(email.get('email_from'))
+        connection_username = self._normalize_email_address(sender_username)
+        return bool(sender_address and connection_username and sender_address == connection_username)
+
+    def _publish_thread_events(self, email_seadb_api, connection_id, email_list, old_thread_rows_by_id, sender_username):
         published_thread_ids = set()
         new_emails_by_thread_id = {}
 
         for email in email_list:
+            if self._is_new_email_from_connection_user(email, sender_username):
+                logger.info('Skip agent event for new email from connection user %s (message_id=%s)', sender_username, email.get('message_id'))
+                continue
+
             message_id = email.get('message_id')
             if not message_id:
                 continue
@@ -295,6 +313,9 @@ class EmailHandler(ConnectionHandler):
                 })
 
         for email in email_list:
+            if self._is_new_email_from_connection_user(email, sender_username):
+                continue
+
             message_id = email.get('message_id')
             if not message_id:
                 continue
