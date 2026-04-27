@@ -64,7 +64,8 @@ class DiscourseSeaDBAPI:
 
     def get_reply_by_id(self, connection_id, topic_id, post_number):
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE `topic_id` = {topic_id} AND `post_number` = {post_number}"
+        sql = f"""SELECT `_pk`, `topic_id`, `post_number`, `content`, `author`, `modified_time`, `accepted_answer`
+                FROM `{table_name}` WHERE `topic_id` = {topic_id} AND `post_number` = {post_number}"""
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
@@ -229,7 +230,8 @@ class DiscourseSeaDBAPI:
 
     def get_topic_replies_by_page(self, connection_id, topic_id, page_size, offset):
         table_name = DiscourseRepliesTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE topic_id = {topic_id} LIMIT {page_size} OFFSET {offset}"
+        sql = f"""SELECT `_pk`, `post_number`, `content` FROM `{table_name}`
+                WHERE topic_id = {topic_id} LIMIT {page_size} OFFSET {offset}"""
         replies = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return replies
 

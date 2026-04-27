@@ -115,7 +115,7 @@ class GitHubSeaDBAPI:
         }
 
         table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE comment_id={comment_id}"
+        sql = f"SELECT `_pk` FROM `{table_name}` WHERE comment_id={comment_id} LIMIT 1"
         comments = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if comments:
             _pk = comments[0].get('_pk')
@@ -407,7 +407,10 @@ class GitHubSeaDBAPI:
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = GithubIssuesTable.gen_table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE `issue_id` = {issue_id}"
+        sql = f"""SELECT `_pk`, `issue_id`, `issue_number`, `title`, `content`, `state`, `state_reason`, `labels`,
+                `issue_type`, `author`, `assignees`, `url`, `modified_time`,
+                `comment_count`, `deleted`, `outdated`, `linked_ticket`
+                FROM `{table_name}` WHERE `issue_id` = {issue_id}"""
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
@@ -430,14 +433,15 @@ class GitHubSeaDBAPI:
 
     def get_issue_comments_by_page(self, connection_id, issue_id, page_size, offset):
         comments_table_name = GithubIssueCommentsTable.gen_table_name(connection_id)
-        sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {offset}"
+        sql_comments = f"""SELECT `_pk`, `comment_id`, `content` FROM `{comments_table_name}`
+                        WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {offset}"""
         comments = self.seadb_api.query_rows(self.base_id, sql_comments).get('results', [])
         return comments
 
     def get_need_ai_issues_by_page(self, connection_id, page_size):
         issues_table_name = GithubIssuesTable.gen_table_name(connection_id)
         sql = f"""
-            SELECT * FROM `{issues_table_name}`
+            SELECT `_pk`, `title`, `content` FROM `{issues_table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """
