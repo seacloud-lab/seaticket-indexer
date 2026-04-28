@@ -1,0 +1,87 @@
+from threading import Thread
+import time
+import logging
+import json
+from copy import deepcopy
+from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
+
+from seaqa_indexer import config
+from seaqa_indexer.mq import get_mq, NoMessageException
+
+logger = logging.getLogger(__name__)
+
+
+class PortalIssueIndexMaster(Thread):
+    """
+    Index master for portal issue updates.
+    Listens on the portal_issue_update channel and adds tasks to index_task and ai_process_task.
+    """
+
+    def __init__(self):
+        Thread.__init__(self)
+        self.mq = get_mq(config.REDIS_HOST, config.REDIS_PORT, config.REDIS_PASSWORD)
+        self.pending_tasks = dict()
+        self.interval = 10 * 60
+        self.check_pending_tasks_interval = 30
+        self.no_message_check_interval = 5 * 60
+
+    def run(self):
+        if not self.mq:
+            return
+        logger.info('portal issue ai master event receive thread started')
+        while True:
+            try:
+                self.master_handler()
+            except NoMessageException:
+                logger.warning('long time no message, reconnect to redis.')
+            except (ResponseError, NoMQAvailable, TimeoutError) as e:
+                logger.error('The connection to the redis server failed: %s', e)
+            except Exception as e:
+                logger.error('Error handling portal issue master task: %s', e)
+
+    def master_handler(self):
+        with self.mq.pubsub(ignore_subscribe_messages=True) as p:
+            p.subscribe('portal_issue_update')
+            logger.info('portal issue master starting listen')
+
+            message_check_time = time.time()
+            last_check_pending_tasks_time = time.time()
+            while True:
+                message = p.get_message(timeout=1.0)
+                now_time = time.time()
+                if message is not None and isinstance(message['data'], str):
+                    message_check_time = time.time()
+                    try:
+                        data = json.loads(message['data'])
+                    except Exception:
+                        logger.warning('message: invalid. %s', message)
+                        data = None
+                    if data:
+                        project_uuid = data.get('project_uuid')
+                        last_update_time = self.pending_tasks.get(project_uuid, 0)
+                        if (now_time - last_update_time) > self.interval:
+                            self.pending_tasks[project_uuid] = now_time
+                            self._add_to_task_queue(project_uuid)
+
+                if len(self.pending_tasks) and (now_time - last_check_pending_tasks_time) > self.check_pending_tasks_interval:
+                    last_check_pending_tasks_time = time.time()
+                    copied_pending_tasks = deepcopy(self.pending_tasks)
+                    logger.info('start check pending portal issue tasks, task number: %s', len(copied_pending_tasks))
+                    for project_uuid, last_update_time in copied_pending_tasks.items():
+                        if (now_time - last_update_time) > self.interval:
+                            self.pending_tasks.pop(project_uuid)
+                            self._add_to_task_queue(project_uuid)
+
+                if message is None:
+                    if (time.time() - message_check_time) > self.no_message_check_interval:
+                        raise NoMessageException
+                    time.sleep(1)
+
+    def _add_to_task_queue(self, project_uuid):
+        msg_data = json.dumps({
+            'project_uuid': project_uuid,
+            'type': 'portal_issue',
+        })
+        self.mq.lpush('index_task', msg_data)
+        self.mq.lpush('ai_process_task', msg_data)
+        logger.info('%s has been add to task queue', msg_data)

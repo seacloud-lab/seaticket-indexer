@@ -10,12 +10,15 @@ from seaqa_indexer.utils import uuid_str_to_32_chars
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
 from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
+from seaqa_indexer.seadb_models.portal_issue_seadb_api import PortalIssueSeaDBAPI
 from seaqa_indexer.index.index_store.ticket_index import TicketIndex
+from seaqa_indexer.index.index_store.portal_issue_index import PortalIssueIndex
 from seaqa_indexer.index.utils import fix_summary, gen_kb_summary_index_name, gen_ticket_index_name,\
-    gen_ticket_summary_index_name, gen_kb_index_name
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
+    gen_ticket_summary_index_name, gen_kb_index_name, gen_portal_issue_index_name, gen_portal_issue_summary_index_name
+from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable, PortalIssuesTable
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
+from seaqa_indexer.index.index_store.portal_issue_summary_vector_index import PortalIssueSummaryVectorIndex
 from seaqa_indexer.handlers import get_handler
 from seaqa_indexer.utils import get_since_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
@@ -109,6 +112,31 @@ def update_ticket_index(project_uuid, db_session_class, is_rebuild=False):
         logger.info('Finish to index ticket project_uuid %s', project_uuid)
     except Exception as e:
         logger.exception('update ticket: %s index failed, error: %s', project_uuid, e)
+
+
+def update_portal_issue_index(project_uuid, db_session_class, is_rebuild=False):
+    try:
+        logger.info('Start to index portal issue project_uuid %s', project_uuid)
+        seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
+        portal_issue_index = PortalIssueIndex(seasearch_api)
+        seaqa_db = SeaqaDB(db_session_class)
+        portal_issue_seadb_api = PortalIssueSeaDBAPI(project_uuid)
+
+        project = seaqa_db.get_portal_issue_indexed_at_by_project_uuid(project_uuid)
+        if not project:
+            logger.warning('Project %s does not exist', project_uuid)
+            return
+        index_name = gen_portal_issue_index_name(project_uuid)
+        portal_issue_index.create_index_if_missing(index_name)
+        old_indexed_at = project.portal_issue_indexed_at
+        since = get_since_time(old_indexed_at, is_rebuild)
+
+        portal_issue_index.update(index_name, uuid_str_to_32_chars(project_uuid), portal_issue_seadb_api, since)
+        indexed_at = datetime.datetime.now(datetime.UTC)
+        seaqa_db.update_portal_issue_indexed_at(project_uuid, indexed_at)
+        logger.info('Finish to index portal issue project_uuid %s', project_uuid)
+    except Exception as e:
+        logger.exception('update portal issue: %s index failed, error: %s', project_uuid, e)
 
 
 def update_connection_content_vector_index(connection_id, db_session_class, is_rebuild=False):
@@ -276,3 +304,36 @@ def update_tickets_summary_index(project_uuid, db_session_class, is_rebuild=Fals
 
     index_count = ticket_summary_vector_index.update(table_name, ai_index_name, project_uuid, seadb_api, since)
     return index_count
+
+
+def update_portal_issues_summary_index(project_uuid, db_session_class, is_rebuild=False):
+    logger.info('Start to index summary vectors for portal issues of project: %s', project_uuid)
+    seadb_api = SeaDBAPI()
+    seaqa_db = SeaqaDB(db_session_class)
+
+    portal_issue = seaqa_db.get_portal_issue_ai_info_by_project_uuid(project_uuid)
+    if not portal_issue:
+        logger.warning('Project %s does not exist', project_uuid)
+        return
+
+    last_portal_issue_ai_indexed_at = portal_issue.portal_issue_ai_indexed_at
+
+    table_name = PortalIssuesTable.gen_table_name()
+
+    fixed_count = fix_summary(project_uuid, table_name, seadb_api)
+    if fixed_count > 0:
+        logger.info('Fixed %d missing embeddings for portal issues of project: %s before indexing', fixed_count, project_uuid)
+
+    seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
+    portal_issue_summary_vector_index = PortalIssueSummaryVectorIndex(seasearch_api)
+    ai_index_name = gen_portal_issue_summary_index_name(project_uuid)
+    portal_issue_summary_vector_index.create_index_if_missing(ai_index_name)
+
+    since = get_since_time(last_portal_issue_ai_indexed_at, is_rebuild)
+
+    indexed_count = portal_issue_summary_vector_index.update(table_name, ai_index_name, project_uuid, seadb_api, since)
+    ai_indexed_at = datetime.datetime.now(datetime.UTC)
+    seaqa_db.update_portal_issue_ai_indexed_at(project_uuid, ai_indexed_at)
+    logger.info('Finish summary vector indexing for portal issues of project %s, indexed %d documents at %s',
+                project_uuid, indexed_count, ai_indexed_at)
+    return indexed_count

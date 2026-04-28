@@ -7,6 +7,7 @@ from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
 from seaqa_indexer.index.knowledge_base_index_master import KnowledgeBaseIndexMaster
 from seaqa_indexer.index.ticket_index_master import TicketIndexMaster
+from seaqa_indexer.index.portal_issue_index_master import PortalIssueIndexMaster
 from seaqa_indexer.syncer.sync_manager import SyncManager
 from seaqa_indexer.utils import get_python_executable, run
 
@@ -19,6 +20,7 @@ class SeaqaIndexerApp(object):
         self.index_manager = IndexManager()
         self.kb_index_master = KnowledgeBaseIndexMaster()
         self.ticket_index_master = TicketIndexMaster()
+        self.portal_issue_index_master = PortalIssueIndexMaster()
 
         self.http_server = HttpServer(self)
         self.sync_task_publisher = SyncTaskPublisher(self.sync_manager)
@@ -38,6 +40,7 @@ class SeaqaIndexerApp(object):
 
         self.kb_index_master.start()
         self.ticket_index_master.start()
+        self.portal_issue_index_master.start()
 
         self.sync_task_publisher.start()
         self.web_crawl_task_publisher.start()
