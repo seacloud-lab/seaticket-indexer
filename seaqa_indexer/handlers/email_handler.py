@@ -200,7 +200,7 @@ class EmailHandler(ConnectionHandler):
             before_date += datetime.timedelta(days=EMAIL_SYNC_INTERVAL_DAYS)
 
             email_list = imap.search_emails(since_date, before_date)
-            new_email_list = []
+            changed_email_list = []
             for email in email_list:
                 if not email:
                     continue
@@ -222,8 +222,9 @@ class EmailHandler(ConnectionHandler):
                     'subject': email.get('subject'),
                     'is_sender': email.get('is_sender'),
                     'email_from': email.get('email_from'),
+                    '_is_new_email': not bool(existed_email),
                 }
-                new_email_list.append(email_info)
+                changed_email_list.append(email_info)
 
                 pk = email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email)
                 upload_email_attachment(connection_id, project_uuid, storage, email, pk)
@@ -243,14 +244,12 @@ class EmailHandler(ConnectionHandler):
                     _status_last_update_time = new_time
                     _status_last_update_count = new_count
                 sync_count += 1
-            if new_email_list:
+            if changed_email_list:
                 old_thread_rows_by_id = self._get_old_thread_rows_by_id(
-                    email_seadb_api, connection_id, new_email_list
+                    email_seadb_api, connection_id, changed_email_list
                 )
-                insert_and_update_thread_rows(email_seadb_api, connection_id, since, new_email_list, is_first_sync)
-                self._publish_thread_events(
-                    email_seadb_api, connection_id, new_email_list, old_thread_rows_by_id
-                )
+                insert_and_update_thread_rows(email_seadb_api, connection_id, since, changed_email_list, is_first_sync)
+                self._publish_thread_events(email_seadb_api, connection_id, changed_email_list, old_thread_rows_by_id)
 
         connection_status['last_sync_changes'] = {
             'added': added_count,
@@ -277,9 +276,35 @@ class EmailHandler(ConnectionHandler):
                 old_thread_rows_by_id[thread_id] = old_thread
         return old_thread_rows_by_id
 
+    def _is_new_outbound_email(self, email):
+        return bool(email.get('_is_new_email') and email.get('is_sender'))
+
     def _publish_thread_events(self, email_seadb_api, connection_id, email_list, old_thread_rows_by_id):
         published_thread_ids = set()
+        new_emails_by_thread_id = {}
+
         for email in email_list:
+            if self._is_new_outbound_email(email):
+                logger.info('Skip agent event for new outbound email (message_id=%s)', email.get('message_id'))
+                continue
+
+            message_id = email.get('message_id')
+            if not message_id:
+                continue
+
+            latest_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
+            thread_id = latest_email.get('thread_id')
+            if not thread_id:
+                continue
+            if email.get('_is_new_email'):
+                new_emails_by_thread_id.setdefault(thread_id, []).append({
+                    key: value for key, value in email.items() if not key.startswith('_')
+                })
+
+        for email in email_list:
+            if self._is_new_outbound_email(email):
+                continue
+
             message_id = email.get('message_id')
             if not message_id:
                 continue
@@ -302,6 +327,10 @@ class EmailHandler(ConnectionHandler):
                 item_id=thread_id,
                 old_row=old_thread,
                 state_event_type=state_event_type,
+                additional_items=new_emails_by_thread_id.get(thread_id),
+                additional_event_type=DataEventType.EMAIL_MESSAGE_ADDED.value,
+                additional_items_field='emails',
+                state_event_ignored_fields=('modified_time', 'unread', 'record_modified_time', 'sync_time'),
                 log_object_name='email thread',
             )
             published_thread_ids.add(thread_id)
