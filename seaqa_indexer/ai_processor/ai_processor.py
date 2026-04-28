@@ -113,6 +113,7 @@ def process_portal_issue_ai(seadb_api, project_uuid):
     updates = []
     table_name = PortalIssuesTable.gen_table_name()
     portal_issue_seadb_api = PortalIssueSeaDBAPI(project_uuid)
+    seaqa_ai_api = SeaQAAIAPI()
 
     logger.info('Start AI process portal issues of project: %s', project_uuid)
     ai_processing_count = 0
@@ -125,7 +126,8 @@ def process_portal_issue_ai(seadb_api, project_uuid):
             title = row.get('title', '')
             content = row.get('content', '')
             full_content = f"Title: {title}\n\nContent: {content}\n"
-            summary, vector = generate_summary(full_content, 'portal_issue', project_uuid)
+            summary = seaqa_ai_api.generate_summary(full_content, 'portal_issue', project_uuid)
+            vector = seaqa_ai_api.generate_embedding(summary, project_uuid)
             updates.append({
                 "pk": pk,
                 "row": {
