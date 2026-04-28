@@ -149,14 +149,3 @@ class SiteHandler(ConnectionHandler):
         # Site sync is handled by web_crawl_manager, not through this method
         # This is a placeholder - actual site crawling uses different mechanism
         raise NotImplementedError("Site sync is handled by web_crawl_manager")
-
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables):
-        """Clean site connection data including crawled files."""
-        # Delete crawled file storage
-        storage.delete_site(connection_id, project_uuid)
-        # Delete seadb table
-        if tables:
-            for table in tables:
-                if table['name'] == self.gen_table_name(connection_id):
-                    seadb_api.delete_table(project_uuid, table['id'])

@@ -8,11 +8,7 @@ from seaqa_indexer import config
 from seaqa_indexer.syncer.sync_manager import ForumNotFoundException, \
     ForumInActiveException
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.handlers import get_handler
-from seaqa_indexer.seadb_models.models import KnowledgeBaseTable, TicketsTable
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
-from seaqa_indexer.handlers import get_handler
 
 
 application = Flask(__name__)
@@ -85,10 +81,6 @@ def cleanup_deleted_project():
         storage.delete_project_crawl_data(project_uuid)
         # delete project attachment
         storage.delete_project_attachment(project_uuid)
-
-        seadb_api = SeaDBAPI()
-        # delete base
-        seadb_api.delete_base(project_uuid)
     except Exception as e:
         logger.exception('cleanup deleted project failed: %s', e)
         return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
@@ -115,16 +107,9 @@ def cleanup_deleted_connection():
 
     try:
         application.app.index_manager.delete_index_by_connection(connection_id, connection_type)
-
-        handler = get_handler(connection_type)
-        if handler:
-            seadb_api = SeaDBAPI()
+        if connection_type in (ConnectionType.SITE.value, ConnectionType.EMAIL.value):
             storage = get_storage()
-            base_metadata = seadb_api.get_base_metadata(project_uuid)
-            tables = base_metadata.get('tables')
-            handler.clean_connection_data(storage, seadb_api, project_uuid, connection_id, tables)
-        else:
-            logger.warning('No handler found for connection type: %s', connection_type)
+            storage.delete_connection_crawl_data(connection_id, project_uuid)
     except Exception as e:
         logger.exception('cleanup deleted connection failed: %s', e)
         return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500

@@ -186,16 +186,6 @@ class GithubIssueHandler(ConnectionHandler):
 
         return total_deleted
 
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables):
-        """Clean github issue connection data including issues and comments tables."""
-        if tables:
-            issues_table_name = self.gen_table_name(connection_id)
-            comments_table_name = self.gen_comments_table_name(connection_id)
-            for table in tables:
-                if table['name'] in (issues_table_name, comments_table_name):
-                    seadb_api.delete_table(project_uuid, table['id'])
-
     def _resolve_issue_state_event_type(self, issue, existed_issue):
         """Return the event type that reflects the issue's own state change."""
         if not existed_issue:

@@ -168,19 +168,6 @@ class EmailHandler(ConnectionHandler):
 
         return total_deleted
 
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables):
-        """Clean email connection data including attachment storage and tables."""
-        # Delete attachment storage (uses same method as site)
-        storage.delete_site(connection_id, project_uuid)
-        # Delete seadb tables
-        if tables:
-            email_table_name = EmailTable.gen_table_name(connection_id)
-            thread_table_name = ThreadTable.gen_table_name(connection_id)
-            for table in tables:
-                if table['name'] in (email_table_name, thread_table_name):
-                    seadb_api.delete_table(project_uuid, table['id'])
-
     def _sync_email(self, connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_sync):
         sync_count = 0
         added_count = 0
