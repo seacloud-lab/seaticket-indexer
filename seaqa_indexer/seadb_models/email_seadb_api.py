@@ -171,7 +171,7 @@ class EmailSeaDBAPI:
 
     def get_thread_emails_by_page(self, connection_id, thread_id, page_size, offset):
         email_table_name = EmailTable.gen_table_name(connection_id)
-        sql_comments = f"SELECT * FROM `{email_table_name}` WHERE thread_id = {thread_id} LIMIT {page_size} OFFSET {offset}"
+        sql_comments = f"SELECT `content` FROM `{email_table_name}` WHERE thread_id = {thread_id} LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql_comments).get('results', [])
         return comments
 

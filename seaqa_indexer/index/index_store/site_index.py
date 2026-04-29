@@ -28,7 +28,7 @@ class SiteIndex(BaseConnectionIndex):
 
         table_name = WebCrawlTable.gen_table_name(connection_id)
         while True:
-            sql = f"""SELECT * FROM `{table_name}` 
+            sql = f"""SELECT `_pk`, `url`, `title`, `modified_time`, `deleted`, `outdated` FROM `{table_name}` 
                     WHERE record_modified_time >= '{since}' 
                     LIMIT {page_size} OFFSET {offset}"""
             result = seadb_api.query_rows(project_uuid, sql)
