@@ -168,16 +168,6 @@ class DiscourseHandler(ConnectionHandler):
 
         return total_deleted
 
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables):
-        """Clean discourse connection data including topics and replies tables."""
-        if tables:
-            topics_table_name = self.gen_table_name(connection_id)
-            replies_table_name = self.gen_replies_table_name(connection_id)
-            for table in tables:
-                if table['name'] in (topics_table_name, replies_table_name):
-                    seadb_api.delete_table(project_uuid, table['id'])
-
     def _sync_discourse(self, connection_id, sync_earliest_time, last_sync_time, connection_status, discourse_forum_api, discourse_seadb_api, seaqa_db):
         page = 0
         should_stop = False

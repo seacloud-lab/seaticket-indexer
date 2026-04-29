@@ -109,12 +109,6 @@ class ConnectionHandler(ABC):
 
         return total_deleted
 
-    @abstractmethod
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables) -> None:
-        """Clean all SeaDB tables and storage associated with a deleted connection."""
-        pass
-
     def build_event(self, event_type, old_row=None, new_row=None, ignored_fields=None):
         old_row = old_row or {}
         new_row = new_row or {}

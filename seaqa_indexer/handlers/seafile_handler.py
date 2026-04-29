@@ -189,15 +189,6 @@ class SeafileHandler(ConnectionHandler):
         # Return config update flag along with sync results
         return sync_count, total_count, is_update_config, config
 
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables):
-        """Clean seafile connection data."""
-        if tables:
-            table_name = self.gen_table_name(connection_id)
-            for table in tables:
-                if table['name'] == table_name:
-                    seadb_api.delete_table(project_uuid, table['id'])
-
     def _sync_seafile(self, connection_id, repo_id, connection_status, since, seahub_api, seaqa_db, seafile_seadb_api, is_first_update, sync_logger):
         page = 1
         per_page = 1000

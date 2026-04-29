@@ -119,15 +119,6 @@ class NotionHandler(ConnectionHandler):
         )
         return sync_count, total_count, False, config
 
-
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables):
-        if tables:
-            table_name = self.gen_table_name(connection_id)
-            for table in tables:
-                if table['name'] == table_name:
-                    seadb_api.delete_table(project_uuid, table['id'])
-
     def _sync_notion(self, connection_id, connection_status, notion_api, seaqa_db, notion_seadb_api, last_sync_time):
         per_page = 100  # max 100
         sync_count = 0

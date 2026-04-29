@@ -31,8 +31,8 @@ class BaseStorage:
     def list_files(self, site_id, project_uuid):
         raise NotImplementedError
 
-    def delete_site(self, site_id, project_uuid):
-        """Delete all crawled files for a site (project_uuid/site_id)."""
+    def delete_connection_crawl_data(self, connection_id, project_uuid):
+        """Delete all crawled files for a connection (project_uuid/connection_id)."""
         raise NotImplementedError
 
     def delete_project_crawl_data(self, project_uuid):
@@ -151,8 +151,8 @@ class S3Storage(BaseStorage):
         if to_delete:
             self.client.delete_objects(Bucket=bucket, Delete={'Objects': to_delete})
 
-    def delete_site(self, site_id, project_uuid):
-        prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=site_id)
+    def delete_connection_crawl_data(self, connection_id, project_uuid):
+        prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=connection_id)
         self._delete_by_prefix(self.bucket, prefix)
 
     def delete_project_crawl_data(self, project_uuid):
