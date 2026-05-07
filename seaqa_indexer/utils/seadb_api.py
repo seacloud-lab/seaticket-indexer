@@ -13,7 +13,7 @@ def parse_response(response):
         try:
             return response.json()
         except:
-            pass
+            return {}
 
 
 class OptionValueInvalidException(Exception):

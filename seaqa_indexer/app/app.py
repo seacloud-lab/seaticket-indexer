@@ -35,6 +35,7 @@ class SeaqaIndexerApp(object):
         self._start_worker('seaqa_indexer.index.content_vector_index_task_worker', 'content vector index worker')
         self._start_worker('seaqa_indexer.tasks.deleted_records_cleaner', 'deleted records cleaner')
         self._start_worker('seaqa_indexer.tasks.notion_page_cleaner', 'notion page cleaner')
+        self._start_worker('seaqa_indexer.tasks.seafile_file_cleaner', 'seafile file cleaner')
 
         self.sync_manager.start()
 
