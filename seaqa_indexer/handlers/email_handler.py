@@ -196,7 +196,7 @@ class EmailHandler(ConnectionHandler):
                     message_id = email.get('message_id')
                     modified_time = email.get('email_date')
                     existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
-                    if existed_email:
+                    if existed_email and existed_email.get('modified_time'):
                         existed_date = time_to_utc_time(str(existed_email.get('modified_time')))
                         email_thread_id = existed_email.get('thread_id')
                         if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
