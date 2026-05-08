@@ -14,6 +14,7 @@ from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.utils.notion_api import NotionAPI
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
+from seaqa_indexer.utils.constants import ConnectionType
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +101,8 @@ class NotionPageCleaner(object):
         return local_page_map
 
     def clean_notion_pages(self):
-        connections = self.seaqa_db.get_notion_connections_to_clean(self.recent_days)
-        logger.info('Found %d notion connections to check', len(connections))
+        connections = self.seaqa_db.get_need_cleaned_connections_by_type(self.recent_days, ConnectionType.NOTION.value)
+        logger.info('Found %d notion connections to clean', len(connections))
 
         for connection in connections:
             connection_id = connection.id

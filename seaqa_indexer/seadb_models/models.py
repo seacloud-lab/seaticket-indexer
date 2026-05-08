@@ -329,6 +329,7 @@ class GithubIssueCommentsTable(BaseModel):
 
 
 class SeafileTable(BaseModel):
+    file_id = MappedColumn('file_id', PropertyTypes.TEXT)
     path = MappedColumn('path', PropertyTypes.TEXT)
     title = MappedColumn('title', PropertyTypes.TEXT)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)

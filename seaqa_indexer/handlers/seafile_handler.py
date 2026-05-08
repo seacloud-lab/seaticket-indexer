@@ -206,14 +206,15 @@ class SeafileHandler(ConnectionHandler):
             for file in recently_changed_files:
                 parent_dir = file.get('_parent_dir')
                 dirent_name = file.get('_name')
-                modified_time = file.get('_file_mtime')
+                modified_time = file.get('_mtime')
                 size = file.get('_size')
+                file_id = file.get('_id')
 
                 file_suffix = get_file_suffix(dirent_name)
                 if file_suffix not in SYNC_FILE_SUFFIXES:
                     continue
 
-                existed_file = seafile_seadb_api.get_file_by_path(connection_id, parent_dir, dirent_name)
+                existed_file = seafile_seadb_api.get_file_by_file_id(connection_id, file_id)
                 if existed_file:
                     if time_to_utc_time(modified_time) <= time_to_utc_time(str(existed_file.get('modified_time'))):
                         logger.debug(f'connection_id %s parent_dir %s filename: %s is up to date, skipping sync.', connection_id, parent_dir, dirent_name)
@@ -234,6 +235,7 @@ class SeafileHandler(ConnectionHandler):
                         content = get_content_by_download_link(download_link)
                         content = extractor.extract(connection_id, repo_id, content, file_path)
                 file_info = {
+                    'file_id': file_id,
                     'path': parent_dir,
                     'filename': dirent_name,
                     'modified_time': modified_time,
@@ -250,29 +252,6 @@ class SeafileHandler(ConnectionHandler):
                     _status_last_update_time = new_time
                     _status_last_update_count = new_count
                 sync_count += 1
-
-        # sync deleted files
-        page = 1
-        per_page = 1000
-        while True:
-            if is_first_update:
-                break
-            resp = seahub_api.get_recently_deleted_files(since, page, per_page)
-            page += 1
-            recently_deleted_files = resp.get('files', [])
-            if not recently_deleted_files:
-                break
-
-            for file in recently_deleted_files:
-                file_suffix = get_file_suffix(file.get('obj_name'))
-                if file_suffix not in SYNC_FILE_SUFFIXES:
-                    continue
-                path = '/' + file.get('path').strip('/')
-                file_info = {
-                    'path': path,
-                    'filename': file.get('obj_name'),
-                }
-                seafile_seadb_api.mark_file_as_deleted(connection_id, file_info)
 
         total_count = seafile_seadb_api.get_file_total_count(connection_id)
         return sync_count, total_count

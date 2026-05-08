@@ -13,8 +13,10 @@ class SeafileSeaDBAPI:
         content = file.get('content')
         path = file['path']
         filename = file['filename']
+        file_id = file.get('file_id')
 
         insert_row = {
+            SeafileTable.file_id.name: file_id,
             SeafileTable.path.name: path,
             SeafileTable.title.name: filename,
             SeafileTable.content.name: content[:SEADB_CONTENT_SIZE_LIMIT],
@@ -37,23 +39,28 @@ class SeafileSeaDBAPI:
         else:
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 
-    def mark_file_as_deleted(self, connection_id, file):
+    def mark_file_as_deleted(self, connection_id, need_deleted_file_ids, file_id_to_pk):
+        batch_size_limit = 100
         table_name = SeafileTable.gen_table_name(connection_id)
-        path = file.get('path')
-        filename = file.get('filename')
-        sql = f"""SELECT _pk FROM `{table_name}` WHERE `path`='{path}' AND title='{filename}'"""
-        resp_result = self.seadb_api.query_rows(self.base_id, sql)
-        results = resp_result.get('results', [])
-        if results:
-            row = {
-                "pk": results[0].get('_pk'),
-                "row": {
-                    SeafileTable.deleted.name: True,
-                    SeafileTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                    SeafileTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+        now_time = datetime.datetime.now(datetime.UTC).isoformat()
+        updates = []
+
+        for file_id in need_deleted_file_ids:
+            pk = file_id_to_pk.get(file_id)
+            updates.append({
+                'pk': pk,
+                'row': {
+                    'deleted': True,
+                    'sync_time': now_time,
+                    'record_modified_time': now_time,
                 }
-            }
-            self.seadb_api.update_rows(self.base_id, table_name, [row])
+            })
+            if len(updates) >= batch_size_limit:
+                self.seadb_api.update_rows(self.base_id, table_name, updates)
+                updates = []
+
+        if updates:
+            self.seadb_api.update_rows(self.base_id, table_name, updates)
 
     def get_file_total_count(self, connection_id):
         table_name = SeafileTable.gen_table_name(connection_id)
@@ -74,9 +81,9 @@ class SeafileSeaDBAPI:
         table_name = SeafileTable.gen_table_name(connection_id)
         self.seadb_api.delete_rows(self.base_id, table_name, deleted_seadb_pk_list)
 
-    def get_file_by_path(self, connection_id, path, filename):
+    def get_file_by_file_id(self, connection_id, file_id):
         table_name = SeafileTable.gen_table_name(connection_id)
-        sql = f"SELECT _pk, modified_time FROM `{table_name}` WHERE `path` = '{path}' and title='{filename}'"
+        sql = f"SELECT _pk, modified_time FROM `{table_name}` WHERE `file_id` = '{file_id}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         files = res.get('results', [])
         return files[0] if files else {}
