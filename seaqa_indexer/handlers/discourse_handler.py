@@ -25,6 +25,23 @@ class DiscourseHandler(ConnectionHandler):
     connection_type = ConnectionType.DISCOURSE_FORUM.value
     BATCH_SIZE = 50
 
+    def should_publish_state_event(self, state_event) -> bool:
+        if state_event.get('type') != DataEventType.DISCOURSE_TOPIC_UPDATED.value:
+            return True
+
+        old_value = state_event.get('old_value') or {}
+        new_value = state_event.get('new_value') or {}
+        changed_fields = set(old_value) | set(new_value)
+        if changed_fields != {'resolved'}:
+            return True
+
+        # `resolved` was added after some topics had already been synced, so
+        # legacy rows can still have NULL in SeaDB. Suppress the synthetic
+        # null -> false update to avoid emitting a misleading topic-updated event.
+        if old_value.get('resolved') is None and new_value.get('resolved') is False:
+            return False
+        return True
+
     def gen_table_name(self, connection_id):
         return DiscourseTopicsTable.gen_table_name(connection_id)
 

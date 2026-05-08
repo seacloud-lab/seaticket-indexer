@@ -24,7 +24,7 @@ class DiscourseSeaDBAPI:
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
-        resolved = True if topic_data.get('has_accepted_answer', False) else False
+        resolved = True if topic_data.get('has_accepted_answer', False) else False # Avoid writing a None value to the resolved field when has_accepted_answer is present but evaluates to None.
         modified_time = topic_data.get('bumped_at')
         topic_created_time = topic_data.get('created_at')
 
@@ -78,7 +78,7 @@ class DiscourseSeaDBAPI:
         slug = topic_data.get('slug')
         views = topic_data.get('views', 0)
         category_id = topic_data.get('category_id')
-        resolved = True if topic_data.get('has_accepted_answer', False) else False
+        resolved = True if topic_data.get('has_accepted_answer', False) else False # Avoid writing a None value to the resolved field when has_accepted_answer is present but evaluates to None.
         bumped_at = topic_data.get('bumped_at')
         last_posted_at = topic_data.get('last_posted_at')
         # When using the webhook, in TOPIC_CREATED mode,
