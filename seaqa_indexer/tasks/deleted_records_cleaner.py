@@ -12,6 +12,7 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.handlers import get_handler
+from seaqa_indexer.seadb_models.models import TicketsTable, TicketCommentsTable, PortalIssuesTable, PortalIssueCommentsTable, KnowledgeBaseTable
 
 
 logger = logging.getLogger(__name__)
@@ -54,13 +55,125 @@ class DeletedRecordsCleaner(object):
             if not self.should_stop.is_set():
                 logger.info('Start to clean deleted records')
                 try:
-                    self.clean_deleted_records()
+                    self.clean_deleted_project_records()
                 except Exception as e:
-                    logger.exception('Cron clean deleted records error: %s', e)
+                    logger.exception('Cron clean deleted project records error: %s', e)
+                try:
+                    self.clean_deleted_connection_records()
+                except Exception as e:
+                    logger.exception('Cron clean deleted connection records error: %s', e)
+    
+    def clean_deleted_portal_issue_records(self, seadb_api, project_uuid, cutoff_time):
+        page_size = 1000
+        portal_issue_table_name = PortalIssuesTable.gen_table_name()
+        portal_issue_comment_table_name = PortalIssueCommentsTable.gen_table_name()
+        total_deleted = 0
 
-    def clean_deleted_records(self):
+        while True:
+            sql = f"""
+                SELECT _pk FROM `{portal_issue_table_name}` 
+                WHERE deleted = true AND modified_time < '{cutoff_time}'
+                LIMIT {page_size}
+            """
+            result = seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+            if not rows:
+                break
+
+            deleted_pks = [row.get('_pk') for row in rows]
+
+            seadb_api.delete_rows(project_uuid, portal_issue_table_name, deleted_pks)
+            for issue_id in deleted_pks:
+                delete_sql = f"DELETE FROM `{portal_issue_comment_table_name}` WHERE issue_id = {issue_id}"
+                seadb_api.query_rows(project_uuid, delete_sql)
+
+            total_deleted += len(deleted_pks)
+
+            if len(rows) < page_size:
+                break
+
+        return total_deleted
+    
+    def clean_deleted_ticket_records(self, seadb_api, project_uuid, cutoff_time):
+        page_size = 1000
+        ticket_table_name = TicketsTable.gen_table_name()
+        ticket_comment_table_name = TicketCommentsTable.gen_table_name()
+        total_deleted = 0
+
+        while True:
+            sql = f"""
+                SELECT _pk FROM `{ticket_table_name}` 
+                WHERE deleted = true AND modified_time < '{cutoff_time}'
+                LIMIT {page_size}
+            """
+            result = seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+            if not rows:
+                break
+
+            deleted_pks = [row.get('_pk') for row in rows]
+
+            seadb_api.delete_rows(project_uuid, ticket_table_name, deleted_pks)
+            for issue_id in deleted_pks:
+                delete_sql = f"DELETE FROM `{ticket_comment_table_name}` WHERE ticket_id = {issue_id}"
+                seadb_api.query_rows(project_uuid, delete_sql)
+
+            total_deleted += len(deleted_pks)
+
+            if len(rows) < page_size:
+                break
+
+        return total_deleted
+    
+    def clean_deleted_kb_records(self, seadb_api, project_uuid, cutoff_time):
+        page_size = 1000
+        kb_table_name = KnowledgeBaseTable.gen_table_name()
+        total_deleted = 0
+
+        while True:
+            sql = f"""
+                SELECT _pk FROM `{kb_table_name}` 
+                WHERE deleted = true AND modified_time < '{cutoff_time}'
+                LIMIT {page_size}
+            """
+            result = seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+            if not rows:
+                break
+
+            deleted_pks = [row.get('_pk') for row in rows]
+
+            seadb_api.delete_rows(project_uuid, kb_table_name, deleted_pks)
+
+            total_deleted += len(deleted_pks)
+
+            if len(rows) < page_size:
+                break
+
+        return total_deleted
+
+    def clean_deleted_project_records(self):
+        projects = self.seaqa_db.get_recently_updated_projects(days=self.recent_days)
+        logger.info('Found %d recently updated projects to check for deleted records', len(projects))
+        cutoff_time = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=self.delete_after_days)).isoformat()
+
+        for project in projects:
+            project_uuid = project.uuid
+
+            try:
+                deleted_portal_issue_count = self.clean_deleted_portal_issue_records(self.seadb_api, project_uuid, cutoff_time)
+                deleted_ticket_count = self.clean_deleted_ticket_records(self.seadb_api, project_uuid, cutoff_time)
+                deleted_kb_count = self.clean_deleted_kb_records(self.seadb_api, project_uuid, cutoff_time)
+                
+                logger.info('Deleted %d portal issue records, %d ticket records, %d konwledge_base records from project %s',  
+                            deleted_portal_issue_count, deleted_ticket_count, deleted_kb_count, project_uuid)
+            except Exception as e:
+                logger.exception('Failed to clean deleted records for project %s: %s', project_uuid, e)
+
+    def clean_deleted_connection_records(self):
         connections = self.seaqa_db.get_recently_updated_connections(days=self.recent_days)
         logger.info('Found %d recently updated connections to check for deleted records', len(connections))
+        cutoff_time = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=self.delete_after_days)).isoformat()
 
         for connection in connections:
             connection_id = connection.id
@@ -74,8 +187,6 @@ class DeletedRecordsCleaner(object):
                     continue
 
                 table_name = handler.gen_table_name(connection_id)
-                cutoff_time = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=self.delete_after_days)).isoformat()
-
                 total_deleted = handler.clean_deleted_records(
                     self.seadb_api, project_uuid, connection_id, cutoff_time
                 )

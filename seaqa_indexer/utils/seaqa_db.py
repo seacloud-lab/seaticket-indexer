@@ -232,6 +232,17 @@ class SeaqaDB(object):
                      AND pc.deleted = false
                      AND pc.last_sync_time >= DATE_SUB(NOW(), INTERVAL :days DAY)"""
             return session.execute(text(sql), {'days': days}).fetchall()
+    
+    def get_recently_updated_projects(self, days=7):
+        with self.db_session_class() as session:
+            sql = """SELECT uuid
+                     FROM projects 
+                     WHERE deleted = false 
+                     AND (knowledge_base_indexed_at >= DATE_SUB(NOW(), INTERVAL :days DAY) 
+                     OR ticket_indexed_at >= DATE_SUB(NOW(), INTERVAL :days DAY) 
+                     OR portal_issue_indexed_at >= DATE_SUB(NOW(), INTERVAL :days DAY))
+                     """
+            return session.execute(text(sql), {'days': days}).fetchall()
 
     def get_need_cleaned_connections_by_type(self, recent_days, connection_type):
         with self.db_session_class() as session:
