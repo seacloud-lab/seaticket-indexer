@@ -145,7 +145,7 @@ class DiscourseHandler(ConnectionHandler):
         while True:
             sql = f"""
                 SELECT _pk, topic_id FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
+                WHERE deleted = true AND record_modified_time < '{cutoff_time}'
                 LIMIT {page_size}
             """
             result = seadb_api.query_rows(project_uuid, sql)

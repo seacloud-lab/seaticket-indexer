@@ -149,3 +149,29 @@ class SiteHandler(ConnectionHandler):
         # Site sync is handled by web_crawl_manager, not through this method
         # This is a placeholder - actual site crawling uses different mechanism
         raise NotImplementedError("Site sync is handled by web_crawl_manager")
+    
+    def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
+        """Clean deleted site records."""
+        page_size = 1000
+        table_name = self.gen_table_name(connection_id)
+        total_deleted = 0
+
+        while True:
+            sql = f"""
+                SELECT _pk FROM `{table_name}` 
+                WHERE deleted = true AND record_modified_time < '{cutoff_time}'
+                LIMIT {page_size}
+            """
+            result = seadb_api.query_rows(project_uuid, sql)
+            rows = result.get('results', [])
+            if not rows:
+                break
+
+            deleted_pks = [row.get('_pk') for row in rows]
+            seadb_api.delete_rows(project_uuid, table_name, deleted_pks)
+            total_deleted += len(deleted_pks)
+
+            if len(rows) < page_size:
+                break
+
+        return total_deleted

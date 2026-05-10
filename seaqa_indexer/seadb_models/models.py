@@ -372,6 +372,20 @@ class TicketsTable(BaseModel):
         return 'tickets'
 
 
+class TicketCommentsTable(BaseModel):
+    ticket_id = MappedColumn('ticket_id', PropertyTypes.INT)
+    content = MappedColumn('content', PropertyTypes.TEXT)
+    creator = MappedColumn('creator', PropertyTypes.TEXT)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    via_agent = MappedColumn('via_agent', PropertyTypes.BOOL)
+
+    @classmethod
+    def gen_table_name(cls):
+        return 'ticket_comments'
+
+
 class PortalIssuesTable(BaseModel):
     """Issues submitted by external users through the support portal."""
     title = MappedColumn('title', PropertyTypes.TEXT)
@@ -399,18 +413,18 @@ class PortalIssuesTable(BaseModel):
     def gen_table_name(cls):
         return 'portal_issues'
 
-class TicketCommentsTable(BaseModel):
-    ticket_id = MappedColumn('ticket_id', PropertyTypes.INT)
+class PortalIssueCommentsTable(BaseModel):
+    """Comments on portal issues submitted by external users."""
+    issue_id = MappedColumn('issue_id', PropertyTypes.INT)
     content = MappedColumn('content', PropertyTypes.TEXT)
     creator = MappedColumn('creator', PropertyTypes.TEXT)
     created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
-    via_agent = MappedColumn('via_agent', PropertyTypes.BOOL)
 
     @classmethod
     def gen_table_name(cls):
-        return 'ticket_comments'
+        return 'portal_issue_comments'
 
 
 class EmailTable(BaseModel):
