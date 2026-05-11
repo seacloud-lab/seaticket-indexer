@@ -131,6 +131,11 @@ class ConnectionHandler(ABC):
             'new_value': new_value or None,
         }
 
+    def should_publish_state_event(self, state_event) -> bool:
+        if state_event.get('old_value') is not None or state_event.get('new_value') is not None:
+            return True
+        return False
+
     def publish_synced_record_events(
         self,
         *,
@@ -182,7 +187,7 @@ class ConnectionHandler(ABC):
                 new_row=latest_row,
                 ignored_fields=state_event_ignored_fields,
             )
-            if state_event.get('old_value') is not None or state_event.get('new_value') is not None:
+            if self.should_publish_state_event(state_event):
                 self.mq.publish('data_events', json.dumps({
                     **base_event,
                     'event': state_event,
