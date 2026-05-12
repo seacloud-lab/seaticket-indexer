@@ -4,7 +4,6 @@ import logging
 
 import requests
 
-from seaqa_indexer.ai_processor.utils import generate_summary
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.seadb_models.general_task_seadb_api import GeneralTaskSeaDBAPI
@@ -80,7 +79,8 @@ class GeneralTaskHandler(ConnectionHandler):
                 title = row.get('title', '')
                 content = row.get('content', '')
                 full_content = f"Title: {title}\n\nContent: {content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.GENERAL_TASK.value, project_uuid)
+                summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.GENERAL_TASK.value, project_uuid)
+                vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
                     'pk': pk,
                     'row': {
