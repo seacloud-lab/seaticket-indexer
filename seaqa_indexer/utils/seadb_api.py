@@ -5,6 +5,8 @@ import requests
 from seaqa_indexer.config import SEADB_SERVER_ACCESS_TOKEN, SEADB_SERVER_URL
 from seaqa_indexer.utils import uuid_str_to_36_chars
 
+SEADB_COMPONENT_USERNAME = 'seaqa-indexer'
+
 
 def parse_response(response):
     if response.status_code >= 400 or response.status_code < 200:
@@ -23,15 +25,17 @@ class OptionValueInvalidException(Exception):
 
 
 class SeaDBAPI:
-    def __init__(self, timeout=30):
+    def __init__(self, timeout=30, username=SEADB_COMPONENT_USERNAME):
         self.timeout = timeout
         self.secret_key = SEADB_SERVER_ACCESS_TOKEN
         self.server_url = SEADB_SERVER_URL
+        self.username = username
 
     def gen_headers(self, base_id):
         payload = {
             'exp': int(time.time()) + 3600,
             'base_id': base_id,
+            'username': self.username,
         }
         token = jwt.encode(payload, self.secret_key, algorithm='HS256')
         return {"Authorization": "Bearer %s" % token}
