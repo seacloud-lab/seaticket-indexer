@@ -483,6 +483,7 @@ class GeneralTaskTable(BaseModel):
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
     due_date = MappedColumn('due_date', PropertyTypes.DATETIME)
     modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
     sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
     deleted = MappedColumn('deleted', PropertyTypes.BOOL)
     outdated = MappedColumn('outdated', PropertyTypes.BOOL)

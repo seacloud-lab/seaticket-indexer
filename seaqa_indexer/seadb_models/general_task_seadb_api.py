@@ -1,3 +1,6 @@
+import datetime
+import json
+
 from seaqa_indexer.seadb_models.models import GeneralTaskTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.config import GENERAL_TASK_COLUMN_MAPPINGS
@@ -28,14 +31,21 @@ class GeneralTaskSeaDBAPI:
         table_name = self._table_name(connection_id)
         self.seadb_api.update_rows(self.base_id, table_name, updates)
 
-    def get_rows_by_page(self, connection_id, page_size, offset):
+    def get_tasks_by_page(self, connection_id, since, page_size, offset):
         table_name = self._table_name(connection_id)
+        since_filter = ''
+        if since:
+            since_filter = f"WHERE record_modified_time >= '{since}'"
         sql = f"""
-            SELECT _pk, title, content, connection_id 
+            SELECT _pk, title, content, modified_time, deleted, outdated
             FROM `{table_name}`
+            {since_filter}
             LIMIT {page_size} OFFSET {offset}
         """
         return self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+
+    def get_rows_by_page(self, connection_id, page_size, offset):
+        return self.get_tasks_by_page(connection_id, None, page_size, offset)
 
     def get_pk_by_source_row_id(self, connection_id, source_row_id):
         table_name = self._table_name(connection_id)
@@ -72,30 +82,18 @@ class GeneralTaskSeaDBAPI:
             GeneralTaskTable.status.name,
             GeneralTaskTable.size.name,
             GeneralTaskTable.priority.name,
-            GeneralTaskTable.assignees.name,
-            GeneralTaskTable.participants.name,
         ]
         desired_values = {column_name: set() for column_name in target_columns}
         for task in tasks:
             status = task.get('status')
             size = task.get('size')
             priority = task.get('priority')
-            assignees = task.get('assignees')
-            participants = task.get('participants')
             if status:
                 desired_values[GeneralTaskTable.status.name].add(str(status))
             if size:
                 desired_values[GeneralTaskTable.size.name].add(str(size))
             if priority:
                 desired_values[GeneralTaskTable.priority.name].add(str(priority))
-            if isinstance(assignees, list):
-                for item in assignees:
-                    if item:
-                        desired_values[GeneralTaskTable.assignees.name].add(str(item))
-            if isinstance(participants, list):
-                for item in participants:
-                    if item:
-                        desired_values[GeneralTaskTable.participants.name].add(str(item))
         for column_name in target_columns:
             column_meta = column_name_to_meta.get(column_name)
             if not column_meta:
@@ -125,6 +123,35 @@ class GeneralTaskSeaDBAPI:
                 if option_data_payload:
                     option_data['option_data'] = option_data_payload
                 self.seadb_api.add_column_option(self.base_id, option_data)
+
+    def build_row_data(self, task, sync_time):
+        content = task.get('description', '')
+        others = task.get('others')
+        if isinstance(others, (dict, list)):
+            others = json.dumps(others, ensure_ascii=False)
+        elif others is None:
+            others = ''
+        else:
+            others = str(others)
+
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        return {
+            GeneralTaskTable.source_row_id.name: str(task.get('id') or '').strip(),
+            GeneralTaskTable.title.name: task.get('title', ''),
+            GeneralTaskTable.status.name: task.get('status'),
+            GeneralTaskTable.size.name: task.get('size'),
+            GeneralTaskTable.priority.name: task.get('priority'),
+            GeneralTaskTable.assignees.name: task.get('assignees', []),
+            GeneralTaskTable.participants.name: task.get('participants', []),
+            GeneralTaskTable.others.name: others,
+            GeneralTaskTable.content.name: content,
+            GeneralTaskTable.due_date.name: task.get('due_date'),
+            GeneralTaskTable.modified_time.name: task.get('modified_time') or now,
+            GeneralTaskTable.created_time.name: task.get('created_time') or now,
+            GeneralTaskTable.sync_time.name: sync_time,
+            GeneralTaskTable.record_modified_time.name: now,
+            GeneralTaskTable.deleted.name: bool(task.get('deleted', False)),
+        }
 
     def get_total_count(self, connection_id):
         table_name = self._table_name(connection_id)
