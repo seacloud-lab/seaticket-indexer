@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import time
 
 import requests
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 class GeneralTaskHandler(ConnectionHandler):
     connection_type = ConnectionType.GENERAL_TASK.value
     BATCH_SIZE = 50
+    FETCH_PAGE_SIZE = 100
 
     def gen_table_name(self, connection_id):
         return GeneralTaskTable.gen_table_name(connection_id)
@@ -109,60 +111,73 @@ class GeneralTaskHandler(ConnectionHandler):
         since = None
         if old_last_sync_time:
             since = old_last_sync_time.isoformat()
+        sync_before = datetime.datetime.now(datetime.UTC).isoformat()
         params['since_at'] = since
+        params['sync_before'] = sync_before
+        params['limit'] = self.FETCH_PAGE_SIZE
 
         headers = {}
         if auth_token:
             headers['Authorization'] = f'Bearer {auth_token}'
-
-        try:
-            resp = requests.get(endpoint, params=params, headers=headers, timeout=60)
-        except Exception as error:
-            sync_logger.log(f'Fetch tasks failed: {error}')
-            return None, None, None, None
-
-        if resp.status_code >= 400:
-            sync_logger.log(f'Fetch tasks failed: {resp.text}')
-            return None, None, None, None
-        data = resp.json()
-        tasks = data.get('tasks', [])
         general_task_seadb_api = GeneralTaskSeaDBAPI(project_uuid)
-        try:
-            general_task_seadb_api.ensure_task_column_options(connection_id, tasks)
-        except Exception as error:
-            sync_logger.log(f'Ensure task column options failed: {error}')
 
         sync_count = 0
         status_last_update_time = datetime.datetime.now()
         status_last_update_count = 0
 
         spec_keys = GENERAL_TASK_CONNECTION_SPEC.keys()
-        for task in tasks:
-            source_row_id = str(task.get('id') or '').strip()
-            if not source_row_id:
-                continue
+        while True:
+            try:
+                resp = requests.get(endpoint, params=params, headers=headers, timeout=60)
+                data = resp.json()
+                print(data, '---data')
+            except Exception as error:
+                sync_logger.log(f'Fetch tasks failed: {error}')
+                return None, None, None, None
 
-            existing_pk = general_task_seadb_api.get_pk_by_source_row_id(connection_id, source_row_id)
-            task_data = {key: task.get(key) for key in spec_keys}
-            row_data = general_task_seadb_api.build_row_data(task_data)
-            if existing_pk:
-                general_task_seadb_api.update_rows(connection_id, [{
-                    'pk': existing_pk,
-                    'row': row_data,
-                }])
-            else:
-                general_task_seadb_api.append_rows(connection_id, [row_data])
-            sync_count += 1
-            should_update_status, new_update_time, new_update_count = need_update_connection_last_sync_count(
-                sync_count,
-                status_last_update_time,
-                status_last_update_count
-            )
-            if should_update_status:
-                connection_status['last_sync_count'] = sync_count
-                seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                status_last_update_time = new_update_time
-                status_last_update_count = new_update_count
+            tasks = data.get('tasks', [])
+            if tasks:
+                try:
+                    general_task_seadb_api.ensure_task_column_options(connection_id, tasks)
+                except Exception as error:
+                    sync_logger.log(f'Ensure task column options failed: {error}')
+
+            for task in tasks:
+                source_row_id = str(task.get('id') or '').strip()
+                if not source_row_id:
+                    continue
+
+                existing_pk = general_task_seadb_api.get_pk_by_source_row_id(connection_id, source_row_id)
+                task_data = {key: task.get(key) for key in spec_keys}
+                row_data = general_task_seadb_api.build_row_data(task_data)
+                if existing_pk:
+                    general_task_seadb_api.update_rows(connection_id, [{
+                        'pk': existing_pk,
+                        'row': row_data,
+                    }])
+                else:
+                    general_task_seadb_api.append_rows(connection_id, [row_data])
+                sync_count += 1
+                should_update_status, new_update_time, new_update_count = need_update_connection_last_sync_count(
+                    sync_count,
+                    status_last_update_time,
+                    status_last_update_count
+                )
+                if should_update_status:
+                    connection_status['last_sync_count'] = sync_count
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                    status_last_update_time = new_update_time
+                    status_last_update_count = new_update_count
+
+            page_info = data.get('page_info') or {}
+            has_more = bool(page_info.get('has_more'))
+            if not has_more:
+                break
+            next_cursor = page_info.get('next_cursor')
+            if not next_cursor:
+                sync_logger.log('Fetch tasks failed: missing next cursor in paged response')
+                return None, None, None, None
+            params['next_cursor'] = next_cursor
 
         total_count = general_task_seadb_api.get_total_count(connection_id)
         return sync_count, total_count, False, config
