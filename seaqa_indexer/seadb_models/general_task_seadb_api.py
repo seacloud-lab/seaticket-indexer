@@ -124,7 +124,7 @@ class GeneralTaskSeaDBAPI:
                     option_data['option_data'] = option_data_payload
                 self.seadb_api.add_column_option(self.base_id, option_data)
 
-    def build_row_data(self, task, sync_time):
+    def build_row_data(self, task):
         content = task.get('description', '')
         others = task.get('others')
         if isinstance(others, (dict, list)):
@@ -148,7 +148,7 @@ class GeneralTaskSeaDBAPI:
             GeneralTaskTable.due_date.name: task.get('due_date'),
             GeneralTaskTable.modified_time.name: task.get('modified_time') or now,
             GeneralTaskTable.created_time.name: task.get('created_time') or now,
-            GeneralTaskTable.sync_time.name: sync_time,
+            GeneralTaskTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             GeneralTaskTable.record_modified_time.name: now,
             GeneralTaskTable.deleted.name: bool(task.get('deleted', False)),
         }

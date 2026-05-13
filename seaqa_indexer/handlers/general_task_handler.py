@@ -10,8 +10,7 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.seadb_models.general_task_seadb_api import GeneralTaskSeaDBAPI
 from seaqa_indexer.seadb_models.models import GeneralTaskTable
 from seaqa_indexer.utils import need_update_connection_last_sync_count
-from seaqa_indexer.utils.constants import ConnectionType, IndexStatus, \
-GENERAL_TASK_CONNECTION_SPEC
+from seaqa_indexer.utils.constants import ConnectionType, IndexStatus, GENERAL_TASK_CONNECTION_SPEC
 
 logger = logging.getLogger(__name__)
 
@@ -102,12 +101,14 @@ class GeneralTaskHandler(ConnectionHandler):
             sync_logger.log('General Task config missing base_url')
             return None, None, None, None
 
-        endpoint = f"{base_url.rstrip('/')}/tasks/"
+        endpoint = base_url.rstrip('/')
+        if not endpoint.endswith('/tasks'):
+            endpoint = f'{endpoint}/tasks'
+        endpoint = f'{endpoint}/'
         params = {}
+        since = None
         if old_last_sync_time:
-            since = old_last_sync_time.isoformat() + "Z"
-        else:
-            since = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=365)).isoformat().replace('+00:00', 'Z')
+            since = old_last_sync_time.isoformat()
         params['since_at'] = since
 
         headers = {}
@@ -132,8 +133,7 @@ class GeneralTaskHandler(ConnectionHandler):
             sync_logger.log(f'Ensure task column options failed: {error}')
 
         sync_count = 0
-        status_last_update_time = datetime.datetime.now(datetime.UTC)
-        sync_time = status_last_update_time.isoformat()
+        status_last_update_time = datetime.datetime.now()
         status_last_update_count = 0
 
         spec_keys = GENERAL_TASK_CONNECTION_SPEC.keys()
@@ -143,10 +143,8 @@ class GeneralTaskHandler(ConnectionHandler):
                 continue
 
             existing_pk = general_task_seadb_api.get_pk_by_source_row_id(connection_id, source_row_id)
-            task_data = {key: task.get(key) for key in spec_keys if key != 'id'}
-            print(task_data, '---task_data')
-            row_data = general_task_seadb_api.build_row_data(task_data, sync_time)
-            print(row_data, '---row_data')
+            task_data = {key: task.get(key) for key in spec_keys}
+            row_data = general_task_seadb_api.build_row_data(task_data)
             if existing_pk:
                 general_task_seadb_api.update_rows(connection_id, [{
                     'pk': existing_pk,
@@ -168,11 +166,3 @@ class GeneralTaskHandler(ConnectionHandler):
 
         total_count = general_task_seadb_api.get_total_count(connection_id)
         return sync_count, total_count, False, config
-
-    def clean_connection_data(self, storage, seadb_api, project_uuid, connection_id, tables):
-        if not tables:
-            return
-        table_name = self.gen_table_name(connection_id)
-        for table in tables:
-            if table.get('name') == table_name:
-                seadb_api.delete_table(project_uuid, table.get('id'))
