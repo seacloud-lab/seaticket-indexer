@@ -2,17 +2,9 @@
 
 set -e
 
-export PYTHONPATH=$PYTHONPATH:/usr/lib/python3.12/dist-packages:/usr/lib/python3.12/site-packages:/usr/local/lib/python3.12/dist-packages:/usr/local/lib/python3.12/site-packages:/data/dev:/data/dev/seaqa-indexer/
+export PYTHONPATH=$PYTHONPATH:/opt/seaticket/seaqa-indexer/
 
-# === Configuration ===
-export SEAQA_MYSQL_DB_HOST=xxx
-export SEAQA_MYSQL_DB_PORT=3306
-export SEAQA_MYSQL_DB_USER=xxx
-export SEAQA_MYSQL_DB_PASSWORD=xxx
-export SEAQA_MYSQL_DB_NAME=xxx
-
-
-INDEXER_SCRIPT="/data/dev/seaqa-indexer/seaqa_indexer/index/script/index_local.py"
+INDEXER_SCRIPT="/opt/seaticket/seaqa-indexer/seaqa_indexer/index/script/index_local.py"
 
 # ==================== Help ====================
 show_help() {
