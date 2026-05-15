@@ -1,7 +1,7 @@
 import datetime
 import json
 
-from seaqa_indexer.seadb_models.models import GeneralTaskTable
+from seaqa_indexer.seadb_models.models import GeneralTaskTable, GeneralTaskUserMappingTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.config import GENERAL_TASK_COLUMN_MAPPINGS
 
@@ -13,6 +13,9 @@ class GeneralTaskSeaDBAPI:
 
     def _table_name(self, connection_id):
         return GeneralTaskTable.gen_table_name(connection_id)
+
+    def _user_mapping_table_name(self, connection_id):
+        return GeneralTaskUserMappingTable.gen_table_name(connection_id)
 
     def get_need_ai_tasks_by_page(self, connection_id, page_size):
         table_name = self._table_name(connection_id)
@@ -56,11 +59,46 @@ class GeneralTaskSeaDBAPI:
             return None
         return results[0].get('_pk')
 
+    def get_user_mapping_pk_by_email(self, connection_id, email):
+        table_name = self._user_mapping_table_name(connection_id)
+        escaped = email.replace("'", "''")
+        sql = f"SELECT _pk FROM `{table_name}` WHERE email = '{escaped}' LIMIT 1"
+        results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if not results:
+            return None
+        return results[0].get('_pk')
+
     def append_rows(self, connection_id, rows):
         if not rows:
             return
         table_name = self._table_name(connection_id)
         self.seadb_api.insert_rows(self.base_id, table_name, rows)
+
+    def upsert_user_mappings(self, connection_id, user_mappings):
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        inserts = []
+        updates = []
+        for user_mapping in user_mappings:
+            email = str(user_mapping.get('email') or '').strip()
+            nickname = str(user_mapping.get('nickname') or '').strip()
+            if not email or not nickname:
+                continue
+            row = {
+                GeneralTaskUserMappingTable.email.name: email,
+                GeneralTaskUserMappingTable.nickname.name: nickname,
+                GeneralTaskUserMappingTable.record_modified_time.name: now,
+            }
+            existing_pk = self.get_user_mapping_pk_by_email(connection_id, email)
+            if existing_pk:
+                updates.append({'pk': existing_pk, 'row': row})
+            else:
+                inserts.append(row)
+
+        table_name = self._user_mapping_table_name(connection_id)
+        if inserts:
+            self.seadb_api.insert_rows(self.base_id, table_name, inserts)
+        if updates:
+            self.seadb_api.update_rows(self.base_id, table_name, updates)
 
     def ensure_task_column_options(self, connection_id, tasks):
         if not tasks:

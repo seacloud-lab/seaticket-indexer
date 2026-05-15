@@ -498,6 +498,16 @@ class GeneralTaskTable(BaseModel):
         return ConnectionType.GENERAL_TASK.value + '_' + str(connection_id)
 
 
+class GeneralTaskUserMappingTable(BaseModel):
+    email = MappedColumn('email', PropertyTypes.TEXT)
+    nickname = MappedColumn('nickname', PropertyTypes.TEXT)
+    record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.GENERAL_TASK.value + '_user_mapping_' + str(connection_id)
+
+
 class KnowledgeBaseTable(BaseModel):
     title = MappedColumn('title', PropertyTypes.TEXT)
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
