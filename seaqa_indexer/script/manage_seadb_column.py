@@ -196,57 +196,56 @@ def str_to_bool(v):
 
 
 def create_parser():
-    parser = argparse.ArgumentParser(description='SeaQA Index Management Tool')
-    subparsers = parser.add_subparsers(title='subcommands', dest='command', required=True)
+    parent_parser = argparse.ArgumentParser(add_help=False)
 
-    parser.add_argument(
+    parent_parser.add_argument(
         '--logfile',
         default=sys.stdout,
         type=argparse.FileType('a'),
         help='Log file path (default: stdout)'
     )
 
-    parser.add_argument(
+    parent_parser.add_argument(
         '--loglevel',
         default='info',
         choices=['debug', 'info', 'warning', 'error'],
         help='Logging level (default: info)'
     )
 
-    parser.add_argument(
+    parent_parser.add_argument(
         '--table-name',
         dest='table_name',
         help='Table Name'
     )
 
-    parser.add_argument(
+    parent_parser.add_argument(
         '--table-type',
         dest='table_type',
         choices=[TableType.PROJECT, TableType.CONNECTION],
         help='Table type'
     )
 
-    parser.add_argument(
+    parent_parser.add_argument(
         '--column-name',
         dest='column_name',
         help='column name'
     )
 
-    parser.add_argument(
+    parent_parser.add_argument(
         '--column-type',
         dest='column_type',
         choices=[value for key, value in PropertyTypes.__dict__.items() if not key.startswith('__')],
         help='column type'
     )
 
-    parser.add_argument(
+    parent_parser.add_argument(
         '--column-data-name',
         dest='column_data_name',
         choices=['text_compresse', 'list_float32', 'list_float64', 'list_int', 'list_bool', 'list_datetime'],
         help='column data name'
     )
 
-    parser.add_argument(
+    parent_parser.add_argument(
         '--need-add-index',
         type=str_to_bool,
         dest='need_add_index',
@@ -254,19 +253,26 @@ def create_parser():
         help='Need add index'
     )
 
+    parser = argparse.ArgumentParser(description='SeaQA Index Management Tool')
+    subparsers = parser.add_subparsers(title='subcommands', dest='command', required=True)
+
     parser_add = subparsers.add_parser(
-        'add',
+        'add-column',
+        parents=[parent_parser],
         help='add seadb column'
     )
     parser_add.set_defaults(func=start_add_column)
 
-    parser_clear = subparsers.add_parser(
-        'delete',
+    parser_delete = subparsers.add_parser(
+        'delete-column',
+        parents=[parent_parser],
         help='delete seadb column'
     )
-    parser_clear.set_defaults(func=start_delete_column)
+    parser_delete.set_defaults(func=start_delete_column)
 
     return parser
+
+
 
 
 def main():

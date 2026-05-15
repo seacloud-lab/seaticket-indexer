@@ -9,36 +9,43 @@ MANAGE_COLUMN_SCRIPT="/opt/seaticket/seaqa-indexer/seaqa_indexer/script/manage_s
 # ==================== Help ====================
 show_help() {
     cat <<EOF
-Usage: $0 [options] <command> [arguments]
+Usage: $0 <command> [options] [arguments]
 
 Commands:
-  add    Add column
-  delete     delete column
+  add-column        Add column
+  delete-column     Delete column
+
 
 Options:
   -h, --help                Show this help
   --log-file FILE           Log file path (default: output to terminal)
   --log-level LEVEL         Log level (default: info)
 
-BUSINESS_ARGS (for both 'add' and 'delete'):
+
+BUSINESS_ARGS (for both 'add-column' and 'delete-column'):
   --table-name NAME                Name of the SeaDB table.
   --table-type TYPE                Type of the table (project or connection).
   --column-name column_name        Name of the column to add/delete.
 
-BUSINESS_ARGS (only for 'add'):
+
+BUSINESS_ARGS (only for 'add-column'):
   --column-type           TYPE             column's type
   --column-data-name      NAME             Optional configuration for the column (e.g., text_compressed).
   --need-add-index        VALUE            Whether to create an index. Value can be true/false, 1/0, etc.
 
+
 Examples:
   # Add a compressed text column
-  $0 --table-name tickets --table-type project --column-name test1 --column-type text --column-data-name text_compresse add
+  $0 add-column --table-name tickets --table-type project --column-name test1 --column-type text --column-data-name text_compressed
+
 
   # Add a column with an index
-  $0 --table-name tickets --table-type project --column-name test1 --column-type text --need-add-index true add
+  $0 add-column --table-name tickets --table-type project --column-name test1 --column-type text --need-add-index true
 
-  # Delete a column (command at the end)
-  $0 --table-name tickets --table-type project --column-name test1 --log-file /tmp/alter_column.log delete
+
+  # Delete a column
+  $0 delete-column --table-name tickets --table-type project --column-name test1 --log-file /tmp/alter_column.log
+
 
 EOF
 }
@@ -49,19 +56,17 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     exit 0
 fi
 
-COMMAND=""
-for arg in "$@"; do
-    if [[ "$arg" == "add" || "$arg" == "delete" ]]; then
-        COMMAND="$arg"
-        break
-    fi
-done
 
-if [[ -z "$COMMAND" ]]; then
-    echo "Error: The command 'add' or 'delete' must be specified." >&2
+COMMAND="$1"
+
+
+if [[ "$COMMAND" != "add-column" && "$COMMAND" != "delete-column" ]]; then
+    echo "Error: The first argument must be the command 'add-column' or 'delete-column'." >&2
     echo "Use -h to view help." >&2
     exit 1
 fi
+
+shift 1
 
 
 LOG_LEVEL="info"
@@ -85,14 +90,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-CMD_ARGS=(--loglevel "$LOG_LEVEL")
 
-# Only pass `--logfile` if the user specifies a log file.
+# ==================== Build and execute commands ====================
+CMD_ARGS=("$COMMAND" "${TEMP_ARGS[@]}" --loglevel "$LOG_LEVEL")
+
+
 if [[ -n "$LOG_FILE" ]]; then
     CMD_ARGS+=(--logfile "$LOG_FILE")
 fi
-
-CMD_ARGS+=("${TEMP_ARGS[@]}")
-
-# ==================== Build and execute commands ====================
+echo ${CMD_ARGS[@]}
 exec python "$MANAGE_COLUMN_SCRIPT" "${CMD_ARGS[@]}"
