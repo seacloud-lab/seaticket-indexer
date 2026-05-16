@@ -129,9 +129,13 @@ class GeneralTaskHandler(ConnectionHandler):
         while True:
             try:
                 resp = requests.get(endpoint, params=params, headers=headers, timeout=60)
+                resp.raise_for_status()
                 data = resp.json()
+                if not isinstance(data, dict):
+                    raise ValueError('General task adapter returned invalid JSON payload')
             except Exception as error:
-                sync_logger.log(f'Fetch tasks failed: {error}')
+                logger.error(error)
+                sync_logger.log('Fetch tasks failed')
                 return None, None, None, None
 
             tasks = data.get('tasks', [])
