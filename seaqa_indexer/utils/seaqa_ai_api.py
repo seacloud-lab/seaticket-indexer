@@ -29,10 +29,9 @@ class SeaQAAIAPI:
             request_kwargs['timeout'] = timeout
         return requests.post(url, **request_kwargs)
 
-    def generate_summary(self, content, type, project_uuid, username='seaqa-indexer', scenario=AIScenario.SUMMARY.value):
+    def generate_summary(self, content, type, project_uuid, scenario=AIScenario.SUMMARY.value):
         params = {
             'content': content[:LLM_INPUT_CHARACTERS_LIMIT],
-            'username': username,
             'type': type,
             'project_uuid': project_uuid,
             'scenario': scenario,
@@ -44,10 +43,9 @@ class SeaQAAIAPI:
         summary = resp_json.get('summary', '')
         return summary
 
-    def generate_embedding(self, query_text, project_uuid, username='seaqa-indexer', scenario=AIScenario.SUMMARY.value):
+    def generate_embedding(self, query_text, project_uuid, scenario=AIScenario.SUMMARY.value):
         params = {
             'content': query_text,
-            'username': username,
             'project_uuid': project_uuid,
             'scenario': scenario,
         }
@@ -62,10 +60,9 @@ class SeaQAAIAPI:
 
         return embedding
 
-    def batch_generate_embeddings(self, texts, project_uuid, username='seaqa-indexer', scenario=AIScenario.SUMMARY.value):
+    def batch_generate_embeddings(self, texts, project_uuid, scenario=AIScenario.SUMMARY.value):
         params = {
             'contents': texts,
-            'username': username,
             'project_uuid': project_uuid,
             'scenario': scenario,
         }
@@ -80,10 +77,9 @@ class SeaQAAIAPI:
         assert len(embeddings) == len(texts), 'Batch generate embeddings error: response length mismatch'
         return embeddings
 
-    def generate_chunks_embedding(self, content, project_uuid, username='seaqa-indexer', scenario=AIScenario.SUMMARY.value):
+    def generate_chunks_embedding(self, content, project_uuid, scenario=AIScenario.SUMMARY.value):
         params = {
             'content': content,
-            'username': username,
             'project_uuid': project_uuid,
             'scenario': scenario,
         }
