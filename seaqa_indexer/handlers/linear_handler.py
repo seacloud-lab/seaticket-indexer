@@ -10,7 +10,6 @@ from seaqa_indexer.seadb_models.linear_seadb_api import LinearSeaDBAPI
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.linear_index import LinearIssuesIndex
-from seaqa_indexer.ai_processor.utils import generate_summary
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +67,7 @@ class LinearIssueHandler(ConnectionHandler):
                 content = row.get('content', '')
 
                 full_content = f"Title: {title}\n\nBody: {content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.LINEAR.value, project_uuid)
+                summary, vector = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.LINEAR.value, project_uuid)
                 updates.append({
                     "pk": pk,
                     "row": {
