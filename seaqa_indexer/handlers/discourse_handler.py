@@ -32,6 +32,8 @@ class DiscourseHandler(ConnectionHandler):
         old_value = state_event.get('old_value') or {}
         new_value = state_event.get('new_value') or {}
         changed_fields = set(old_value) | set(new_value)
+        if not changed_fields:
+            return False
         if changed_fields != {'resolved'}:
             return True
 
