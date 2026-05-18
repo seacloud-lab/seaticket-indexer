@@ -50,10 +50,10 @@ class GeneralTaskSeaDBAPI:
     def get_rows_by_page(self, connection_id, page_size, offset):
         return self.get_tasks_by_page(connection_id, None, page_size, offset)
 
-    def get_pk_by_source_row_id(self, connection_id, source_row_id):
+    def get_pk_by_source_task_id(self, connection_id, source_task_id):
         table_name = self._table_name(connection_id)
-        escaped = source_row_id.replace("'", "''")
-        sql = f"SELECT _pk FROM `{table_name}` WHERE source_row_id = '{escaped}' LIMIT 1"
+        escaped = source_task_id.replace("'", "''")
+        sql = f"SELECT _pk FROM `{table_name}` WHERE source_task_id = '{escaped}' LIMIT 1"
         results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if not results:
             return None
@@ -80,12 +80,12 @@ class GeneralTaskSeaDBAPI:
         updates = []
         for user_mapping in user_mappings:
             email = str(user_mapping.get('email') or '').strip()
-            nickname = str(user_mapping.get('nickname') or '').strip()
-            if not email or not nickname:
+            name = str(user_mapping.get('name') or '').strip()
+            if not email or not name:
                 continue
             row = {
                 GeneralTaskUserTable.email.name: email,
-                GeneralTaskUserTable.nickname.name: nickname,
+                GeneralTaskUserTable.name.name: name,
                 GeneralTaskUserTable.record_modified_time.name: now,
             }
             existing_pk = self.get_user_mapping_pk_by_email(connection_id, email)
@@ -174,7 +174,7 @@ class GeneralTaskSeaDBAPI:
 
         now = datetime.datetime.now(datetime.UTC).isoformat()
         return {
-            GeneralTaskTable.source_row_id.name: str(task.get('id') or '').strip(),
+            GeneralTaskTable.source_task_id.name: str(task.get('task_id') or '').strip(),
             GeneralTaskTable.title.name: task.get('title', ''),
             GeneralTaskTable.status.name: task.get('status'),
             GeneralTaskTable.size.name: task.get('size'),

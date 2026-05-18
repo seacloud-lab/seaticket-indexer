@@ -116,7 +116,7 @@ SEASEARCH_BULK_OPERATE_LIMIT = 100
 
 # Connection
 GENERAL_TASK_CONNECTION_SPEC = {
-    "id": {
+    "task_id": {
         "type": "string",
         "description": "srouce data id。"
     },

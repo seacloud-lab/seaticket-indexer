@@ -472,7 +472,7 @@ class ThreadTable(BaseModel):
 
 
 class GeneralTaskTable(BaseModel):
-    source_row_id = MappedColumn('source_row_id', PropertyTypes.TEXT)
+    source_task_id = MappedColumn('source_task_id', PropertyTypes.TEXT)
     title = MappedColumn('title', PropertyTypes.TEXT)
     status = MappedColumn('status', PropertyTypes.SINGLE_SELECT)
     size = MappedColumn('size', PropertyTypes.SINGLE_SELECT)
@@ -500,12 +500,12 @@ class GeneralTaskTable(BaseModel):
 
 class GeneralTaskUserTable(BaseModel):
     email = MappedColumn('email', PropertyTypes.TEXT)
-    nickname = MappedColumn('nickname', PropertyTypes.TEXT)
+    name = MappedColumn('name', PropertyTypes.TEXT)
     record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
 
     @classmethod
     def gen_table_name(cls, connection_id):
-        return ConnectionType.GENERAL_TASK.value + '_user_mapping_' + str(connection_id)
+        return ConnectionType.GENERAL_TASK.value + '_user_' + str(connection_id)
 
 
 class KnowledgeBaseTable(BaseModel):

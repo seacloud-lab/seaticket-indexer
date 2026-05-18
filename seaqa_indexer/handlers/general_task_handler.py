@@ -98,7 +98,7 @@ class GeneralTaskHandler(ConnectionHandler):
 
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, connection_status, seaqa_db, sync_logger):
         base_url = (config.get('base_url') or '').strip()
-        auth_token = (config.get('auth_token') or '').strip()
+        api_token = (config.get('api_token') or '').strip()
         if not base_url:
             sync_logger.log('General Task config missing base_url')
             return None, None, None, None
@@ -117,8 +117,8 @@ class GeneralTaskHandler(ConnectionHandler):
         params['limit'] = self.FETCH_PAGE_SIZE
 
         headers = {}
-        if auth_token:
-            headers['Authorization'] = f'Bearer {auth_token}'
+        if api_token:
+            headers['Authorization'] = f'Bearer {api_token}'
         general_task_seadb_api = GeneralTaskSeaDBAPI(project_uuid)
 
         sync_count = 0
@@ -152,11 +152,11 @@ class GeneralTaskHandler(ConnectionHandler):
                     sync_logger.log(f'Ensure task column options failed: {error}')
 
             for task in tasks:
-                source_row_id = str(task.get('id') or '').strip()
-                if not source_row_id:
+                source_task_id = str(task.get('task_id') or '').strip()
+                if not source_task_id:
                     continue
 
-                existing_pk = general_task_seadb_api.get_pk_by_source_row_id(connection_id, source_row_id)
+                existing_pk = general_task_seadb_api.get_pk_by_source_task_id(connection_id, source_task_id)
                 task_data = {key: task.get(key) for key in spec_keys}
                 row_data = general_task_seadb_api.build_row_data(task_data)
                 if existing_pk:
