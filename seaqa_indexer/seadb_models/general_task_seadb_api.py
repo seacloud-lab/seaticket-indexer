@@ -1,7 +1,7 @@
 import datetime
 import json
 
-from seaqa_indexer.seadb_models.models import GeneralTaskTable, GeneralTaskUserMappingTable
+from seaqa_indexer.seadb_models.models import GeneralTaskTable, GeneralTaskUserTable
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.config import GENERAL_TASK_COLUMN_MAPPINGS
 
@@ -15,7 +15,7 @@ class GeneralTaskSeaDBAPI:
         return GeneralTaskTable.gen_table_name(connection_id)
 
     def _user_mapping_table_name(self, connection_id):
-        return GeneralTaskUserMappingTable.gen_table_name(connection_id)
+        return GeneralTaskUserTable.gen_table_name(connection_id)
 
     def get_need_ai_tasks_by_page(self, connection_id, page_size):
         table_name = self._table_name(connection_id)
@@ -84,9 +84,9 @@ class GeneralTaskSeaDBAPI:
             if not email or not nickname:
                 continue
             row = {
-                GeneralTaskUserMappingTable.email.name: email,
-                GeneralTaskUserMappingTable.nickname.name: nickname,
-                GeneralTaskUserMappingTable.record_modified_time.name: now,
+                GeneralTaskUserTable.email.name: email,
+                GeneralTaskUserTable.nickname.name: nickname,
+                GeneralTaskUserTable.record_modified_time.name: now,
             }
             existing_pk = self.get_user_mapping_pk_by_email(connection_id, email)
             if existing_pk:
