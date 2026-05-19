@@ -14,7 +14,7 @@ class GeneralTaskSeaDBAPI:
     def _table_name(self, connection_id):
         return GeneralTaskTable.gen_table_name(connection_id)
 
-    def _user_mapping_table_name(self, connection_id):
+    def _task_user_table_name(self, connection_id):
         return GeneralTaskUserTable.gen_table_name(connection_id)
 
     def get_need_ai_tasks_by_page(self, connection_id, page_size):
@@ -59,14 +59,14 @@ class GeneralTaskSeaDBAPI:
             return None
         return results[0].get('_pk')
 
-    def get_user_mapping_pk_by_email(self, connection_id, email):
-        table_name = self._user_mapping_table_name(connection_id)
-        escaped = email.replace("'", "''")
-        sql = f"SELECT _pk FROM `{table_name}` WHERE email = '{escaped}' LIMIT 1"
+    def get_existing_user_mapping_pks(self, connection_id, emails):
+        if not emails:
+            return {}
+        table_name = self._task_user_table_name(connection_id)
+        escaped_emails = "', '".join(e.replace("'", "''") for e in emails)
+        sql = f"SELECT email, _pk FROM `{table_name}` WHERE email IN ('{escaped_emails}')"
         results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if not results:
-            return None
-        return results[0].get('_pk')
+        return {row.get('email'): row.get('_pk') for row in results}
 
     def append_rows(self, connection_id, rows):
         if not rows:
@@ -75,7 +75,13 @@ class GeneralTaskSeaDBAPI:
         self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
     def upsert_user_mappings(self, connection_id, user_mappings):
+        if not user_mappings:
+            return
         now = datetime.datetime.now(datetime.UTC).isoformat()
+        emails = [str(user_mapping.get('email') or '').strip() for user_mapping in user_mappings]
+        emails = [e for e in emails if e]
+        existing_pks = self.get_existing_user_mapping_pks(connection_id, emails)
+
         inserts = []
         updates = []
         for user_mapping in user_mappings:
@@ -88,13 +94,13 @@ class GeneralTaskSeaDBAPI:
                 GeneralTaskUserTable.name.name: name,
                 GeneralTaskUserTable.record_modified_time.name: now,
             }
-            existing_pk = self.get_user_mapping_pk_by_email(connection_id, email)
+            existing_pk = existing_pks.get(email)
             if existing_pk:
                 updates.append({'pk': existing_pk, 'row': row})
             else:
                 inserts.append(row)
 
-        table_name = self._user_mapping_table_name(connection_id)
+        table_name = self._task_user_table_name(connection_id)
         if inserts:
             self.seadb_api.insert_rows(self.base_id, table_name, inserts)
         if updates:

@@ -29,7 +29,6 @@ class PropertyTypes:
     GEOLOCATION = 'geolocation'
     BUTTON = 'button'
     LIST = 'list'
-    JSON = 'json'
 
 
 class ListTypes:
