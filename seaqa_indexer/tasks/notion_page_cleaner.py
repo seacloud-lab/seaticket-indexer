@@ -1,16 +1,12 @@
-import sys
 import time
 import json
 import logging
-import threading
-import signal
 import datetime
+from threading import Thread, Event
 
-from seaqa_indexer import config
-from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils import decrypt_config, add_suffix_to_logfile
+from seaqa_indexer.utils import decrypt_config
 from seaqa_indexer.utils.notion_api import NotionAPI
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -19,44 +15,37 @@ from seaqa_indexer.utils.constants import ConnectionType
 logger = logging.getLogger(__name__)
 
 
-NOTION_PAGE_CLEANER_LOG_SUFFIX = 'notion_page_cleaner'
-
 class NotionPageCleaner(object):
+    def __init__(self):
+        self._enabled = True
+        self._interval = 24 * 60 * 60 # Running interval
+        self.check_days = 30 # Only check connections that are more than 30 days old since the last cleanup.
+
+    def start(self):
+        if not self.is_enabled():
+            logging.warning('Can not start notion page cleaner: it is not enabled!')
+            return
+
+        NotionPageCleanerTimer(self._interval, self.check_days).start()
+        logging.info('notion page cleaner timer is started')
+
+    def is_enabled(self):
+        return self._enabled
+
+
+class NotionPageCleanerTimer(Thread):
     """Compare remote Notion pages with local records and mark missing pages as deleted."""
 
-    def __init__(self):
+    def __init__(self, interval, check_days):
+        Thread.__init__(self)
         self.db_session_class = init_db_session_class()
         self.seadb_api = SeaDBAPI()
         self.seaqa_db = SeaqaDB(self.db_session_class)
 
-        self.should_stop = threading.Event()
-        self.clear_interval = 24 * 60 * 60
-        self.recent_days = 30 # Only check connections that are more than 30 days old since the last cleanup.
+        self.finished = Event()
+        self.interval = interval
+        self.check_days = check_days
         self.page_size = 100
-        self.set_signal()
-
-    @property
-    def tname(self):
-        return threading.current_thread().name
-
-    def start(self):
-        threading.Thread(
-            target=self.cron_clean_notion_pages,
-            name='cron_clean_notion_pages_thread',
-            daemon=True
-        ).start()
-
-    def cron_clean_notion_pages(self):
-        logger.info('Start notion page cleaner timer')
-        while not self.should_stop.is_set():
-            self.should_stop.wait(self.clear_interval)
-
-            if not self.should_stop.is_set():
-                logger.info('Start to clean notion pages')
-                try:
-                    self.clean_notion_pages()
-                except Exception as e:
-                    logger.exception('Cron clean notion pages error: %s', e)
 
     def fetch_remote_page_ids(self, notion_api):
         page_ids = set()
@@ -103,7 +92,7 @@ class NotionPageCleaner(object):
         return local_page_map
 
     def clean_notion_pages(self):
-        connections = self.seaqa_db.get_need_cleaned_connections_by_type(self.recent_days, ConnectionType.NOTION.value)
+        connections = self.seaqa_db.get_need_cleaned_connections_by_type(self.check_days, ConnectionType.NOTION.value)
         logger.info('Found %d notion connections to clean', len(connections))
 
         for connection in connections:
@@ -133,37 +122,15 @@ class NotionPageCleaner(object):
             except Exception as e:
                 logger.exception('Failed to clean notion pages for connection %s: %s', connection_id, e)
 
-    def clear(self):
-        self.should_stop.set()
-        logger.info("Exit notion page cleaner process")
-        sys.exit(0)
+    def run(self):
+        while not self.finished.is_set():
+            self.finished.wait(self.interval)
+            if not self.finished.is_set():
+                logging.info('starts to clean notion pages task')
+                try:
+                    self.clean_notion_pages()
+                except Exception as e:
+                    logging.exception('clean notion pages task error: %s', e)
 
-    def signal_term_handler(self, signal, frame):
-        self.clear()
-
-    def set_signal(self):
-        signal.signal(signal.SIGTERM, self.signal_term_handler)
-
-
-def start():
-    notion_page_cleaner = NotionPageCleaner()
-    logger.info("Notion page cleaner process initialized.")
-    try:
-        notion_page_cleaner.start()
-    except Exception as e:
-        logger.exception(e)
-        notion_page_cleaner.clear()
-        sys.exit(1)
-
-    while True:
-        time.sleep(2)
-
-
-def main():
-    logfile = add_suffix_to_logfile(config.LOG_FILE, NOTION_PAGE_CLEANER_LOG_SUFFIX)
-    LogConfigurator(config.LOG_LEVEL, logfile)
-    start()
-
-
-if __name__ == "__main__":
-    main()
+    def cancel(self):
+        self.finished.set()

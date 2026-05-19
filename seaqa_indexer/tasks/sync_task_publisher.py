@@ -1,11 +1,8 @@
 # coding: UTF-8
 import logging
-import json
-
 from sqlalchemy.sql import text
 from threading import Thread, Event
 
-from seaqa_indexer.config import LOG_FILE, LOG_LEVEL
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.mq import get_mq
@@ -31,8 +28,6 @@ class SyncTaskPublisher(object):
     def __init__(self, sync_manager):
         self._enabled = True
         self._sync_manager = sync_manager
-        self._logfile = LOG_FILE
-        self._loglevel = LOG_LEVEL
         self._interval = 1 * 60 * 60
         self._sync_interval = 1 * 60 * 60
 
@@ -41,7 +36,7 @@ class SyncTaskPublisher(object):
             logging.warning('Can not start sync task publisher: it is not enabled!')
             return
 
-        SyncTaskPublisherTimer(self._logfile, self._loglevel, self._interval, self._sync_interval, self._sync_manager).start()
+        SyncTaskPublisherTimer(self._interval, self._sync_interval, self._sync_manager).start()
         logging.info('sync task publisher is started')
 
     def is_enabled(self):
@@ -49,10 +44,8 @@ class SyncTaskPublisher(object):
 
 
 class SyncTaskPublisherTimer(Thread):
-    def __init__(self, logfile, loglevel, interval, sync_interval, sync_manager):
+    def __init__(self, interval, sync_interval, sync_manager):
         Thread.__init__(self)
-        self._logfile = logfile
-        self._loglevel = loglevel
         self.finished = Event()
         self._interval = interval
         self._sync_interval = sync_interval

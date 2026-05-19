@@ -4,6 +4,9 @@ from seaqa_indexer.server.http_server import HttpServer
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 from seaqa_indexer.index.index_manager import IndexManager
 from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
+from seaqa_indexer.tasks.notion_page_cleaner import NotionPageCleaner
+from seaqa_indexer.tasks.seafile_file_cleaner import SeafileFileCleaner
+from seaqa_indexer.tasks.deleted_records_cleaner import DeletedRecordsCleaner
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
 from seaqa_indexer.index.knowledge_base_index_master import KnowledgeBaseIndexMaster
 from seaqa_indexer.index.ticket_index_master import TicketIndexMaster
@@ -24,6 +27,10 @@ class SeaqaIndexerApp(object):
 
         self.http_server = HttpServer(self)
         self.sync_task_publisher = SyncTaskPublisher(self.sync_manager)
+        self.notion_page_cleaner = NotionPageCleaner()
+        self.seafile_file_cleaner = SeafileFileCleaner()
+        self.deleted_records_cleaner = DeletedRecordsCleaner()
+
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
 
     def serve_forever(self):
@@ -33,9 +40,6 @@ class SeaqaIndexerApp(object):
         self._start_worker('seaqa_indexer.syncer.connection_sync_worker', 'connection sync worker')
         self._start_worker('seaqa_indexer.ai_processor.ai_process_task_worker', 'ai process worker')
         self._start_worker('seaqa_indexer.index.content_vector_index_task_worker', 'content vector index worker')
-        self._start_worker('seaqa_indexer.tasks.deleted_records_cleaner', 'deleted records cleaner')
-        self._start_worker('seaqa_indexer.tasks.notion_page_cleaner', 'notion page cleaner')
-        self._start_worker('seaqa_indexer.tasks.seafile_file_cleaner', 'seafile file cleaner')
 
         self.sync_manager.start()
 
@@ -45,6 +49,9 @@ class SeaqaIndexerApp(object):
 
         self.sync_task_publisher.start()
         self.web_crawl_task_publisher.start()
+        self.notion_page_cleaner.start()
+        self.seafile_file_cleaner.start()
+        self.deleted_records_cleaner.start()
         self.http_server.start()
 
     def _start_worker(self, module_name, worker_label):
