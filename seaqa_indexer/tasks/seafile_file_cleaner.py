@@ -10,7 +10,7 @@ from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.utils import decrypt_config, add_suffix_to_logfile
 from seaqa_indexer.utils.seahub_api import SeahubAPI
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -19,6 +19,7 @@ from seaqa_indexer.utils import get_file_suffix
 
 logger = logging.getLogger(__name__)
 
+SEAFILE_FILE_CLEANER_LOG_SUFFIX = 'seafile_file_cleaner'
 
 class SeafileFileCleaner(object):
     """Compare remote repo files with local records and mark missing files as deleted."""
@@ -156,7 +157,8 @@ def start():
 
 
 def main():
-    LogConfigurator(config.LOG_LEVEL, config.LOG_FILE)
+    logfile = add_suffix_to_logfile(config.LOG_FILE, SEAFILE_FILE_CLEANER_LOG_SUFFIX)
+    LogConfigurator(config.LOG_LEVEL, logfile)
     start()
 
 

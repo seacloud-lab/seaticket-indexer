@@ -12,11 +12,14 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.handlers import get_handler
+from seaqa_indexer.utils import add_suffix_to_logfile
 from seaqa_indexer.seadb_models.models import TicketsTable, TicketCommentsTable, PortalIssuesTable, PortalIssueCommentsTable, KnowledgeBaseTable
 
 
 logger = logging.getLogger(__name__)
 
+
+DELETED_RECORD_CLEANER_LOG_SUFFIX = 'deleted_records_cleaner'
 
 class DeletedRecordsCleaner(object):
     """
@@ -221,7 +224,8 @@ def start():
 
 
 def main():
-    LogConfigurator(config.LOG_LEVEL, config.LOG_FILE)
+    logfile = add_suffix_to_logfile(config.LOG_FILE, DELETED_RECORD_CLEANER_LOG_SUFFIX)
+    LogConfigurator(config.LOG_LEVEL, logfile)
     start()
 
 

@@ -216,3 +216,9 @@ def get_no_duplicate_obj_name(obj_name, exist_obj_names):
                 return new_name
             else:
                 i += 1
+
+
+def add_suffix_to_logfile(original_log, suffix):
+    base, ext = os.path.splitext(original_log)
+    new_log = f"{base}.{suffix}{ext}"
+    return new_log

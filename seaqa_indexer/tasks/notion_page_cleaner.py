@@ -10,7 +10,7 @@ from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.utils import decrypt_config, add_suffix_to_logfile
 from seaqa_indexer.utils.notion_api import NotionAPI
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -18,6 +18,8 @@ from seaqa_indexer.utils.constants import ConnectionType
 
 logger = logging.getLogger(__name__)
 
+
+NOTION_PAGE_CLEANER_LOG_SUFFIX = 'notion_page_cleaner'
 
 class NotionPageCleaner(object):
     """Compare remote Notion pages with local records and mark missing pages as deleted."""
@@ -158,7 +160,8 @@ def start():
 
 
 def main():
-    LogConfigurator(config.LOG_LEVEL, config.LOG_FILE)
+    logfile = add_suffix_to_logfile(config.LOG_FILE, NOTION_PAGE_CLEANER_LOG_SUFFIX)
+    LogConfigurator(config.LOG_LEVEL, logfile)
     start()
 
 
