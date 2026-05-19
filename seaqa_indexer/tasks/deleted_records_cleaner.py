@@ -1,12 +1,8 @@
-import sys
-import time
 import logging
-import threading
-import signal
 import datetime
+from threading import Thread, Event
 
 from seaqa_indexer import config
-from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -17,51 +13,41 @@ from seaqa_indexer.seadb_models.models import TicketsTable, TicketCommentsTable,
 
 logger = logging.getLogger(__name__)
 
-
 class DeletedRecordsCleaner(object):
+    def __init__(self):
+        self._enabled = True
+        self.interval = 24 * 60 * 60  # Running interval
+        self.check_days = 7  # Only check connections updated in the last 14 days
+        self.delete_after_days = 14  # Only delete records that have been deleted for more than 14 days
+
+    def start(self):
+        if not self.is_enabled():
+            logging.warning('Can not start deleted records cleaner: it is not enabled!')
+            return
+
+        DeletedRecordsCleanerTimer(self.interval, self.check_days, self.delete_after_days).start()
+        logging.info('deleted records cleaner timer is started')
+
+    def is_enabled(self):
+        return self._enabled
+
+class DeletedRecordsCleanerTimer(Thread):
     """
     Clean deleted records for recently active connections.
     """
 
-    def __init__(self):
+    def __init__(self, interval, check_days, delete_after_days):
+        Thread.__init__(self)
         self.db_session_class = init_db_session_class()
         self.seaqa_db = SeaqaDB(self.db_session_class)
         self.seadb_api = SeaDBAPI()
         self.seasearch_api = SeaSearchAPI(config.SEASEARCH_URL, config.SEASEARCH_TOKEN)
 
-        self.should_stop = threading.Event()
-        self.clear_interval = 24 * 60 * 60
-        self.recent_days = 7  # Only check connections updated in the last 14 days
-        self.delete_after_days = 14  # Only delete records that have been deleted for more than 14 days
+        self.finished = Event()
+        self.interval = interval
+        self.check_days = check_days
+        self.delete_after_days = delete_after_days
 
-        self.set_signal()
-
-    @property
-    def tname(self):
-        return threading.current_thread().name
-
-    def start(self):
-        threading.Thread(
-            target=self.cron_clean_deleted_records,
-            name='cron_clean_deleted_records_thread',
-            daemon=True
-        ).start()
-
-    def cron_clean_deleted_records(self):
-        logger.info('Start deleted records cleaner timer')
-        while not self.should_stop.is_set():
-            self.should_stop.wait(self.clear_interval)
-
-            if not self.should_stop.is_set():
-                logger.info('Start to clean deleted records')
-                try:
-                    self.clean_deleted_project_records()
-                except Exception as e:
-                    logger.exception('Cron clean deleted project records error: %s', e)
-                try:
-                    self.clean_deleted_connection_records()
-                except Exception as e:
-                    logger.exception('Cron clean deleted connection records error: %s', e)
     
     def clean_deleted_portal_issue_records(self, seadb_api, project_uuid, cutoff_time):
         page_size = 1000
@@ -153,7 +139,7 @@ class DeletedRecordsCleaner(object):
         return total_deleted
 
     def clean_deleted_project_records(self):
-        projects = self.seaqa_db.get_recently_updated_projects(days=self.recent_days)
+        projects = self.seaqa_db.get_recently_updated_projects(days=self.check_days)
         logger.info('Found %d recently updated projects to check for deleted records', len(projects))
         cutoff_time = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=self.delete_after_days)).isoformat()
 
@@ -171,7 +157,7 @@ class DeletedRecordsCleaner(object):
                 logger.exception('Failed to clean deleted records for project %s: %s', project_uuid, e)
 
     def clean_deleted_connection_records(self):
-        connections = self.seaqa_db.get_recently_updated_connections(days=self.recent_days)
+        connections = self.seaqa_db.get_recently_updated_connections(days=self.check_days)
         logger.info('Found %d recently updated connections to check for deleted records', len(connections))
         cutoff_time = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=self.delete_after_days)).isoformat()
 
@@ -194,36 +180,19 @@ class DeletedRecordsCleaner(object):
             except Exception as e:
                 logger.exception('Failed to clean deleted records for connection %s: %s', connection_id, e)
 
-    def clear(self):
-        self.should_stop.set()
-        logger.info("Exit deleted records cleaner process")
-        sys.exit(0)
+    def run(self):
+        while not self.finished.is_set():
+            self.finished.wait(self.interval)
+            if not self.finished.is_set():
+                logger.info('Start to clean deleted records')
+                try:
+                    self.clean_deleted_project_records()
+                except Exception as e:
+                    logger.exception('Cron clean deleted project records error: %s', e)
+                try:
+                    self.clean_deleted_connection_records()
+                except Exception as e:
+                    logger.exception('Cron clean deleted connection records error: %s', e)
 
-    def signal_term_handler(self, signal, frame):
-        self.clear()
-
-    def set_signal(self):
-        signal.signal(signal.SIGTERM, self.signal_term_handler)
-
-
-def start():
-    deleted_records_cleaner = DeletedRecordsCleaner()
-    logger.info("Deleted records cleaner process initialized.")
-    try:
-        deleted_records_cleaner.start()
-    except Exception as e:
-        logger.exception(e)
-        deleted_records_cleaner.clear()
-        sys.exit(1)
-
-    while True:
-        time.sleep(2)
-
-
-def main():
-    LogConfigurator(config.LOG_LEVEL, config.LOG_FILE)
-    start()
-
-
-if __name__ == "__main__":
-    main()
+    def cancel(self):
+        self.finished.set()

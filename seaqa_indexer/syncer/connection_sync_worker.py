@@ -1,4 +1,3 @@
-import json
 import logging
 
 from seaqa_indexer.workers.base_task_worker import BaseTaskWorker, run_worker

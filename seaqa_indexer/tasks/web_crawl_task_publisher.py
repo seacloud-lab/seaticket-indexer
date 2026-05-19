@@ -5,7 +5,6 @@ import json
 from sqlalchemy.sql import text
 from threading import Thread, Event
 
-from seaqa_indexer.config import LOG_FILE, LOG_LEVEL
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.mq import get_mq
 from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
@@ -21,8 +20,6 @@ __all__ = [
 class WebCrawlTaskPublisher(object):
     def __init__(self):
         self._enabled = True
-        self._logfile = LOG_FILE
-        self._loglevel = LOG_LEVEL
         self._interval = 1 * 60 * 60
         self._crawl_interval = 3 * 24 * 60 * 60
 
@@ -31,7 +28,7 @@ class WebCrawlTaskPublisher(object):
             logging.warning('Can not start web crawl task publisher: it is not enabled!')
             return
 
-        WebCrawlTaskPublisherTimer(self._logfile, self._loglevel, self._interval, self._crawl_interval).start()
+        WebCrawlTaskPublisherTimer(self._interval, self._crawl_interval).start()
         logging.info('web crawl task publisher is started')
 
     def is_enabled(self):
@@ -39,10 +36,8 @@ class WebCrawlTaskPublisher(object):
 
 
 class WebCrawlTaskPublisherTimer(Thread):
-    def __init__(self, logfile, loglevel, interval, crawl_interval):
+    def __init__(self, interval, crawl_interval):
         Thread.__init__(self)
-        self._logfile = logfile
-        self._loglevel = loglevel
         self.finished = Event()
         self._interval = interval
         self._crawl_interval = crawl_interval

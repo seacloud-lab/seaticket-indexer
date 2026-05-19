@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from redis.exceptions import ConnectionError as NoMQAvailable, ResponseError, TimeoutError
 
 from seaqa_indexer import config
+from seaqa_indexer.utils import add_suffix_to_logfile
 from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.mq import get_mq
 
@@ -198,8 +199,10 @@ def run_worker(worker_class, log_level=None, log_file=None):
         log_level: log level, default is config.LOG_LEVEL
         log_file: log file, default is config.LOG_FILE
     """
-    LogConfigurator(log_level or config.LOG_LEVEL, log_file or config.LOG_FILE)
     worker = worker_class()
+    worker_name = worker.get_worker_name()
+    logfile = add_suffix_to_logfile(config.LOG_FILE, worker_name)
+    LogConfigurator(log_level or config.LOG_LEVEL, logfile)
     logger.info("%s process initialized.", worker.get_worker_name())
     try:
         worker.start()
