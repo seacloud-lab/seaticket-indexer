@@ -13,9 +13,6 @@ class LinearSeaDBAPI:
         self.base_id = base_id
         self.seadb_api = SeaDBAPI()
 
-    def _escape(self, value: str) -> str:
-        return value.replace("'", "''") if isinstance(value, str) else value
-
     def get_linear_issues_count(self, connection_id):
         table_name = LinearIssueTable.gen_table_name(connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
@@ -27,8 +24,8 @@ class LinearSeaDBAPI:
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = LinearIssueTable.gen_table_name(connection_id)
-        issue_id = self._escape(str(issue_id))
-        sql = f"SELECT * FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
+        issue_id = str(issue_id)
+        sql = f"SELECT `_pk`, `issue_id`, `modified_time`, `deleted` FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and response.get('results'):
             return response['results'][0]
@@ -58,6 +55,30 @@ class LinearSeaDBAPI:
 
         return table_id, label_column.get('key'), existing_label_names
 
+    def get_state_column_info(self, connection_id):
+        table_name = LinearIssueTable.gen_table_name(connection_id)
+        metadata = self.seadb_api.get_base_metadata(self.base_id)
+        table_info = {}
+        for table in metadata.get('tables', []):
+            if table.get('name') == table_name:
+                table_info = table
+                break
+        table_id = table_info.get('id')
+        columns = table_info.get('columns', []) or []
+        state_column = {}
+        for column in columns:
+            if column.get('name') == LinearIssueTable.state.name:
+                state_column = column
+                break
+
+        existing_state_names = set()
+        if state_column.get('data'):
+            for option in state_column.get('data', {}).get('options', []):
+                if option.get('name'):
+                    existing_state_names.add(option['name'])
+
+        return table_id, state_column.get('key'), existing_state_names
+
     def add_label_options(self, table_id, column_key, existing_label_names, labels_nodes):
         if not table_id or not column_key:
             return existing_label_names
@@ -76,6 +97,25 @@ class LinearSeaDBAPI:
             self.seadb_api.add_column_option(self.base_id, column_option)
             existing_label_names.add(label_name)
         return existing_label_names
+
+    def add_state_options(self, table_id, column_key, existing_state_names, states_nodes):
+        if not table_id or not column_key:
+            return existing_state_names
+        for state in states_nodes:
+            state_name = state.get('name')
+            if not state_name or state_name in existing_state_names:
+                continue
+            color = state.get('color')
+            option_data = {'color': f"{color}"} if color else None
+            column_option = {
+                'table_id': table_id,
+                'column_key': column_key,
+                'option_name': state_name,
+                'option_data': option_data or {},
+            }
+            self.seadb_api.add_column_option(self.base_id, column_option)
+            existing_state_names.add(state_name)
+        return existing_state_names
 
     def save_or_update_issue_to_db(self, connection_id, issue, existed_issue):
         issue_id = issue.get('id')
@@ -134,7 +174,7 @@ class LinearSeaDBAPI:
 
     def mark_issue_deleted(self, connection_id, issue_id):
         table_name = LinearIssueTable.gen_table_name(connection_id)
-        issue_id = self._escape(str(issue_id))
+        issue_id = str(issue_id)
         sql = f"SELECT _pk FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if not issues:
@@ -153,7 +193,7 @@ class LinearSeaDBAPI:
 
     def mark_issue_active(self, connection_id, issue_id):
         table_name = LinearIssueTable.gen_table_name(connection_id)
-        issue_id = self._escape(str(issue_id))
+        issue_id = str(issue_id)
         sql = f"SELECT _pk FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if not issues:
@@ -223,18 +263,18 @@ class LinearSeaDBAPI:
 
     def delete_comment_from_db(self, connection_id, comment_id):
         comments_table_name = LinearCommentsTable.gen_table_name(connection_id)
-        comment_id_str = self._escape(str(comment_id))
+        comment_id_str = str(comment_id)
         sql = f"DELETE FROM `{comments_table_name}` WHERE comment_id = '{comment_id_str}'"
         self.seadb_api.query_rows(self.base_id, sql)
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
         issues_table_name = LinearIssueTable.gen_table_name(connection_id)
         if last_indexed_at:
-            sql = f"""SELECT * FROM `{issues_table_name}` 
+            sql = f"""SELECT `_pk`, `issue_id`, `deleted`, `outdated`, `content`, `title`, `modified_time` FROM `{issues_table_name}` 
                     WHERE modified_time >= '{last_indexed_at}' 
                     LIMIT {page_size} OFFSET {offset}"""
         else:
-            sql = f"""SELECT * FROM `{issues_table_name}` 
+            sql = f"""SELECT `_pk`, `issue_id`, `deleted`, `outdated`, `content`, `title`, `modified_time` FROM `{issues_table_name}` 
                     LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
         return res.get('results', [])
@@ -248,15 +288,15 @@ class LinearSeaDBAPI:
 
     def get_issue_comments_by_page(self, connection_id, issue_id, page_size, offset):
         comments_table_name = LinearCommentsTable.gen_table_name(connection_id)
-        issue_id = self._escape(str(issue_id))
-        sql = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = '{issue_id}' LIMIT {page_size} OFFSET {offset}"
+        issue_id = str(issue_id)
+        sql = f"SELECT `_pk`, `comment_id`, `content` FROM `{comments_table_name}` WHERE issue_id = '{issue_id}' LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return comments
 
     def get_need_ai_issues_by_page(self, connection_id, page_size):
         issues_table_name = LinearIssueTable.gen_table_name(connection_id)
         sql = f"""
-            SELECT * FROM `{issues_table_name}`
+            SELECT `_pk`, `title`, `content` FROM `{issues_table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """

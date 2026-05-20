@@ -7,6 +7,7 @@ from seaqa_indexer.seadb_models.models import LinearIssueTable, LinearCommentsTa
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.utils.linear_api import LinearAPI
 from seaqa_indexer.seadb_models.linear_seadb_api import LinearSeaDBAPI
+from seaqa_indexer.utils.seadb_api import OptionValueInvalidException
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.linear_index import LinearIssuesIndex
@@ -112,8 +113,6 @@ class LinearIssueHandler(ConnectionHandler):
         refresh_token = oauth_info.get('refresh_token')
         team_id = config.get('team_id')
         include_archived = config.get('include_archived', True)
-        expires_in_raw = oauth_info.get('expires_in')
-
         if not access_token:
             sync_logger.log("Linear access_token is missing in project_linear_oauth")
             return None, None, None, None
@@ -123,24 +122,13 @@ class LinearIssueHandler(ConnectionHandler):
             refresh_token=refresh_token,
         )
 
-        # Proactively refresh token if expired
-        if expires_in_raw and refresh_token:
-            try:
-                if isinstance(expires_in_raw, (int, float)):
-                    expires_in = datetime.datetime.fromtimestamp(expires_in_raw, tz=datetime.UTC)
-                else:
-                    expires_in = time_to_utc_time(str(expires_in_raw))
-                if expires_in <= datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=60):
-                    linear_api.refresh_access_token()
-            except Exception:
-                logger.exception("Failed to refresh Linear OAuth token")
-
         since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
         linear_seadb_api = LinearSeaDBAPI(project_uuid)
 
+        is_first_sync = not old_last_sync_time
         sync_count, total_count = self._sync_linear_issue(
             connection_id, since, connection_status, linear_api, seaqa_db, linear_seadb_api,
-            team_id, include_archived
+            team_id, include_archived, is_first_sync
         )
 
         is_update_config = False
@@ -199,16 +187,11 @@ class LinearIssueHandler(ConnectionHandler):
                 if table['name'] in (issues_table_name, comments_table_name):
                     seadb_api.delete_table(project_uuid, table['id'])
 
-    def _sync_linear_issue(self, connection_id, since, connection_status, linear_api, seaqa_db, linear_seadb_api, team_id, include_archived):
-        cursor = None
-        per_page = 50
-        sync_count = 0
-        _status_last_update_time = datetime.datetime.now()
-        _status_last_update_count = 0
-        table_id, label_column_key, existing_label_names = linear_seadb_api.get_label_column_info(connection_id)
+    def sync_linear_options(self, connection_id, linear_seadb_api, linear_api, team_id=None):
         try:
             labels = linear_api.get_issue_labels()
             if labels:
+                table_id, label_column_key, existing_label_names = linear_seadb_api.get_label_column_info(connection_id)
                 linear_seadb_api.add_label_options(
                     table_id,
                     label_column_key,
@@ -217,6 +200,29 @@ class LinearIssueHandler(ConnectionHandler):
                 )
         except Exception:
             logger.exception("Failed to sync Linear labels")
+
+        try:
+            states = linear_api.get_workflow_states(team_id=team_id)
+            if states:
+                table_id, state_column_key, existing_state_names = linear_seadb_api.get_state_column_info(connection_id)
+                linear_seadb_api.add_state_options(
+                    table_id,
+                    state_column_key,
+                    existing_state_names,
+                    states,
+                )
+        except Exception:
+            logger.exception("Failed to sync Linear states")
+
+    def _sync_linear_issue(self, connection_id, since, connection_status, linear_api, seaqa_db, linear_seadb_api, team_id, include_archived, is_first_sync):
+        cursor = None
+        per_page = 50
+        sync_count = 0
+        _status_last_update_time = datetime.datetime.now()
+        _status_last_update_count = 0
+
+        if is_first_sync:
+            self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
 
         while True:
             issues, page_info = linear_api.list_issues(
@@ -249,7 +255,13 @@ class LinearIssueHandler(ConnectionHandler):
 
                 sync_count += 1
 
-                linear_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+                try:
+                    linear_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+                except OptionValueInvalidException as e:
+                    logger.warning('The option name may not exist; resynchronize it. exception info is: %s', e)
+                    self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
+                    linear_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count
                 )

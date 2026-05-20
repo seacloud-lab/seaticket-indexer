@@ -63,24 +63,6 @@ class LinearAPI:
         self._last_token_update = data
         return data
 
-    def _request(self, query, variables = None, retry_on_auth = True):
-        payload = {
-            "query": query,
-            "variables": variables or {},
-        }
-        response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-        if response.status_code in (401, 403):
-            if retry_on_auth and self.refresh_access_token():
-                return self._request(query, variables, retry_on_auth=False)
-            raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
-        if response.status_code >= 400:
-            raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
-
-        data = response.json() or {}
-        if "errors" in data and data["errors"]:
-            raise LinearAPIException(data["errors"])
-        return data.get("data", {})
-
     def list_issues(
         self,
         since = None,
@@ -124,8 +106,23 @@ class LinearAPI:
             "filter": filter_data or None,
             "includeArchived": include_archived,
         }
-        data = self._request(query, variables)
-        issues_data = data.get("issues", {}) or {}
+        payload = {
+            "query": query,
+            "variables": variables,
+        }
+        response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+        if response.status_code == 401:
+            if self.refresh_access_token():
+                response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+            else:
+                raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
+        if response.status_code >= 400:
+            raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
+        data = response.json() or {}
+        if "errors" in data and data["errors"]:
+            raise LinearAPIException(data["errors"])
+        result = data.get("data", {})
+        issues_data = result.get("issues", {}) or {}
         return issues_data.get("nodes", []) or [], issues_data.get("pageInfo", {}) or {}
 
     def list_issue_comments(
@@ -155,10 +152,75 @@ class LinearAPI:
             "after": after,
             "first": first,
         }
-        data = self._request(query, variables)
-        issue = data.get("issue") or {}
+        payload = {
+            "query": query,
+            "variables": variables,
+        }
+        response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+        if response.status_code == 401:
+            if self.refresh_access_token():
+                response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+            else:
+                raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
+        if response.status_code >= 400:
+            raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
+        data = response.json() or {}
+        if "errors" in data and data["errors"]:
+            raise LinearAPIException(data["errors"])
+        result = data.get("data", {})
+        issue = result.get("issue") or {}
         comments = issue.get("comments") or {}
         return comments.get("nodes", []) or [], comments.get("pageInfo", {}) or {}
+
+    def get_workflow_states(self, team_id=None, first: int = 100):
+        states = []
+        try:
+            cursor = None
+            while True:
+                query = """
+                query WorkflowStates($after: String, $first: Int!, $filter: WorkflowStateFilter) {
+                  workflowStates(after: $after, first: $first, filter: $filter) {
+                    nodes { name color }
+                    pageInfo { hasNextPage endCursor }
+                  }
+                }
+                """
+                filter_data = {}
+                if team_id:
+                    filter_data["team"] = {"id": {"eq": team_id}}
+                variables = {
+                    "after": cursor,
+                    "first": first,
+                    "filter": filter_data or None,
+                }
+                payload = {
+                    "query": query,
+                    "variables": variables,
+                }
+                response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+                if response.status_code == 401:
+                    if self.refresh_access_token():
+                        response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+                    else:
+                        raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
+                if response.status_code >= 400:
+                    raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
+                data = response.json() or {}
+                if "errors" in data and data["errors"]:
+                    raise LinearAPIException(data["errors"])
+                result = data.get("data", {})
+                conn = result.get("workflowStates") or {}
+                nodes = conn.get("nodes") or []
+                states.extend(nodes)
+                page_info = conn.get("pageInfo") or {}
+                if not page_info.get("hasNextPage"):
+                    break
+                cursor = page_info.get("endCursor")
+            return states
+        except Exception:
+            pass
+
+        return states
 
     def get_issue_labels(self, first: int = 100):
         labels = []
@@ -179,8 +241,23 @@ class LinearAPI:
                     "first": first,
                     "filter": filter_data or None,
                 }
-                data = self._request(query, variables)
-                conn = data.get("issueLabels") or {}
+                payload = {
+                    "query": query,
+                    "variables": variables,
+                }
+                response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+                if response.status_code == 401:
+                    if self.refresh_access_token():
+                        response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+                    else:
+                        raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
+                if response.status_code >= 400:
+                    raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
+                data = response.json() or {}
+                if "errors" in data and data["errors"]:
+                    raise LinearAPIException(data["errors"])
+                result = data.get("data", {})
+                conn = result.get("issueLabels") or {}
                 nodes = conn.get("nodes") or []
                 labels.extend(nodes)
                 page_info = conn.get("pageInfo") or {}
