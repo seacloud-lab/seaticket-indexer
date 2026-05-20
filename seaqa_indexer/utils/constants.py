@@ -166,5 +166,9 @@ GENERAL_TASK_CONNECTION_SPEC = {
     "others": {
         "type": "json",
         "description": "Additional structured data for the task."
+    },
+    "version": {
+        "type": "string",
+        "description": "Version of the task."
     }
 }

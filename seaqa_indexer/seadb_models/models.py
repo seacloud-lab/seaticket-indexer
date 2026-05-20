@@ -478,6 +478,7 @@ class GeneralTaskTable(BaseModel):
     priority = MappedColumn('priority', PropertyTypes.SINGLE_SELECT)
     assignees = MappedColumn('assignees', PropertyTypes.LIST)
     participants = MappedColumn('participants', PropertyTypes.LIST)
+    version = MappedColumn('version', PropertyTypes.TEXT)
     others = MappedColumn('others', PropertyTypes.TEXT, {'compressed': True})
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
     due_date = MappedColumn('due_date', PropertyTypes.DATETIME)

@@ -47,9 +47,6 @@ class GeneralTaskSeaDBAPI:
         """
         return self.seadb_api.query_rows(self.base_id, sql).get('results', [])
 
-    def get_rows_by_page(self, connection_id, page_size, offset):
-        return self.get_tasks_by_page(connection_id, None, page_size, offset)
-
     def get_pk_by_source_task_id(self, connection_id, source_task_id):
         table_name = self._table_name(connection_id)
         escaped = source_task_id.replace("'", "''")
@@ -187,6 +184,7 @@ class GeneralTaskSeaDBAPI:
             GeneralTaskTable.priority.name: task.get('priority'),
             GeneralTaskTable.assignees.name: task.get('assignees', []),
             GeneralTaskTable.participants.name: task.get('participants', []),
+            GeneralTaskTable.version.name: task.get('version', ''),
             GeneralTaskTable.others.name: others,
             GeneralTaskTable.content.name: content,
             GeneralTaskTable.due_date.name: task.get('due_date'),
