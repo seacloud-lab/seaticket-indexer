@@ -6,7 +6,7 @@ import time
 from dateutil.relativedelta import relativedelta
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
-from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
+from seaqa_indexer.seadb_models.utils import get_table_name
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.discourse_forum_api import DiscourseForumAPI
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
@@ -45,10 +45,10 @@ class DiscourseHandler(ConnectionHandler):
         return True
 
     def gen_table_name(self, connection_id):
-        return DiscourseTopicsTable.gen_table_name(connection_id)
+        return get_table_name('DiscourseTopicsTable', connection_id=connection_id)
 
     def gen_replies_table_name(self, connection_id):
-        return DiscourseRepliesTable.gen_table_name(connection_id)
+        return get_table_name('DiscourseRepliesTable', connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         discourse_index = DiscourseIndex(seasearch_api)
