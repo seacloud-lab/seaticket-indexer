@@ -6,6 +6,7 @@ pymysql==1.1.*
 Flask==3.0.*
 waitress==3.0.*
 scrapy==2.13.2
+Twisted==25.5.*
 beautifulsoup4==4.12.3
 chardet==5.1.0
 trafilatura==2.0.0
