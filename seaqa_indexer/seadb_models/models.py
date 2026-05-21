@@ -470,6 +470,44 @@ class ThreadTable(BaseModel):
         return ConnectionType.EMAIL.value + '_' + 'thread_' + str(connection_id)
 
 
+class GeneralTaskTable(BaseModel):
+    source_task_id = MappedColumn('source_task_id', PropertyTypes.TEXT)
+    title = MappedColumn('title', PropertyTypes.TEXT)
+    status = MappedColumn('status', PropertyTypes.SINGLE_SELECT)
+    size = MappedColumn('size', PropertyTypes.SINGLE_SELECT)
+    priority = MappedColumn('priority', PropertyTypes.SINGLE_SELECT)
+    assignees = MappedColumn('assignees', PropertyTypes.LIST)
+    participants = MappedColumn('participants', PropertyTypes.LIST)
+    version = MappedColumn('version', PropertyTypes.TEXT)
+    others = MappedColumn('others', PropertyTypes.TEXT, {'compressed': True})
+    content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})
+    due_date = MappedColumn('due_date', PropertyTypes.DATETIME)
+    modified_time = MappedColumn('modified_time', PropertyTypes.DATETIME)
+    created_time = MappedColumn('created_time', PropertyTypes.DATETIME)
+    sync_time = MappedColumn('sync_time', PropertyTypes.DATETIME)
+    deleted = MappedColumn('deleted', PropertyTypes.BOOL)
+    outdated = MappedColumn('outdated', PropertyTypes.BOOL)
+    record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
+    ai_summary = MappedColumn('ai_summary', PropertyTypes.TEXT)
+    ai_processed_time = MappedColumn('ai_processed_time', PropertyTypes.DATETIME)
+    ai_summary_vector = MappedColumn('ai_summary_vector', PropertyTypes.LIST, ListTypes.vector)
+    linked_ticket = MappedColumn('linked_ticket', PropertyTypes.INT)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.GENERAL_TASK.value + '_' + str(connection_id)
+
+
+class GeneralTaskUserTable(BaseModel):
+    email = MappedColumn('email', PropertyTypes.TEXT)
+    name = MappedColumn('name', PropertyTypes.TEXT)
+    record_modified_time = MappedColumn('record_modified_time', PropertyTypes.DATETIME)
+
+    @classmethod
+    def gen_table_name(cls, connection_id):
+        return ConnectionType.GENERAL_TASK.value + '_user_' + str(connection_id)
+
+
 class KnowledgeBaseTable(BaseModel):
     title = MappedColumn('title', PropertyTypes.TEXT)
     content = MappedColumn('content', PropertyTypes.TEXT, {'compressed': True})

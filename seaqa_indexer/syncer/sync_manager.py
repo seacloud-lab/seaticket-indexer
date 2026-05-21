@@ -26,6 +26,7 @@ NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.DISCOURSE_FORUM.value,
     ConnectionType.SEAFILE.value,
     ConnectionType.EMAIL.value,
+    ConnectionType.GENERAL_TASK.value,
     ConnectionType.SITE.value,
     ConnectionType.NOTION.value,
 ]
