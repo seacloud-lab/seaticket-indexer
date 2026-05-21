@@ -67,7 +67,7 @@ class DataEventType(Enum):
     GITHUB_ISSUE_COMMENT_ADDED = 'github_issue_comment_added'
     DISCOURSE_TOPIC_ADDED = 'discourse_topic_added'
     DISCOURSE_TOPIC_UPDATED = 'discourse_topic_updated'
-    DISCOURSE_TOPIC_REPLY_ADDED = 'discourse_topic_reply_added'
+    DISCOURSE_TOPIC_COMMENT_ADDED = 'discourse_topic_comment_added'
     EMAIL_THREAD_ADDED = 'email_thread_added'
     EMAIL_MESSAGE_ADDED = 'email_message_added'
 

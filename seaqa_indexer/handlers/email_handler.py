@@ -316,7 +316,6 @@ class EmailHandler(ConnectionHandler):
                 state_event_type=state_event_type,
                 additional_items=new_emails_by_thread_id.get(thread_id),
                 additional_event_type=DataEventType.EMAIL_MESSAGE_ADDED.value,
-                additional_items_field='emails',
                 state_event_ignored_fields=('modified_time', 'unread', 'record_modified_time', 'sync_time'),
                 log_object_name='email thread',
             )
