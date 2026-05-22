@@ -264,8 +264,7 @@ class DiscourseHandler(ConnectionHandler):
                     old_row=existing_topic,
                     state_event_type=topic_state_event_type,
                     additional_items=added_replies,
-                    additional_event_type=DataEventType.DISCOURSE_TOPIC_REPLY_ADDED.value,
-                    additional_items_field='replies',
+                    additional_event_type=DataEventType.DISCOURSE_TOPIC_COMMENT_ADDED.value,
                     state_event_ignored_fields=('views', 'modified_time', 'record_modified_time', 'sync_time'),
                     log_object_name='topic',
                 )

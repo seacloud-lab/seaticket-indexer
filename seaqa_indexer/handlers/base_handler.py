@@ -147,7 +147,6 @@ class ConnectionHandler(ABC):
         state_event_type,
         additional_items=None,
         additional_event_type=None,
-        additional_items_field=None,
         state_event_ignored_fields=None,
         log_object_name='record',
     ):
@@ -168,18 +167,19 @@ class ConnectionHandler(ABC):
                 'modified_time': time_to_utc_time(str(latest_row.get('modified_time'))).isoformat(),
             }
 
-            if old_row and additional_items:
-                related_event = {
-                    'type': additional_event_type,
-                    'old_value': None,
-                    'new_value': {
-                        additional_items_field: additional_items,
-                    },
-                }
-                self.mq.publish('data_events', json.dumps({
-                    **base_event,
-                    'event': related_event,
-                }))
+            if old_row and additional_items and additional_event_type:
+                for item in additional_items:
+                    if not isinstance(item, dict):
+                        continue
+                    related_event = {
+                        'type': additional_event_type,
+                        'old_value': None,
+                        'new_value': dict(item),
+                    }
+                    self.mq.publish('data_events', json.dumps({
+                        **base_event,
+                        'event': related_event,
+                    }))
 
             state_event = self.build_event(
                 state_event_type,
