@@ -4,23 +4,17 @@ import requests
 from seaqa_indexer.config import LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET
 
 
-class LinearAPIException(Exception):
-    pass
-
-
-class LinearAPIAuthException(LinearAPIException):
-    pass
-
-
 class LinearAPI:
     def __init__(
         self,
         access_token: str,
         refresh_token,
+        expires_at=None,
         timeout: int = 60,
     ):
         self.access_token = access_token
         self.refresh_token = refresh_token
+        self.expires_at = expires_at
         self.client_id = LINEAR_CLIENT_ID
         self.client_secret = LINEAR_CLIENT_SECRET
         self.api_url = "https://api.linear.app/graphql"
@@ -39,29 +33,37 @@ class LinearAPI:
         }
 
     def refresh_access_token(self):
-        if not (self.refresh_token and self.client_id and self.client_secret):
-            return None
-
         payload = {
             "grant_type": "refresh_token",
             "refresh_token": self.refresh_token,
             "client_id": self.client_id,
             "client_secret": self.client_secret,
         }
-        response = requests.post(self.token_url, data=payload, timeout=self.timeout)
-        if response.status_code >= 400:
-            raise LinearAPIAuthException(f"Linear OAuth refresh failed {response.status_code}: {response.text}")
+        response = requests.post(
+            self.token_url,
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
         data = response.json() or {}
         access_token = data.get("access_token")
-        if not access_token:
-            raise LinearAPIAuthException("Linear OAuth refresh response missing access_token")
-
         self.access_token = access_token
-        if data.get("refresh_token"):
-            self.refresh_token = data.get("refresh_token")
-
+        self.refresh_token = data.get("refresh_token")
         self._last_token_update = data
         return data
+
+    def _is_expired(self):
+        """Check if the token is expired."""
+        if not self.expires_at:
+            return False
+
+        expires_at = self.expires_at
+        if isinstance(expires_at, str):
+            expires_at = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+
+        now_datetime = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        return now_datetime >= expires_at
 
     def list_issues(
         self,
@@ -110,17 +112,11 @@ class LinearAPI:
             "query": query,
             "variables": variables,
         }
+        if self._is_expired():
+            self.refresh_access_token()
         response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-        if response.status_code == 401:
-            if self.refresh_access_token():
-                response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-            else:
-                raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
-        if response.status_code >= 400:
-            raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
-        data = response.json() or {}
-        if "errors" in data and data["errors"]:
-            raise LinearAPIException(data["errors"])
+        response.raise_for_status()
+        data = response.json()
         result = data.get("data", {})
         issues_data = result.get("issues", {}) or {}
         return issues_data.get("nodes", []) or [], issues_data.get("pageInfo", {}) or {}
@@ -156,17 +152,11 @@ class LinearAPI:
             "query": query,
             "variables": variables,
         }
+        if self._is_expired():
+            self.refresh_access_token()
         response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-        if response.status_code == 401:
-            if self.refresh_access_token():
-                response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-            else:
-                raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
-        if response.status_code >= 400:
-            raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
-        data = response.json() or {}
-        if "errors" in data and data["errors"]:
-            raise LinearAPIException(data["errors"])
+        response.raise_for_status()
+        data = response.json()
         result = data.get("data", {})
         issue = result.get("issue") or {}
         comments = issue.get("comments") or {}
@@ -174,13 +164,15 @@ class LinearAPI:
 
     def get_workflow_states(self, team_id=None, first: int = 100):
         states = []
+        if self._is_expired():
+            self.refresh_access_token()
         try:
             cursor = None
             while True:
                 query = """
                 query WorkflowStates($after: String, $first: Int!, $filter: WorkflowStateFilter) {
                   workflowStates(after: $after, first: $first, filter: $filter) {
-                    nodes { name color }
+                    nodes { id name color }
                     pageInfo { hasNextPage endCursor }
                   }
                 }
@@ -198,16 +190,8 @@ class LinearAPI:
                     "variables": variables,
                 }
                 response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-                if response.status_code == 401:
-                    if self.refresh_access_token():
-                        response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-                    else:
-                        raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
-                if response.status_code >= 400:
-                    raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
-                data = response.json() or {}
-                if "errors" in data and data["errors"]:
-                    raise LinearAPIException(data["errors"])
+                response.raise_for_status()
+                data = response.json()
                 result = data.get("data", {})
                 conn = result.get("workflowStates") or {}
                 nodes = conn.get("nodes") or []
@@ -218,19 +202,21 @@ class LinearAPI:
                 cursor = page_info.get("endCursor")
             return states
         except Exception:
-            pass
+            return None
 
         return states
 
     def get_issue_labels(self, first: int = 100):
         labels = []
+        if self._is_expired():
+            self.refresh_access_token()
         try:
             cursor = None
             while True:
                 query = """
                 query IssueLabels($after: String, $first: Int!, $filter: IssueLabelFilter) {
                   issueLabels(after: $after, first: $first, filter: $filter) {
-                    nodes { name color }
+                    nodes { id name color }
                     pageInfo { hasNextPage endCursor }
                   }
                 }
@@ -246,16 +232,8 @@ class LinearAPI:
                     "variables": variables,
                 }
                 response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-                if response.status_code == 401:
-                    if self.refresh_access_token():
-                        response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-                    else:
-                        raise LinearAPIAuthException(f"Linear API unauthorized: {response.status_code}")
-                if response.status_code >= 400:
-                    raise LinearAPIException(f"Linear API error {response.status_code}: {response.text}")
-                data = response.json() or {}
-                if "errors" in data and data["errors"]:
-                    raise LinearAPIException(data["errors"])
+                response.raise_for_status()
+                data = response.json()
                 result = data.get("data", {})
                 conn = result.get("issueLabels") or {}
                 nodes = conn.get("nodes") or []
@@ -266,13 +244,17 @@ class LinearAPI:
                 cursor = page_info.get("endCursor")
             return labels
         except Exception:
-            pass
+            return None
 
         return labels
 
     @staticmethod
-    def calc_expires_in(expires_in):
+    def calc_expires_at(expires_in):
+        """Calculate absolute expiry datetime from expires_in seconds.
+        Returns an aware datetime or None."""
         if not expires_in:
             return None
-        expires_in = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=int(expires_in))
-        return expires_in.astimezone(datetime.UTC).replace(tzinfo=None, microsecond=0)
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            seconds=int(expires_in)
+        )
+        return expires_at.replace(microsecond=0)

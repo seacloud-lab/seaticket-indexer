@@ -22,9 +22,16 @@ class LinearSeaDBAPI:
             issues_count = response['results'][0].get('count', 0)
         return issues_count
 
+    def get_table_metadata(self, connection_id):
+        table_name = LinearIssueTable.gen_table_name(connection_id)
+        metadata = self.seadb_api.get_base_metadata(self.base_id)
+        for table in metadata.get('tables', []):
+            if table.get('name') == table_name:
+                return table
+        return {}
+
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = LinearIssueTable.gen_table_name(connection_id)
-        issue_id = str(issue_id)
         sql = f"SELECT `_pk`, `issue_id`, `modified_time`, `deleted` FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and response.get('results'):
@@ -32,13 +39,7 @@ class LinearSeaDBAPI:
         return {}
 
     def get_label_column_info(self, connection_id):
-        table_name = LinearIssueTable.gen_table_name(connection_id)
-        metadata = self.seadb_api.get_base_metadata(self.base_id)
-        table_info = {}
-        for table in metadata.get('tables', []):
-            if table.get('name') == table_name:
-                table_info = table
-                break
+        table_info = self.get_table_metadata(connection_id)
         table_id = table_info.get('id')
         columns = table_info.get('columns', []) or []
         label_column = {}
@@ -56,13 +57,7 @@ class LinearSeaDBAPI:
         return table_id, label_column.get('key'), existing_label_names
 
     def get_state_column_info(self, connection_id):
-        table_name = LinearIssueTable.gen_table_name(connection_id)
-        metadata = self.seadb_api.get_base_metadata(self.base_id)
-        table_info = {}
-        for table in metadata.get('tables', []):
-            if table.get('name') == table_name:
-                table_info = table
-                break
+        table_info = self.get_table_metadata(connection_id)
         table_id = table_info.get('id')
         columns = table_info.get('columns', []) or []
         state_column = {}
@@ -79,43 +74,118 @@ class LinearSeaDBAPI:
 
         return table_id, state_column.get('key'), existing_state_names
 
-    def add_label_options(self, table_id, column_key, existing_label_names, labels_nodes):
-        if not table_id or not column_key:
-            return existing_label_names
-        for label in labels_nodes:
-            label_name = label.get('name')
-            if not label_name or label_name in existing_label_names:
-                continue
-            color = label.get('color')
-            option_data = {'color': f"{color}"} if color else None
-            column_option = {
-                'table_id': table_id,
-                'column_key': column_key,
-                'option_name': label_name,
-                'option_data': option_data or {},
-            }
-            self.seadb_api.add_column_option(self.base_id, column_option)
-            existing_label_names.add(label_name)
-        return existing_label_names
+    def _sync_select_column_options(self, table_id, column_key, existing_options, remote_nodes, remote_id_key):
+        if not table_id or not column_key or remote_nodes is None:
+            return
 
-    def add_state_options(self, table_id, column_key, existing_state_names, states_nodes):
-        if not table_id or not column_key:
-            return existing_state_names
-        for state in states_nodes:
-            state_name = state.get('name')
-            if not state_name or state_name in existing_state_names:
+        existing_remote_id_to_option = {}
+        for option in existing_options:
+            remote_id = option.get(remote_id_key)
+            if remote_id:
+                existing_remote_id_to_option[remote_id] = option
+
+        new_remote_ids = set()
+        matched_option_ids = set()
+        need_added_options = []
+        need_updated_options = []
+
+        for remote_node in remote_nodes:
+            remote_id = remote_node.get('id')
+            remote_name = remote_node.get('name')
+            remote_color = remote_node.get('color')
+            if not remote_id or not remote_name:
                 continue
-            color = state.get('color')
-            option_data = {'color': f"{color}"} if color else None
-            column_option = {
-                'table_id': table_id,
-                'column_key': column_key,
-                'option_name': state_name,
-                'option_data': option_data or {},
-            }
-            self.seadb_api.add_column_option(self.base_id, column_option)
-            existing_state_names.add(state_name)
-        return existing_state_names
+
+            new_remote_ids.add(remote_id)
+            old_option = existing_remote_id_to_option.get(remote_id)
+            if not old_option:
+                for option in existing_options:
+                    if option.get('name') == remote_name and option.get('id') not in matched_option_ids:
+                        old_option = option
+                        break
+
+            if not old_option:
+                need_added_options.append({
+                    'table_id': table_id,
+                    'column_key': column_key,
+                    'option_name': remote_name,
+                    'option_data': {
+                        'color': remote_color,
+                        remote_id_key: remote_id,
+                    },
+                })
+                continue
+
+            option_id = old_option.get('id')
+            matched_option_ids.add(option_id)
+            old_remote_id = old_option.get(remote_id_key)
+            old_name = old_option.get('name')
+            old_color = old_option.get('color')
+
+            update_option_data = {}
+            if old_remote_id != remote_id:
+                update_option_data[remote_id_key] = remote_id
+            if old_color != remote_color:
+                update_option_data['color'] = remote_color
+            if not update_option_data:
+                update_option_data = None
+
+            new_option_name = remote_name if remote_name != old_name else None
+            if new_option_name or update_option_data:
+                need_updated_options.append((option_id, new_option_name, update_option_data))
+
+        need_deleted_option_ids = []
+        for option in existing_options:
+            option_id = option.get('id')
+            remote_id = option.get(remote_id_key)
+            if remote_id and remote_id in new_remote_ids:
+                continue
+            if option_id in matched_option_ids:
+                continue
+            if option_id:
+                need_deleted_option_ids.append(option_id)
+
+        if need_deleted_option_ids:
+            self.seadb_api.delete_column_option(self.base_id, table_id, column_key, option_ids=need_deleted_option_ids)
+
+        for option_id, new_option_name, update_option_data in need_updated_options:
+            self.seadb_api.update_column_option(
+                self.base_id,
+                table_id,
+                column_key,
+                option_id=option_id,
+                new_option_name=new_option_name,
+                update_option_data=update_option_data,
+            )
+
+        for added_option in need_added_options:
+            self.seadb_api.add_column_option(self.base_id, added_option)
+
+    def add_or_update_label_column_options(self, issue_labels, table_info):
+        table_id = table_info.get('id')
+        columns = table_info.get('columns', []) or []
+        label_column = {}
+        for column in columns:
+            if column.get('name') == LinearIssueTable.labels.name:
+                label_column = column
+                break
+
+        column_key = label_column.get('key')
+        existing_options = (label_column.get('data') or {}).get('options', []) or []
+        self._sync_select_column_options(table_id, column_key, existing_options, issue_labels, 'linear_id')
+
+    def add_or_update_state_column_options(self, states, table_info):
+        table_id = table_info.get('id')
+        columns = table_info.get('columns', []) or []
+        state_column = {}
+        for column in columns:
+            if column.get('name') == LinearIssueTable.state.name:
+                state_column = column
+                break
+
+        column_key = state_column.get('key')
+        existing_options = (state_column.get('data') or {}).get('options', []) or []
+        self._sync_select_column_options(table_id, column_key, existing_options, states, 'linear_id')
 
     def save_or_update_issue_to_db(self, connection_id, issue, existed_issue):
         issue_id = issue.get('id')
@@ -150,8 +220,8 @@ class LinearSeaDBAPI:
             LinearIssueTable.state.name: (issue.get('state') or {}).get('name'),
             LinearIssueTable.author.name: author,
             LinearIssueTable.assignees.name: json.dumps(assignees_list),
-            LinearIssueTable.created_time.name: time_to_utc_time(issue.get('createdAt')).isoformat() if issue.get('createdAt') else None,
-            LinearIssueTable.modified_time.name: time_to_utc_time(issue.get('updatedAt')).isoformat() if issue.get('updatedAt') else None,
+            LinearIssueTable.created_time.name: time_to_utc_time(issue.get('createdAt')).isoformat(),
+            LinearIssueTable.modified_time.name: time_to_utc_time(issue.get('updatedAt')).isoformat(),
             LinearIssueTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             LinearIssueTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             LinearIssueTable.closed_time.name: time_to_utc_time(issue.get('completedAt')).isoformat() if issue.get('completedAt') else None,
@@ -174,7 +244,6 @@ class LinearSeaDBAPI:
 
     def mark_issue_deleted(self, connection_id, issue_id):
         table_name = LinearIssueTable.gen_table_name(connection_id)
-        issue_id = str(issue_id)
         sql = f"SELECT _pk FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if not issues:
@@ -193,7 +262,6 @@ class LinearSeaDBAPI:
 
     def mark_issue_active(self, connection_id, issue_id):
         table_name = LinearIssueTable.gen_table_name(connection_id)
-        issue_id = str(issue_id)
         sql = f"SELECT _pk FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if not issues:
@@ -238,10 +306,10 @@ class LinearSeaDBAPI:
             insert_row = {
                 LinearCommentsTable.comment_id.name: comment_id,
                 LinearCommentsTable.content.name: content,
-                LinearCommentsTable.issue_id.name: str(issue_id),
+                LinearCommentsTable.issue_id.name: issue_id,
                 LinearCommentsTable.author.name: (comment.get('user') or {}).get('name'),
-                LinearCommentsTable.created_time.name: time_to_utc_time(comment.get('createdAt')).isoformat() if comment.get('createdAt') else None,
-                LinearCommentsTable.modified_time.name: time_to_utc_time(comment.get('updatedAt')).isoformat() if comment.get('updatedAt') else None,
+                LinearCommentsTable.created_time.name: time_to_utc_time(comment.get('createdAt')).isoformat(),
+                LinearCommentsTable.modified_time.name: time_to_utc_time(comment.get('updatedAt')).isoformat(),
             }
 
             comments_table_name = LinearCommentsTable.gen_table_name(connection_id)
@@ -263,15 +331,14 @@ class LinearSeaDBAPI:
 
     def delete_comment_from_db(self, connection_id, comment_id):
         comments_table_name = LinearCommentsTable.gen_table_name(connection_id)
-        comment_id_str = str(comment_id)
-        sql = f"DELETE FROM `{comments_table_name}` WHERE comment_id = '{comment_id_str}'"
+        sql = f"DELETE FROM `{comments_table_name}` WHERE comment_id = '{comment_id}'"
         self.seadb_api.query_rows(self.base_id, sql)
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
         issues_table_name = LinearIssueTable.gen_table_name(connection_id)
         if last_indexed_at:
             sql = f"""SELECT `_pk`, `issue_id`, `deleted`, `outdated`, `content`, `title`, `modified_time` FROM `{issues_table_name}` 
-                    WHERE modified_time >= '{last_indexed_at}' 
+                    WHERE record_modified_time >= '{last_indexed_at}' 
                     LIMIT {page_size} OFFSET {offset}"""
         else:
             sql = f"""SELECT `_pk`, `issue_id`, `deleted`, `outdated`, `content`, `title`, `modified_time` FROM `{issues_table_name}` 
@@ -288,7 +355,6 @@ class LinearSeaDBAPI:
 
     def get_issue_comments_by_page(self, connection_id, issue_id, page_size, offset):
         comments_table_name = LinearCommentsTable.gen_table_name(connection_id)
-        issue_id = str(issue_id)
         sql = f"SELECT `_pk`, `comment_id`, `content` FROM `{comments_table_name}` WHERE issue_id = '{issue_id}' LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return comments

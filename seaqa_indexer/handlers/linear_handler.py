@@ -117,9 +117,11 @@ class LinearIssueHandler(ConnectionHandler):
             sync_logger.log("Linear access_token is missing in project_linear_oauth")
             return None, None, None, None
 
+        expires_at = oauth_info.get('expires_at')
         linear_api = LinearAPI(
             access_token=access_token,
             refresh_token=refresh_token,
+            expires_at=expires_at,
         )
 
         since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
@@ -133,11 +135,11 @@ class LinearIssueHandler(ConnectionHandler):
 
         is_update_config = False
         if linear_api.last_token_update:
-            expires_in = LinearAPI.calc_expires_in(linear_api.last_token_update.get('expires_in'))
+            expires_at = LinearAPI.calc_expires_at(linear_api.last_token_update.get('expires_in'))
             seaqa_db.upsert_project_linear_oauth(
                 project_uuid,
                 linear_api.access_token,
-                expires_in=expires_in,
+                expires_at=expires_at,
                 refresh_token=linear_api.refresh_token,
             )
 
@@ -153,7 +155,7 @@ class LinearIssueHandler(ConnectionHandler):
         while True:
             sql = f"""
                 SELECT _pk, issue_id FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
+                WHERE deleted = true AND record_modified_time < '{cutoff_time}'
                 LIMIT {page_size}
             """
             result = seadb_api.query_rows(project_uuid, sql)
@@ -190,27 +192,15 @@ class LinearIssueHandler(ConnectionHandler):
     def sync_linear_options(self, connection_id, linear_seadb_api, linear_api, team_id=None):
         try:
             labels = linear_api.get_issue_labels()
-            if labels:
-                table_id, label_column_key, existing_label_names = linear_seadb_api.get_label_column_info(connection_id)
-                linear_seadb_api.add_label_options(
-                    table_id,
-                    label_column_key,
-                    existing_label_names,
-                    labels,
-                )
+            table_info = linear_seadb_api.get_table_metadata(connection_id)
+            linear_seadb_api.add_or_update_label_column_options(labels, table_info)
         except Exception:
             logger.exception("Failed to sync Linear labels")
 
         try:
             states = linear_api.get_workflow_states(team_id=team_id)
-            if states:
-                table_id, state_column_key, existing_state_names = linear_seadb_api.get_state_column_info(connection_id)
-                linear_seadb_api.add_state_options(
-                    table_id,
-                    state_column_key,
-                    existing_state_names,
-                    states,
-                )
+            table_info = linear_seadb_api.get_table_metadata(connection_id)
+            linear_seadb_api.add_or_update_state_column_options(states, table_info)
         except Exception:
             logger.exception("Failed to sync Linear states")
 
@@ -221,8 +211,7 @@ class LinearIssueHandler(ConnectionHandler):
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
 
-        if is_first_sync:
-            self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
+        self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
 
         while True:
             issues, page_info = linear_api.list_issues(
@@ -232,6 +221,7 @@ class LinearIssueHandler(ConnectionHandler):
                 team_id=team_id,
                 include_archived=include_archived,
             )
+
             if not issues:
                 break
 

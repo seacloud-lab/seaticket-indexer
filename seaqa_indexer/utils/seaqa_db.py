@@ -1,7 +1,6 @@
 import logging
 from sqlalchemy import text
-from seaqa_indexer.utils import uuid_str_to_32_chars, uuid_str_to_36_chars
-
+from seaqa_indexer.utils import uuid_str_to_32_chars
 
 logger = logging.getLogger('__name__')
 
@@ -24,9 +23,9 @@ class SeaqaDB(object):
             return connections
 
     def get_project_linear_oauth(self, project_uuid):
-        project_uuid = uuid_str_to_36_chars(project_uuid)
+        project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
-            sql = """SELECT access_token, refresh_token, expires_in 
+            sql = """SELECT access_token, refresh_token, expires_at 
                      FROM project_linear_oauth 
                      WHERE project_uuid=:project_uuid 
                      ORDER BY id DESC LIMIT 1"""
@@ -35,29 +34,29 @@ class SeaqaDB(object):
                 return {}
             return dict(row._mapping)
 
-    def upsert_project_linear_oauth(self, project_uuid, access_token, expires_in=None, refresh_token=None):
-        project_uuid = uuid_str_to_36_chars(project_uuid)
+    def upsert_project_linear_oauth(self, project_uuid, access_token, expires_at=None, refresh_token=None):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
             sql = """SELECT id FROM project_linear_oauth WHERE project_uuid=:project_uuid ORDER BY id DESC LIMIT 1"""
             row = session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
             if row:
                 cmd = """UPDATE project_linear_oauth 
-                         SET access_token=:access_token, refresh_token=:refresh_token, expires_in=:expires_in 
+                         SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at 
                          WHERE id=:id"""
                 session.execute(text(cmd), {
                     'id': row._mapping['id'],
                     'access_token': access_token,
                     'refresh_token': refresh_token,
-                    'expires_in': expires_in,
+                    'expires_at': expires_at,
                 })
             else:
-                cmd = """INSERT INTO project_linear_oauth (project_uuid, access_token, refresh_token, expires_in)
-                         VALUES (:project_uuid, :access_token, :refresh_token, :expires_in)"""
+                cmd = """INSERT INTO project_linear_oauth (project_uuid, access_token, refresh_token, expires_at)
+                         VALUES (:project_uuid, :access_token, :refresh_token, :expires_at)"""
                 session.execute(text(cmd), {
                     'project_uuid': project_uuid,
                     'access_token': access_token,
                     'refresh_token': refresh_token,
-                    'expires_in': expires_in,
+                    'expires_at': expires_at,
                 })
             session.commit()
 

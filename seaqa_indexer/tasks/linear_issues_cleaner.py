@@ -3,16 +3,14 @@ import time
 import json
 import logging
 import threading
-import signal
 import datetime
-
-from sqlalchemy.sql import text
 
 from seaqa_indexer import config
 from seaqa_indexer.app.log import LogConfigurator
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils import decrypt_config, time_to_utc_time
+from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.linear_api import LinearAPI
 from seaqa_indexer.seadb_models.linear_seadb_api import LinearSeaDBAPI
 
@@ -30,7 +28,6 @@ class LinearIssuesCleaner(object):
         self.seaqa_db = SeaqaDB(self.db_session_class)
         self.should_stop = threading.Event()
         self.clear_interval = 30 * 24 * 60 * 60  # 30 days
-        self.set_signal()
 
     @property
     def tname(self):
@@ -54,14 +51,6 @@ class LinearIssuesCleaner(object):
                     self.clean_linear_issues()
                 except Exception as e:
                     logger.exception('Cron clean linear issues error: %s', e)
-
-    def get_active_linear_connections(self):
-        with self.db_session_class() as session:
-            sql = """SELECT pc.id, pc.config, pc.project_uuid
-                     FROM project_connection pc
-                     INNER JOIN projects p ON p.uuid=pc.project_uuid
-                     WHERE p.deleted=false AND pc.deleted=false AND pc.is_active=true AND pc.type='linear'"""
-            return session.execute(text(sql)).fetchall()
 
     def _fetch_remote_issue_ids(self, linear_api, team_id, include_archived):
         per_page = 100
@@ -92,15 +81,8 @@ class LinearIssuesCleaner(object):
 
         return remote_ids, remote_deleted_ids
 
-    def _get_team_id_from_config(self, config_data):
-        if isinstance(config_data.get('config'), dict):
-            inner = config_data.get('config')
-        else:
-            inner = {}
-        return config_data.get('team_id') or inner.get('team_id')
-
     def clean_linear_issues(self):
-        connections = self.get_active_linear_connections()
+        connections = self.seaqa_db.get_need_cleaned_connections_by_type(self.check_days, ConnectionType.LINEAR.value)
         logger.info('Found %d active linear connections to check for deleted issues', len(connections))
 
         for connection in connections:
@@ -122,30 +104,19 @@ class LinearIssuesCleaner(object):
             linear_api = LinearAPI(
                 access_token=access_token,
                 refresh_token=refresh_token,
+                expires_at=oauth_info.get('expires_at'),
             )
 
-            expires_in_raw = oauth_info.get('expires_in')
-            if expires_in_raw and refresh_token:
-                try:
-                    if isinstance(expires_in_raw, (int, float)):
-                        expires_in = datetime.datetime.fromtimestamp(expires_in_raw, tz=datetime.UTC)
-                    else:
-                        expires_in = time_to_utc_time(str(expires_in_raw))
-                    if expires_in <= datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=60):
-                        linear_api.refresh_access_token()
-                except Exception:
-                    logger.exception("Failed to refresh Linear OAuth token")
-
             if linear_api.last_token_update:
-                expires_in = LinearAPI.calc_expires_in(linear_api.last_token_update.get('expires_in'))
+                expires_at = LinearAPI.calc_expires_at(linear_api.last_token_update.get('expires_in'))
                 self.seaqa_db.upsert_project_linear_oauth(
                     project_uuid,
                     linear_api.access_token,
-                    expires_in=expires_in,
+                    expires_at=expires_at,
                     refresh_token=linear_api.refresh_token,
                 )
 
-            team_id = self._get_team_id_from_config(config_data)
+            team_id = config_data.get('team_id')
 
             remote_ids, remote_deleted_ids = self._fetch_remote_issue_ids(
                 linear_api,
@@ -182,16 +153,8 @@ class LinearIssuesCleaner(object):
             for issue_id in need_restore_ids:
                 linear_seadb_api.mark_issue_active(connection_id, issue_id)
 
-    def clear(self):
-        self.should_stop.set()
-        logger.info("Exit linear issues cleaner process")
-        sys.exit(0)
-
-    def signal_term_handler(self, signal, frame):
-        self.clear()
-
-    def set_signal(self):
-        signal.signal(signal.SIGTERM, self.signal_term_handler)
+            cleaned_at = datetime.datetime.now(datetime.UTC)
+            self.seaqa_db.update_connection_last_cleaned_at(connection_id, cleaned_at)
 
 
 def start():
@@ -201,7 +164,6 @@ def start():
         cleaner.start()
     except Exception as e:
         logger.exception(e)
-        cleaner.clear()
         sys.exit(1)
 
     while True:
