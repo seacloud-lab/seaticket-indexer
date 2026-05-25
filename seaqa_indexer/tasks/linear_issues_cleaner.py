@@ -119,17 +119,10 @@ class LinearIssuesCleanerTimer(Thread):
                 linear_api = LinearAPI(
                     access_token=access_token,
                     refresh_token=refresh_token,
+                    project_uuid=project_uuid,
+                    seaqa_db=self.seaqa_db,
                     expires_at=oauth_info.get('expires_at'),
                 )
-
-                if linear_api.last_token_update:
-                    expires_at = LinearAPI.calc_expires_at(linear_api.last_token_update.get('expires_in'))
-                    self.seaqa_db.upsert_project_linear_oauth(
-                        project_uuid,
-                        linear_api.access_token,
-                        expires_at=expires_at,
-                        refresh_token=linear_api.refresh_token,
-                    )
 
                 remote_issue_ids, remote_deleted_ids = self.fetch_remote_issue_ids(
                     linear_api,

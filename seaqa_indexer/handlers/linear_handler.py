@@ -121,6 +121,8 @@ class LinearIssueHandler(ConnectionHandler):
         linear_api = LinearAPI(
             access_token=access_token,
             refresh_token=refresh_token,
+            project_uuid=project_uuid,
+            seaqa_db=seaqa_db,
             expires_at=expires_at,
         )
 
@@ -134,14 +136,6 @@ class LinearIssueHandler(ConnectionHandler):
         )
 
         is_update_config = False
-        if linear_api.last_token_update:
-            expires_at = LinearAPI.calc_expires_at(linear_api.last_token_update.get('expires_in'))
-            seaqa_db.upsert_project_linear_oauth(
-                project_uuid,
-                linear_api.access_token,
-                expires_at=expires_at,
-                refresh_token=linear_api.refresh_token,
-            )
 
         return sync_count, total_count, is_update_config, config
 

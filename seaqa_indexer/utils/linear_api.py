@@ -2,6 +2,7 @@ import datetime
 import requests
 
 from seaqa_indexer.config import LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET
+from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 
 class LinearAPI:
@@ -9,12 +10,18 @@ class LinearAPI:
         self,
         access_token: str,
         refresh_token,
+        project_uuid=None,
+        seaqa_db: SeaqaDB = None,
         expires_at=None,
         timeout: int = 60,
+        token_refresh_buffer_seconds: int = 5 * 60,
     ):
         self.access_token = access_token
         self.refresh_token = refresh_token
+        self.project_uuid = project_uuid
+        self.seaqa_db = seaqa_db
         self.expires_at = expires_at
+        self.token_refresh_buffer_seconds = token_refresh_buffer_seconds
         self.client_id = LINEAR_CLIENT_ID
         self.client_secret = LINEAR_CLIENT_SECRET
         self.api_url = "https://api.linear.app/graphql"
@@ -51,6 +58,15 @@ class LinearAPI:
         self.access_token = access_token
         self.refresh_token = data.get("refresh_token")
         self._last_token_update = data
+
+        if self.seaqa_db and self.project_uuid:
+            expires_at = self.calc_expires_at(data.get("expires_in"))
+            self.seaqa_db.upsert_project_linear_oauth(
+                self.project_uuid,
+                self.access_token,
+                expires_at=expires_at,
+                refresh_token=self.refresh_token,
+            )
         return data
 
     def _is_expired(self):
@@ -63,7 +79,8 @@ class LinearAPI:
             expires_at = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
 
         now_datetime = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-        return now_datetime >= expires_at
+        refresh_threshold = expires_at - datetime.timedelta(seconds=self.token_refresh_buffer_seconds)
+        return now_datetime >= refresh_threshold
 
     def list_issues(
         self,
