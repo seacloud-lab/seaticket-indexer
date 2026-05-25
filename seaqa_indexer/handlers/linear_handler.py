@@ -190,19 +190,14 @@ class LinearIssueHandler(ConnectionHandler):
                     seadb_api.delete_table(project_uuid, table['id'])
 
     def sync_linear_options(self, connection_id, linear_seadb_api, linear_api, team_id=None):
-        try:
-            labels = linear_api.get_issue_labels()
             table_info = linear_seadb_api.get_table_metadata(connection_id)
-            linear_seadb_api.add_or_update_label_column_options(labels, table_info)
-        except Exception:
-            logger.exception("Failed to sync Linear labels")
 
-        try:
+            labels = linear_api.get_issue_labels()
+            linear_seadb_api.add_or_update_label_column_options(labels, table_info)
+
             states = linear_api.get_workflow_states(team_id=team_id)
-            table_info = linear_seadb_api.get_table_metadata(connection_id)
             linear_seadb_api.add_or_update_state_column_options(states, table_info)
-        except Exception:
-            logger.exception("Failed to sync Linear states")
+
 
     def _sync_linear_issue(self, connection_id, since, connection_status, linear_api, seaqa_db, linear_seadb_api, team_id, include_archived, is_first_sync):
         cursor = None
@@ -210,8 +205,8 @@ class LinearIssueHandler(ConnectionHandler):
         sync_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
-
-        self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
+        if is_first_sync:
+            self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
 
         while True:
             issues, page_info = linear_api.list_issues(

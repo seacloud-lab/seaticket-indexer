@@ -166,86 +166,79 @@ class LinearAPI:
         states = []
         if self._is_expired():
             self.refresh_access_token()
-        try:
-            cursor = None
-            while True:
-                query = """
-                query WorkflowStates($after: String, $first: Int!, $filter: WorkflowStateFilter) {
-                  workflowStates(after: $after, first: $first, filter: $filter) {
-                    nodes { id name color }
-                    pageInfo { hasNextPage endCursor }
-                  }
-                }
-                """
-                filter_data = {}
-                if team_id:
-                    filter_data["team"] = {"id": {"eq": team_id}}
-                variables = {
-                    "after": cursor,
-                    "first": first,
-                    "filter": filter_data or None,
-                }
-                payload = {
-                    "query": query,
-                    "variables": variables,
-                }
-                response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-                result = data.get("data", {})
-                conn = result.get("workflowStates") or {}
-                nodes = conn.get("nodes") or []
-                states.extend(nodes)
-                page_info = conn.get("pageInfo") or {}
-                if not page_info.get("hasNextPage"):
-                    break
-                cursor = page_info.get("endCursor")
-            return states
-        except Exception:
-            return None
 
+        cursor = None
+        while True:
+            query = """
+            query WorkflowStates($after: String, $first: Int!, $filter: WorkflowStateFilter) {
+              workflowStates(after: $after, first: $first, filter: $filter) {
+                nodes { id name color }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+            """
+            filter_data = {}
+            if team_id:
+                filter_data["team"] = {"id": {"eq": team_id}}
+            variables = {
+                "after": cursor,
+                "first": first,
+                "filter": filter_data or None,
+            }
+            payload = {
+                "query": query,
+                "variables": variables,
+            }
+            response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+            result = data.get("data", {})
+            conn = result.get("workflowStates") or {}
+            nodes = conn.get("nodes") or []
+            states.extend(nodes)
+            page_info = conn.get("pageInfo") or {}
+            if not page_info.get("hasNextPage"):
+                break
+            cursor = page_info.get("endCursor")
         return states
+
 
     def get_issue_labels(self, first: int = 100):
         labels = []
         if self._is_expired():
             self.refresh_access_token()
-        try:
-            cursor = None
-            while True:
-                query = """
-                query IssueLabels($after: String, $first: Int!, $filter: IssueLabelFilter) {
-                  issueLabels(after: $after, first: $first, filter: $filter) {
-                    nodes { id name color }
-                    pageInfo { hasNextPage endCursor }
-                  }
-                }
-                """
-                filter_data = {}
-                variables = {
-                    "after": cursor,
-                    "first": first,
-                    "filter": filter_data or None,
-                }
-                payload = {
-                    "query": query,
-                    "variables": variables,
-                }
-                response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-                result = data.get("data", {})
-                conn = result.get("issueLabels") or {}
-                nodes = conn.get("nodes") or []
-                labels.extend(nodes)
-                page_info = conn.get("pageInfo") or {}
-                if not page_info.get("hasNextPage"):
-                    break
-                cursor = page_info.get("endCursor")
-            return labels
-        except Exception:
-            return None
 
+        cursor = None
+        while True:
+            query = """
+            query IssueLabels($after: String, $first: Int!, $filter: IssueLabelFilter) {
+              issueLabels(after: $after, first: $first, filter: $filter) {
+                nodes { id name color }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+            """
+            filter_data = {}
+            variables = {
+                "after": cursor,
+                "first": first,
+                "filter": filter_data or None,
+            }
+            payload = {
+                "query": query,
+                "variables": variables,
+            }
+            response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+            result = data.get("data", {})
+            conn = result.get("issueLabels") or {}
+            nodes = conn.get("nodes") or []
+            labels.extend(nodes)
+            page_info = conn.get("pageInfo") or {}
+            if not page_info.get("hasNextPage"):
+                break
+            cursor = page_info.get("endCursor")
         return labels
 
     @staticmethod

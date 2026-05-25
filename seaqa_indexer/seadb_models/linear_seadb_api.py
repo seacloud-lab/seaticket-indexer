@@ -172,7 +172,7 @@ class LinearSeaDBAPI:
 
         column_key = label_column.get('key')
         existing_options = (label_column.get('data') or {}).get('options', []) or []
-        self._sync_select_column_options(table_id, column_key, existing_options, issue_labels, 'linear_id')
+        self._sync_select_column_options(table_id, column_key, existing_options, issue_labels, 'label_id')
 
     def add_or_update_state_column_options(self, states, table_info):
         table_id = table_info.get('id')
@@ -185,7 +185,7 @@ class LinearSeaDBAPI:
 
         column_key = state_column.get('key')
         existing_options = (state_column.get('data') or {}).get('options', []) or []
-        self._sync_select_column_options(table_id, column_key, existing_options, states, 'linear_id')
+        self._sync_select_column_options(table_id, column_key, existing_options, states, 'state_id')
 
     def save_or_update_issue_to_db(self, connection_id, issue, existed_issue):
         issue_id = issue.get('id')

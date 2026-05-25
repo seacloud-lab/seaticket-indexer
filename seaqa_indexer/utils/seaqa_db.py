@@ -34,7 +34,7 @@ class SeaqaDB(object):
                 return {}
             return dict(row._mapping)
 
-    def upsert_project_linear_oauth(self, project_uuid, access_token, expires_at=None, refresh_token=None):
+    def upsert_project_linear_oauth(self, project_uuid, access_token, expires_at, refresh_token):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
             sql = """SELECT id FROM project_linear_oauth WHERE project_uuid=:project_uuid ORDER BY id DESC LIMIT 1"""

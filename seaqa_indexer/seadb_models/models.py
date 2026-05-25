@@ -22,6 +22,7 @@ class SchemaTables:
     NOTION = SCHEMA.NotionTable
     GENERAL_TASK = SCHEMA.GeneralTaskTable
     GENERAL_TASK_USER = SCHEMA.GeneralTaskUserTable
+    LINEAR_ISSUES = SCHEMA.LinearIssuesTable
 
 
 class PropertyTypes:
