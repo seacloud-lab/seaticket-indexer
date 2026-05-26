@@ -53,6 +53,7 @@ class LinearAPI:
         self.refresh_token = data.get("refresh_token")
 
         expires_at = self.calc_expires_at(data.get("expires_in"))
+        self.expires_at = expires_at
         self.seaqa_db.upsert_project_linear_oauth(
             self.project_uuid,
             self.access_token,
@@ -63,8 +64,10 @@ class LinearAPI:
 
     def _is_expired(self):
         """Check if the token is expired."""
-        expires_at = datetime.datetime.strptime(self.expires_at, "%Y-%m-%d %H:%M:%S")
-        now_datetime = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        expires_at = self.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+        now_datetime = datetime.datetime.now(datetime.timezone.utc)
         refresh_threshold = expires_at - datetime.timedelta(seconds=self.token_refresh_buffer_seconds)
         return now_datetime >= refresh_threshold
 
