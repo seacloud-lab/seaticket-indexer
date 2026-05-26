@@ -2,17 +2,16 @@ import datetime
 import requests
 
 from seaqa_indexer.config import LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET
-from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 
 class LinearAPI:
     def __init__(
         self,
-        access_token: str,
+        access_token,
         refresh_token,
-        project_uuid=None,
-        seaqa_db: SeaqaDB = None,
-        expires_at=None,
+        project_uuid,
+        seaqa_db,
+        expires_at,
         timeout: int = 60,
         token_refresh_buffer_seconds: int = 5 * 60,
     ):
@@ -27,11 +26,6 @@ class LinearAPI:
         self.api_url = "https://api.linear.app/graphql"
         self.token_url = "https://api.linear.app/oauth/token"
         self.timeout = timeout
-        self._last_token_update = None
-
-    @property
-    def last_token_update(self):
-        return self._last_token_update
 
     def _headers(self):
         return {
@@ -57,27 +51,19 @@ class LinearAPI:
         access_token = data.get("access_token")
         self.access_token = access_token
         self.refresh_token = data.get("refresh_token")
-        self._last_token_update = data
 
-        if self.seaqa_db and self.project_uuid:
-            expires_at = self.calc_expires_at(data.get("expires_in"))
-            self.seaqa_db.upsert_project_linear_oauth(
-                self.project_uuid,
-                self.access_token,
-                expires_at=expires_at,
-                refresh_token=self.refresh_token,
-            )
+        expires_at = self.calc_expires_at(data.get("expires_in"))
+        self.seaqa_db.upsert_project_linear_oauth(
+            self.project_uuid,
+            self.access_token,
+            expires_at=expires_at,
+            refresh_token=self.refresh_token,
+        )
         return data
 
     def _is_expired(self):
         """Check if the token is expired."""
-        if not self.expires_at:
-            return False
-
-        expires_at = self.expires_at
-        if isinstance(expires_at, str):
-            expires_at = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
-
+        expires_at = datetime.datetime.strptime(self.expires_at, "%Y-%m-%d %H:%M:%S")
         now_datetime = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         refresh_threshold = expires_at - datetime.timedelta(seconds=self.token_refresh_buffer_seconds)
         return now_datetime >= refresh_threshold

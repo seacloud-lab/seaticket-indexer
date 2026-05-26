@@ -217,14 +217,7 @@ class LinearIssueHandler(ConnectionHandler):
             for issue in issues:
                 # Check if issue already exists in DB
                 issue_id = issue.get('id')
-                is_deleted = bool(issue.get('archivedAt'))
                 existed_issue = linear_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
-                if is_deleted:
-                    if existed_issue and not existed_issue.get('deleted'):
-                        linear_seadb_api.mark_issue_deleted(connection_id, issue_id)
-                        sync_count += 1
-                    # deleted but never stored or already deleted, skip
-                    continue
                 if existed_issue and existed_issue.get('deleted'):
                     linear_seadb_api.mark_issue_active(connection_id, issue_id)
                 if existed_issue and issue.get('updatedAt'):
