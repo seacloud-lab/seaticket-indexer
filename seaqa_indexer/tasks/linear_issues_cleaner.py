@@ -47,7 +47,6 @@ class LinearIssuesCleanerTimer(Thread):
 
     def fetch_remote_issue_ids(self, linear_api, team_id, include_archived):
         issue_ids = set()
-        remote_deleted_ids = set()
         cursor = None
 
         while True:
@@ -66,8 +65,6 @@ class LinearIssuesCleanerTimer(Thread):
                 if not issue_id:
                     continue
                 issue_ids.add(issue_id)
-                if issue.get('archivedAt'):
-                    remote_deleted_ids.add(issue_id)
 
             if not page_info.get('hasNextPage'):
                 break
@@ -76,7 +73,7 @@ class LinearIssuesCleanerTimer(Thread):
                 break
             time.sleep(0.34)
 
-        return issue_ids, remote_deleted_ids
+        return issue_ids
 
     def get_local_issue_ids(self, linear_seadb_api, connection_id):
         offset = 0
@@ -110,21 +107,18 @@ class LinearIssuesCleanerTimer(Thread):
                 include_archived = connection_config.get('include_archived', True)
 
                 oauth_info = self.seaqa_db.get_project_linear_oauth(project_uuid)
-                access_token = oauth_info.get('access_token')
-                refresh_token = oauth_info.get('refresh_token')
+                access_token = oauth_info.access_token
+                refresh_token = oauth_info.refresh_token
                 if not access_token:
                     logger.warning('Linear access_token missing for project %s', project_uuid)
                     continue
 
                 linear_api = LinearAPI(
                     access_token=access_token,
-                    refresh_token=refresh_token,
-                    project_uuid=project_uuid,
-                    seaqa_db=self.seaqa_db,
-                    expires_at=oauth_info.get('expires_at'),
+                    refresh_token=refresh_token
                 )
 
-                remote_issue_ids, remote_deleted_ids = self.fetch_remote_issue_ids(
+                remote_issue_ids = self.fetch_remote_issue_ids(
                     linear_api,
                     team_id,
                     include_archived=include_archived,
@@ -133,32 +127,13 @@ class LinearIssuesCleanerTimer(Thread):
                 linear_seadb_api = LinearSeaDBAPI(project_uuid)
                 local_ids = self.get_local_issue_ids(linear_seadb_api, connection_id)
 
-                local_deleted_ids = set()
-                offset = 0
-                while True:
-                    rows = linear_seadb_api.get_issue_ids_by_page(connection_id, self.page_size, offset)
-                    if not rows:
-                        break
-                    for row in rows:
-                        issue_id = row.get('issue_id')
-                        if issue_id and row.get('deleted'):
-                            local_deleted_ids.add(issue_id)
-                    if len(rows) < self.page_size:
-                        break
-                    offset += self.page_size
-
-                need_deleted_ids = (local_ids - remote_issue_ids) | (local_ids & remote_deleted_ids)
-                need_deleted_ids -= local_deleted_ids
-                need_restore_ids = (local_deleted_ids & remote_issue_ids) - remote_deleted_ids
-
+                need_deleted_ids = local_ids - remote_issue_ids
                 for issue_id in need_deleted_ids:
                     linear_seadb_api.mark_issue_deleted(connection_id, issue_id)
-                for issue_id in need_restore_ids:
-                    linear_seadb_api.mark_issue_active(connection_id, issue_id)
 
                 cleaned_at = datetime.datetime.now(datetime.UTC)
                 self.seaqa_db.update_connection_last_cleaned_at(connection_id, cleaned_at)
-                logger.info('Marked %d linear issues deleted and %d restored for connection %s', len(need_deleted_ids), len(need_restore_ids), connection_id)
+                logger.info('Marked %d linear issues deleted and %d restored for connection %s', len(need_deleted_ids), connection_id)
             except Exception as e:
                 logger.exception('Failed to clean linear issues for connection %s: %s', connection_id, e)
 

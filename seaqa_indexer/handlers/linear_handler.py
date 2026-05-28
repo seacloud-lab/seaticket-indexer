@@ -109,21 +109,17 @@ class LinearIssueHandler(ConnectionHandler):
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
         oauth_info = seaqa_db.get_project_linear_oauth(project_uuid)
-        access_token = oauth_info.get('access_token')
-        refresh_token = oauth_info.get('refresh_token')
+        access_token = oauth_info.access_token
+        refresh_token = oauth_info.refresh_token
         team_id = config.get('team_id')
         include_archived = config.get('include_archived', True)
         if not access_token:
             sync_logger.log("Linear access_token is missing in project_linear_oauth")
             return None, None, None, None
 
-        expires_at = oauth_info.get('expires_at')
         linear_api = LinearAPI(
             access_token=access_token,
-            refresh_token=refresh_token,
-            project_uuid=project_uuid,
-            seaqa_db=seaqa_db,
-            expires_at=expires_at,
+            refresh_token=refresh_token
         )
 
         since = old_last_sync_time.isoformat() + "Z" if old_last_sync_time else None
@@ -218,8 +214,6 @@ class LinearIssueHandler(ConnectionHandler):
                 # Check if issue already exists in DB
                 issue_id = issue.get('id')
                 existed_issue = linear_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
-                if existed_issue and existed_issue.get('deleted'):
-                    linear_seadb_api.mark_issue_active(connection_id, issue_id)
                 if existed_issue and issue.get('updatedAt'):
                     if time_to_utc_time(issue.get('updatedAt')) <= time_to_utc_time(str(existed_issue.get('modified_time'))):
                         logger.debug(f'Issue {issue_id} is up to date, skipping sync.')

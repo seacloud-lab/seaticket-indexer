@@ -9,18 +9,10 @@ class LinearAPI:
         self,
         access_token,
         refresh_token,
-        project_uuid,
-        seaqa_db,
-        expires_at,
         timeout: int = 60,
-        token_refresh_buffer_seconds: int = 5 * 60,
     ):
         self.access_token = access_token
         self.refresh_token = refresh_token
-        self.project_uuid = project_uuid
-        self.seaqa_db = seaqa_db
-        self.expires_at = expires_at
-        self.token_refresh_buffer_seconds = token_refresh_buffer_seconds
         self.client_id = LINEAR_CLIENT_ID
         self.client_secret = LINEAR_CLIENT_SECRET
         self.api_url = "https://api.linear.app/graphql"
@@ -46,6 +38,8 @@ class LinearAPI:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=self.timeout,
         )
+        if response.status_code == 400 and response.text:
+            raise Exception(response.text)
         response.raise_for_status()
         data = response.json() or {}
         access_token = data.get("access_token")
@@ -53,23 +47,10 @@ class LinearAPI:
         self.refresh_token = data.get("refresh_token")
 
         expires_at = self.calc_expires_at(data.get("expires_in"))
-        self.expires_at = expires_at
-        self.seaqa_db.upsert_project_linear_oauth(
-            self.project_uuid,
-            self.access_token,
-            expires_at=expires_at,
-            refresh_token=self.refresh_token,
-        )
-        return data
+        access_token = data.get("access_token")
+        refresh_token = data.get("refresh_token")
 
-    def _is_expired(self):
-        """Check if the token is expired."""
-        expires_at = self.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
-        now_datetime = datetime.datetime.now(datetime.timezone.utc)
-        refresh_threshold = expires_at - datetime.timedelta(seconds=self.token_refresh_buffer_seconds)
-        return now_datetime >= refresh_threshold
+        return {'access_token': access_token, 'refresh_token': refresh_token, 'expires_at': expires_at}
 
     def list_issues(
         self,
@@ -118,8 +99,6 @@ class LinearAPI:
             "query": query,
             "variables": variables,
         }
-        if self._is_expired():
-            self.refresh_access_token()
         response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
         response.raise_for_status()
         data = response.json()
@@ -158,8 +137,6 @@ class LinearAPI:
             "query": query,
             "variables": variables,
         }
-        if self._is_expired():
-            self.refresh_access_token()
         response = requests.post(self.api_url, json=payload, headers=self._headers(), timeout=self.timeout)
         response.raise_for_status()
         data = response.json()
@@ -170,8 +147,6 @@ class LinearAPI:
 
     def get_workflow_states(self, team_id=None, first: int = 100):
         states = []
-        if self._is_expired():
-            self.refresh_access_token()
 
         cursor = None
         while True:
@@ -211,8 +186,6 @@ class LinearAPI:
 
     def get_issue_labels(self, first: int = 100):
         labels = []
-        if self._is_expired():
-            self.refresh_access_token()
 
         cursor = None
         while True:
@@ -256,4 +229,4 @@ class LinearAPI:
         expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
             seconds=int(expires_in)
         )
-        return expires_at.replace(microsecond=0)
+        return expires_at
