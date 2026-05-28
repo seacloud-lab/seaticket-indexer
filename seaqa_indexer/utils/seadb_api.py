@@ -24,6 +24,12 @@ class OptionValueInvalidException(Exception):
         super().__init__(self.message)
 
 
+class TableNotFound(Exception):
+    def __init__(self, message="no such table"):
+        self.message = message
+        super().__init__(self.message)
+
+
 class SeaDBAPI:
     def __init__(self, timeout=30, username=SEADB_COMPONENT_USERNAME):
         self.timeout = timeout
@@ -145,6 +151,8 @@ class SeaDBAPI:
             post_data['params'] = params
         url = f'{self.server_url}/api/v1/{base_id}/query'
         response = requests.post(url, json=post_data, headers=headers, timeout=self.timeout)
+        if response.status_code == 400 and 'no such table' in response.text:
+            raise TableNotFound()
         return parse_response(response)
 
     # columns
