@@ -120,6 +120,10 @@ GENERAL_TASK_CONNECTION_SPEC = {
         "type": "string",
         "description": "srouce data id。"
     },
+    "url": {
+        "type": "string",
+        "description": "Source task URL."
+    },
     "title": {
         "type": "string",
         "description": "task title。"

@@ -472,6 +472,7 @@ class ThreadTable(BaseModel):
 
 class GeneralTaskTable(BaseModel):
     source_task_id = MappedColumn('source_task_id', PropertyTypes.TEXT)
+    url = MappedColumn('url', PropertyTypes.TEXT)
     title = MappedColumn('title', PropertyTypes.TEXT)
     status = MappedColumn('status', PropertyTypes.SINGLE_SELECT)
     size = MappedColumn('size', PropertyTypes.SINGLE_SELECT)

@@ -178,6 +178,7 @@ class GeneralTaskSeaDBAPI:
         now = datetime.datetime.now(datetime.UTC).isoformat()
         return {
             GeneralTaskTable.source_task_id.name: str(task.get('task_id') or '').strip(),
+            GeneralTaskTable.url.name: str(task.get('url') or '').strip(),
             GeneralTaskTable.title.name: task.get('title', ''),
             GeneralTaskTable.status.name: task.get('status'),
             GeneralTaskTable.size.name: task.get('size'),
