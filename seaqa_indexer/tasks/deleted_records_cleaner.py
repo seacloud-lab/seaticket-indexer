@@ -4,7 +4,7 @@ from threading import Thread, Event
 
 from seaqa_indexer import config
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
+from seaqa_indexer.utils.seadb_api import SeaDBAPI, TableNotFound
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.handlers import get_handler
@@ -61,7 +61,11 @@ class DeletedRecordsCleanerTimer(Thread):
                 WHERE deleted = true AND modified_time < '{cutoff_time}'
                 LIMIT {page_size}
             """
-            result = seadb_api.query_rows(project_uuid, sql)
+            try:
+                result = seadb_api.query_rows(project_uuid, sql)
+            except TableNotFound:
+                logger.warning('table %s not found', portal_issue_table_name)
+                break
             rows = result.get('results', [])
             if not rows:
                 break
