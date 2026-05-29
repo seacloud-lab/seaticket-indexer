@@ -8,7 +8,7 @@ from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import EmailTable, ThreadTable
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
-from seaqa_indexer.utils.imap_mail import ImapMail
+from seaqa_indexer.utils.mail_viewer import get_mail_viewer_from_config, EmailConfigError, EmailViewError, EmailAuthProviderError
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.index.utils import gen_index_name_by_type
@@ -105,10 +105,6 @@ class EmailHandler(ConnectionHandler):
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, connection_status, seaqa_db, sync_logger):
-        imap_host = config.get('imap_host')
-        imap_port = config.get('imap_port')
-        email_user = config.get('username')
-        email_password = config.get('password')
         sync_years = config.get('sync_years', 5)
         since = old_last_sync_time
         is_first_update = False
@@ -122,16 +118,24 @@ class EmailHandler(ConnectionHandler):
         storage = get_storage()
 
         try:
-            imap = ImapMail(imap_host, email_user, email_password, port=imap_port)
-        except Exception as e:
-            logger.error("connection_id %s imap_host: %s, email_user: %s, login error: %s",
-                        connection_id, imap_host, email_user, e)
-            sync_logger.log(f"imap account is invalid")
+            mail_viewer = get_mail_viewer_from_config(config)
+        except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
+            logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)
+            sync_logger.log('email account is invalid')
             return None, None, None, None
 
-        sync_count, total_count = self._sync_email(connection_id, project_uuid, connection_status, since,
-                         imap, seaqa_db, email_seadb_api, storage, is_first_update)
-        return sync_count, total_count, False, config
+        try:
+            sync_count, total_count = self._sync_email(connection_id, project_uuid, connection_status, since,
+                             mail_viewer, seaqa_db, email_seadb_api, storage, is_first_update)
+        except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
+            logger.error('connection_id %s email sync failed: %s', connection_id, e)
+            sync_logger.log(str(e))
+            return None, None, None, None
+        finally:
+            mail_viewer.close()
+
+        is_update_config = getattr(mail_viewer, 'config_updated', False)
+        return sync_count, total_count, is_update_config, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
         """Clean deleted email thread records and their emails."""
@@ -168,7 +172,7 @@ class EmailHandler(ConnectionHandler):
 
         return total_deleted
 
-    def _sync_email(self, connection_id, project_uuid, connection_status, since, imap, seaqa_db, email_seadb_api, storage, is_first_sync):
+    def _sync_email(self, connection_id, project_uuid, connection_status, since, mail_viewer, seaqa_db, email_seadb_api, storage, is_first_sync):
         sync_count = 0
         added_count = 0
         updated_count = 0
@@ -186,7 +190,7 @@ class EmailHandler(ConnectionHandler):
             since_date = before_date
             before_date += datetime.timedelta(days=EMAIL_SYNC_INTERVAL_DAYS)
 
-            email_list = imap.search_emails(since_date, before_date)
+            email_list = mail_viewer.search_emails(since_date, before_date)
             changed_email_list = []
             for email in email_list:
                 if not email:
