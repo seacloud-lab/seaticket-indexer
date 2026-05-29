@@ -9,6 +9,7 @@ from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.index.index_store.general_task_index import GeneralTaskIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.seadb_models.general_task_seadb_api import GeneralTaskSeaDBAPI
+from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.seadb_models.models import GeneralTaskTable
 from seaqa_indexer.utils import need_update_connection_last_sync_count
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus, GENERAL_TASK_CONNECTION_SPEC
@@ -151,21 +152,36 @@ class GeneralTaskHandler(ConnectionHandler):
                 except Exception as error:
                     sync_logger.log(f'Ensure task column options failed: {error}')
 
+            source_task_ids = [str(task.get('task_id')) for task in tasks]
+            existing_rows_by_source_task_id = general_task_seadb_api.get_rows_by_source_task_ids(connection_id, source_task_ids)
+            append_rows = []
+            update_rows = []
             for task in tasks:
                 source_task_id = str(task.get('task_id') or '').strip()
                 if not source_task_id:
                     continue
 
-                existing_pk = general_task_seadb_api.get_pk_by_source_task_id(connection_id, source_task_id)
+                existing_row = existing_rows_by_source_task_id.get(source_task_id)
+                if existing_row:
+                    remote_modified_time = task.get('modified_time')
+                    local_modified_time = existing_row.get('modified_time')
+                    if remote_modified_time and local_modified_time:
+                        try:
+                            if time_to_utc_time(str(remote_modified_time)) <= time_to_utc_time(str(local_modified_time)):
+                                logger.debug('General task %s is up to date, skipping sync.', source_task_id)
+                                continue
+                        except Exception:
+                            logger.warning('Failed to compare modified_time for general task %s', source_task_id)
+
                 task_data = {key: task.get(key) for key in spec_keys}
                 row_data = general_task_seadb_api.build_row_data(task_data)
-                if existing_pk:
-                    general_task_seadb_api.update_rows(connection_id, [{
-                        'pk': existing_pk,
+                if existing_row:
+                    update_rows.append({
+                        'pk': existing_row.get('_pk'),
                         'row': row_data,
-                    }])
+                    })
                 else:
-                    general_task_seadb_api.append_rows(connection_id, [row_data])
+                    append_rows.append(row_data)
                 sync_count += 1
                 should_update_status, new_update_time, new_update_count = need_update_connection_last_sync_count(
                     sync_count,
@@ -177,6 +193,11 @@ class GeneralTaskHandler(ConnectionHandler):
                     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
                     status_last_update_time = new_update_time
                     status_last_update_count = new_update_count
+
+            if append_rows:
+                general_task_seadb_api.append_rows(connection_id, append_rows)
+            if update_rows:
+                general_task_seadb_api.update_rows(connection_id, update_rows)
 
             page_info = data.get('page_info') or {}
             has_more = bool(page_info.get('has_more'))
