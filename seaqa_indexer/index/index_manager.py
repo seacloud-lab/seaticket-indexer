@@ -308,9 +308,9 @@ class IndexManager:
 
         return formatted_results
 
-    def vector_search_by_text(self, project_uuid, connection_ids, extra_sources, query_text, username, time_from=None, time_to=None, top_k=10):
+    def vector_search_by_text(self, project_uuid, connection_ids, extra_sources, query_text, time_from=None, time_to=None, top_k=10):
 
-        query_vector = self.seaqa_ai_api.generate_embedding(query_text, project_uuid, username=username, scenario=AIScenario.SEARCH.value)
+        query_vector = self.seaqa_ai_api.generate_embedding(query_text, project_uuid, scenario=AIScenario.SEARCH.value)
         if not query_vector:
             logger.warning('Failed to generate query vector for: %s', query_text)
             return []
