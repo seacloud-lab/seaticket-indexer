@@ -265,7 +265,6 @@ def vector_search_by_text():
     connection_ids = data.get('connection_ids')
     time_from = data.get('time_from')
     time_to = data.get('time_to')
-    username = data.get('username', '')
     extra_sources = data.get('extra_sources', [])
 
     if not query:
@@ -278,7 +277,7 @@ def vector_search_by_text():
         count = int(data.get('count'))
     except:
         count = 20
-    results = application.app.index_manager.vector_search_by_text(project_uuid, connection_ids, extra_sources, query, username, time_from, time_to, count)
+    results = application.app.index_manager.vector_search_by_text(project_uuid, connection_ids, extra_sources, query, time_from, time_to, count)
 
     return {'results': results}, 200
 
