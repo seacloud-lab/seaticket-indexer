@@ -56,6 +56,17 @@ class GeneralTaskSeaDBAPI:
             return None
         return results[0].get('_pk')
 
+    def get_rows_by_source_task_ids(self, connection_id, source_task_ids):
+        table_name = self._table_name(connection_id)
+        escaped_ids = "', '".join(source_task_id.replace("'", "''") for source_task_id in source_task_ids)
+        sql = (
+            f"SELECT _pk, source_task_id, modified_time, deleted "
+            f"FROM `{table_name}` "
+            f"WHERE source_task_id IN ('{escaped_ids}')"
+        )
+        results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        return {row.get('source_task_id'): row for row in results }
+
     def get_existing_user_mapping_pks(self, connection_id, emails):
         if not emails:
             return {}
@@ -184,7 +195,6 @@ class GeneralTaskSeaDBAPI:
             GeneralTaskTable.size.name: task.get('size'),
             GeneralTaskTable.priority.name: task.get('priority'),
             GeneralTaskTable.assignees.name: task.get('assignees', []),
-            GeneralTaskTable.participants.name: task.get('participants', []),
             GeneralTaskTable.version.name: task.get('version', ''),
             GeneralTaskTable.others.name: others,
             GeneralTaskTable.content.name: content,
