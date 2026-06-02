@@ -1,0 +1,27 @@
+name: SeaQA Indexer Test CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: pip install
+        run: |
+          cd $GITHUB_WORKSPACE
+          pip install -r test-requirements.txt
+
+      - name: run pytest
+        run: |
+          cd $GITHUB_WORKSPACE
+          python -m pytest seaqa_indexer/tests/ -v
