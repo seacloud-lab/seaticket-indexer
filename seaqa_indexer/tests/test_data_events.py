@@ -156,7 +156,6 @@ class TestPublishSyncedRecordEvents:
             state_event_type='dummy_updated',
             additional_items=[{'id': 1}],
             additional_event_type='dummy_comment_added',
-            additional_items_field='comments',
             state_event_ignored_fields=('_pk', 'modified_time'),
         )
 
@@ -165,7 +164,7 @@ class TestPublishSyncedRecordEvents:
         second_payload = json.loads(handler.mq.publish.call_args_list[1][0][1])
 
         assert first_payload['event']['type'] == 'dummy_comment_added'
-        assert first_payload['event']['new_value'] == {'comments': [{'id': 1}]}
+        assert first_payload['event']['new_value'] == {'id': 1}
 
         assert second_payload['event']['type'] == 'dummy_updated'
         assert second_payload['event']['old_value'] == {'summary': 'old'}
@@ -190,7 +189,6 @@ class TestPublishSyncedRecordEvents:
             state_event_type='dummy_added',
             additional_items=[{'id': 2}],
             additional_event_type='dummy_comment_added',
-            additional_items_field='comments',
             state_event_ignored_fields=('_pk', 'modified_time'),
         )
 
@@ -217,7 +215,6 @@ class TestPublishSyncedRecordEvents:
             state_event_type='dummy_updated',
             additional_items=[],
             additional_event_type='dummy_comment_added',
-            additional_items_field='comments',
             state_event_ignored_fields=('_pk', 'modified_time'),
         )
 
