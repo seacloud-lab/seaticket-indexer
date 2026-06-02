@@ -3,7 +3,7 @@ import hashlib
 import urllib.parse
 from email.utils import parsedate_to_datetime
 from seaqa_indexer.crawler.extractor import extract_html
-from seaqa_indexer.seadb_models.utils import get_seadb_column_name, get_seadb_table_name
+from seaqa_indexer.seadb_models.utils import get_column_name_from_schema, get_table_name_from_schema
 from seaqa_indexer.utils import md5
 
 
@@ -86,9 +86,9 @@ def spider_parse_item(spider, response):
 def load_existing_site_info(connection_id, project_uuid, existing_site_info, seadb_api, limit=1000):
     """Load the ETag and Last-Modified information of an existing file"""
     offset = 0
-    table_name = get_seadb_table_name('WebCrawlTable', connection_id=connection_id)
+    table_name = get_table_name_from_schema('WebCrawlTable', connection_id=connection_id)
     while True:
-        sql = f"""SELECT `{get_seadb_column_name('WebCrawlTable', 'url')}`, `{get_seadb_column_name('WebCrawlTable', 'etag')}`, `{get_seadb_column_name('WebCrawlTable', 'modified_time')}`, `{get_seadb_column_name('WebCrawlTable', 'hash')}`
+        sql = f"""SELECT `{get_column_name_from_schema('WebCrawlTable', 'url')}`, `{get_column_name_from_schema('WebCrawlTable', 'etag')}`, `{get_column_name_from_schema('WebCrawlTable', 'modified_time')}`, `{get_column_name_from_schema('WebCrawlTable', 'hash')}`
         FROM `{table_name}`
         LIMIT {limit} OFFSET {offset}"""
         result = seadb_api.query_rows(project_uuid, sql)

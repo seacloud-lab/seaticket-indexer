@@ -3,7 +3,7 @@ import logging
 import datetime
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
-from seaqa_indexer.seadb_models.utils import get_seadb_table_name
+from seaqa_indexer.seadb_models.utils import get_table_name_from_schema
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.index.utils import gen_index_name_by_type, gen_content_vector_index_name
 from seaqa_indexer.utils.constants import IndexStatus
@@ -22,7 +22,7 @@ class SiteHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return get_seadb_table_name('WebCrawlTable', connection_id=connection_id)
+        return get_table_name_from_schema('WebCrawlTable', connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         site_index = SiteIndex(seasearch_api)

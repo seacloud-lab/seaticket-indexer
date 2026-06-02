@@ -13,7 +13,7 @@ def _resolve_table_name_by_schema_table_key(schema_table_name, connection_id=Non
     return schema_table_name
 
 
-def get_seadb_table_name(schema_table_name, connection_id=None):
+def get_table_name_from_schema(schema_table_name, connection_id=None):
     """Resolve the actual seadb table name from the YAML schema for a given schema table name."""
     schema = get_seadb_table_schemas()
     tables = schema.get('tables') or {}
@@ -24,7 +24,7 @@ def get_seadb_table_name(schema_table_name, connection_id=None):
     return ''
 
 
-def get_seadb_column_name(schema_table_name, column_name):
+def get_column_name_from_schema(schema_table_name, column_name):
     """Return the column_name defined in YAML schema, or empty string if column not found. O(1) dict lookup."""
     schema = get_seadb_table_schemas()
     tables = schema.get('tables') or {}
@@ -35,7 +35,7 @@ def get_seadb_column_name(schema_table_name, column_name):
     return ''
 
 
-def get_seadb_column_data(schema_table_name, column_name):
+def get_column_data _from_schema(schema_table_name, column_name):
     """Return the column_data config for the specified column from YAML schema. O(1) dict lookup."""
     schema = get_seadb_table_schemas()
     tables = schema.get('tables') or {}

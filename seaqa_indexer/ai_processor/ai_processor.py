@@ -3,7 +3,7 @@ import datetime
 import json
 
 from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
-from seaqa_indexer.seadb_models.utils import get_seadb_table_name
+from seaqa_indexer.seadb_models.utils import get_table_name_from_schema
 from seaqa_indexer.seadb_models.knowledge_base_seadb_api import KnowledgeBaseSeaDBAPI
 from seaqa_indexer.utils.constants import AIStatus
 from seaqa_indexer.seadb_models.ticket_seadb_api import TicketSeaDBAPI
@@ -67,7 +67,7 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
 def process_knowledge_base_ai(seadb_api, project_uuid):
     page_size = 100
     updates = []
-    table_name = get_seadb_table_name('KnowledgeBaseTable')
+    table_name = get_table_name_from_schema('KnowledgeBaseTable')
     knowledge_base_seadb_api = KnowledgeBaseSeaDBAPI(project_uuid)
     seaqa_ai_api = SeaQAAIAPI()
 
@@ -107,7 +107,7 @@ def process_knowledge_base_ai(seadb_api, project_uuid):
 def process_portal_issue_ai(seadb_api, project_uuid):
     page_size = 100
     updates = []
-    table_name = get_seadb_table_name('PortalIssuesTable')
+    table_name = get_table_name_from_schema('PortalIssuesTable')
     portal_issue_seadb_api = PortalIssueSeaDBAPI(project_uuid)
     seaqa_ai_api = SeaQAAIAPI()
 
@@ -147,7 +147,7 @@ def process_portal_issue_ai(seadb_api, project_uuid):
 def process_ticket_ai(seadb_api, project_uuid):
     page_size = 100
     updates = []
-    table_name = get_seadb_table_name('TicketsTable')
+    table_name = get_table_name_from_schema('TicketsTable')
     ticket_seadb_api = TicketSeaDBAPI(project_uuid)
     seaqa_ai_api = SeaQAAIAPI()
 
