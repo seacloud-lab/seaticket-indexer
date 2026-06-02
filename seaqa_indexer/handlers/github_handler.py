@@ -4,7 +4,7 @@ import logging
 from urllib.parse import urlparse
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
-from seaqa_indexer.seadb_models.utils import get_table_name
+from seaqa_indexer.seadb_models.utils import get_seadb_table_name
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.github_issues_api import GitHubAPI, GitHubAppNotInstalled
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
@@ -27,10 +27,10 @@ class GithubIssueHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return get_table_name('GithubIssuesTable', connection_id=connection_id)
+        return get_seadb_table_name('GithubIssuesTable', connection_id=connection_id)
 
     def gen_comments_table_name(self, connection_id):
-        return get_table_name('GithubIssueCommentsTable', connection_id=connection_id)
+        return get_seadb_table_name('GithubIssueCommentsTable', connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         github_issue_index = GitHubIssuesIndex(seasearch_api)

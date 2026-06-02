@@ -1,5 +1,5 @@
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.utils import get_table_name
+from seaqa_indexer.seadb_models.utils import get_seadb_table_name
 
 
 class KnowledgeBaseSeaDBAPI:
@@ -8,7 +8,7 @@ class KnowledgeBaseSeaDBAPI:
         self.seadb_api = SeaDBAPI()
 
     def get_knowledge_bases_by_page(self, since, page_size, offset):
-        table_name = get_table_name('KnowledgeBaseTable')
+        table_name = get_seadb_table_name('KnowledgeBaseTable')
         sql = f"""SELECT `_pk`, `title`, `content`, `deleted`, `modified_time` FROM `{table_name}`
                 WHERE modified_time >= '{since}' LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
@@ -16,7 +16,7 @@ class KnowledgeBaseSeaDBAPI:
         return results
 
     def get_need_ai_knowledge_bases_by_page(self, page_size):
-        table_name = get_table_name('KnowledgeBaseTable')
+        table_name = get_seadb_table_name('KnowledgeBaseTable')
         sql = f"""
             SELECT `_pk`, `title`, `content` FROM `{table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < modified_time) 

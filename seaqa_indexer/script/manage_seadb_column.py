@@ -44,7 +44,7 @@ class ColumnManager:
             projects = session.execute(text(sql), {'limit':limit, 'start': start}).fetchall()
             return projects
     
-    def get_column_data(self, column_data_name, column_type):
+    def get_seadb_column_data(self, column_data_name, column_type):
         column_data = None
         if not column_data_name:
             return column_data
@@ -66,7 +66,7 @@ class ColumnManager:
                 return True
     
     def add_seadb_column(self, table_name, table_type, column_name, column_type, column_data_name, need_add_index=False):
-        column_data = self.get_column_data(column_data_name, column_type)
+        column_data = self.get_seadb_column_data(column_data_name, column_type)
         limit = 1000
         start = 0
         while True:

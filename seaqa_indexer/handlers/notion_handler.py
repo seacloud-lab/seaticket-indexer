@@ -4,7 +4,7 @@ import logging
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.index.index_store.notion_index import NotionIndex
-from seaqa_indexer.seadb_models.utils import get_table_name
+from seaqa_indexer.seadb_models.utils import get_seadb_table_name
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.index.utils import gen_index_name_by_type
@@ -22,7 +22,7 @@ class NotionHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return get_table_name('NotionTable', connection_id=connection_id)
+        return get_seadb_table_name('NotionTable', connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         notion_index = NotionIndex(seasearch_api)
@@ -49,7 +49,7 @@ class NotionHandler(ConnectionHandler):
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
         updates = []
-        table_name = get_table_name('NotionTable', connection_id=connection_id)
+        table_name = get_seadb_table_name('NotionTable', connection_id=connection_id)
         notion_seadb_api = NotionSeaDBAPI(project_uuid)
 
         ai_processing_count = 0
