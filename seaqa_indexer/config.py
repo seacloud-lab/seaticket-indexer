@@ -96,7 +96,6 @@ MYSQL_UNIX_SOCKET = os.getenv('WEB_CRAWLER_MYSQL_UNIX_SOCKET', '')
 # SeaDB Configuration
 SEADB_SERVER_URL = configs.get('SEADB_SERVER_URL', 'http://seadb:8888')
 SEADB_SERVER_ACCESS_TOKEN = configs.get('SEADB_SERVER_ACCESS_TOKEN', '')
-SEADB_TABLE_SCHEMA_PATH = configs.get('SEADB_TABLE_SCHEMA_PATH', os.path.join(basedir, 'seaqa_indexer', 'seadb_models', 'table_schemas.yaml'))
 
 # SeaQA AI
 SEAQA_AI_INNER_SERVER_URL = configs.get('SEAQA_AI_INNER_SERVER_URL', 'http://seaqa-ai:8887')

@@ -1,5 +1,3 @@
-from seaqa_indexer.utils.constants import ConnectionType
-
 
 class SchemaTableNames:
     """Schema table keys used in table_schemas.yaml, for get_table_name_from_schema / get_column_name_from_schema."""
