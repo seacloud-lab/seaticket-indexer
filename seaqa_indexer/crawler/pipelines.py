@@ -6,6 +6,9 @@ from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.seadb_models.utils import get_column_name_from_schema, get_table_name_from_schema
 from seaqa_indexer.utils import need_update_connection_last_sync_count
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 
 class BatchCrawlPipeline:
     def __init__(self):
@@ -23,7 +26,7 @@ class BatchCrawlPipeline:
 
         if urls_to_delete:
             formatted_urls = ", ".join("'{}'".format(url) for url in urls_to_delete)
-            table_name = get_table_name_from_schema('WebCrawlTable', connection_id=self.site_id)
+            table_name = get_table_name_from_schema(SchemaTableNames.WEB_CRAWL, connection_id=self.site_id)
             sql = f"""SELECT _pk FROM `{table_name}` WHERE url in ({formatted_urls}) LIMIT {len(urls_to_delete)}"""
             resp_results = self.seadb_api.query_rows(self.project_uuid, sql)
             results = resp_results.get('results', [])
@@ -32,9 +35,9 @@ class BatchCrawlPipeline:
                 row = {
                     "pk": result.get('_pk'),
                     "row": {
-                        get_column_name_from_schema('WebCrawlTable', 'deleted'): True,
-                        get_column_name_from_schema('WebCrawlTable', 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-                        get_column_name_from_schema('WebCrawlTable', 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'deleted'): True,
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
                     }
                 }
                 rows.append(row)
@@ -74,7 +77,7 @@ class BatchCrawlPipeline:
         modified_time = item.get('last_modified') if item else None
         filename = url_to_filename(url)
 
-        table_name = get_table_name_from_schema('WebCrawlTable', connection_id=self.site_id)
+        table_name = get_table_name_from_schema(SchemaTableNames.WEB_CRAWL, connection_id=self.site_id)
         sql = f"""SELECT _pk FROM `{table_name}` WHERE url='{url}'"""
         resp_result = self.seadb_api.query_rows(self.project_uuid, sql)
         results = resp_result.get('results')
@@ -87,12 +90,12 @@ class BatchCrawlPipeline:
                 {
                     "pk": results[0].get('_pk'),
                     "row": {
-                        get_column_name_from_schema('WebCrawlTable', 'title'): title,
-                        get_column_name_from_schema('WebCrawlTable', 'etag'): etag,
-                        get_column_name_from_schema('WebCrawlTable', 'modified_time'): modified_time,
-                        get_column_name_from_schema('WebCrawlTable', 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-                        get_column_name_from_schema('WebCrawlTable', 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-                        get_column_name_from_schema('WebCrawlTable', 'hash'): hash,
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'title'): title,
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'etag'): etag,
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'modified_time'): modified_time,
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
+                        get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'hash'): hash,
                     }
                 }
             ]
@@ -101,13 +104,13 @@ class BatchCrawlPipeline:
             self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
             rows = [
                 {
-                    get_column_name_from_schema('WebCrawlTable', 'url'): url,
-                    get_column_name_from_schema('WebCrawlTable', 'title'): title,
-                    get_column_name_from_schema('WebCrawlTable', 'etag'): etag,
-                    get_column_name_from_schema('WebCrawlTable', 'modified_time'): modified_time,
-                    get_column_name_from_schema('WebCrawlTable', 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-                    get_column_name_from_schema('WebCrawlTable', 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-                    get_column_name_from_schema('WebCrawlTable', 'hash'): hash,
+                    get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'url'): url,
+                    get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'title'): title,
+                    get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'etag'): etag,
+                    get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'modified_time'): modified_time,
+                    get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
+                    get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
+                    get_column_name_from_schema(SchemaTableNames.WEB_CRAWL, 'hash'): hash,
                 }
             ]
             self.seadb_api.insert_rows(self.project_uuid, table_name, rows)

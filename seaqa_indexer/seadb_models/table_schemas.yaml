@@ -28,11 +28,11 @@ tables:
         column_data:
           list_type: float32
     indexes:
-    - url
-    - modified_time
-    - deleted
-    - ai_processed_time
-    - record_modified_time
+    - - url
+    - - modified_time
+    - - deleted
+    - - ai_processed_time
+    - - record_modified_time
     table_name: site_{connection_id}
   GithubIssuesTable:
     columns:
@@ -117,18 +117,18 @@ tables:
       linked_ticket:
         column_type: int64
     indexes:
-    - issue_id
-    - state
-    - state_reason
-    - labels
-    - title
-    - author
-    - created_time
-    - closed_time
-    - deleted
-    - linked_ticket
-    - ai_processed_time
-    - record_modified_time
+    - - issue_id
+    - - state
+    - - state_reason
+    - - labels
+    - - title
+    - - author
+    - - created_time
+    - - closed_time
+    - - deleted
+    - - linked_ticket
+    - - ai_processed_time
+    - - record_modified_time
     table_name: github_issue_{connection_id}
   GithubIssueCommentsTable:
     columns:
@@ -147,8 +147,8 @@ tables:
       modified_time:
         column_type: datetime
     indexes:
-    - issue_id
-    - comment_id
+    - - issue_id
+    - - comment_id
     table_name: github_issue_comments_{connection_id}
   DiscourseTopicsTable:
     columns:
@@ -187,12 +187,12 @@ tables:
       linked_ticket:
         column_type: int64
     indexes:
-    - topic_id
-    - sync_time
-    - deleted
-    - linked_ticket
-    - ai_processed_time
-    - record_modified_time
+    - - topic_id
+    - - sync_time
+    - - deleted
+    - - linked_ticket
+    - - ai_processed_time
+    - - record_modified_time
     table_name: discourse_forum_{connection_id}
   DiscourseRepliesTable:
     columns:
@@ -211,9 +211,9 @@ tables:
       accepted_answer:
         column_type: bool
     indexes:
-    - topic_id
-    - post_number
-    - modified_time
+    - - topic_id
+    - - post_number
+    - - modified_time
     table_name: discourse_forum_replies_{connection_id}
   SeafileTable:
     columns:
@@ -246,11 +246,11 @@ tables:
         column_data:
           list_type: float32
     indexes:
-    - path
-    - title
-    - deleted
-    - ai_processed_time
-    - record_modified_time
+    - - path
+    - - title
+    - - deleted
+    - - ai_processed_time
+    - - record_modified_time
     table_name: seafile_{connection_id}
   TicketsTable:
     columns:
@@ -281,7 +281,7 @@ tables:
       substate:
         column_type: single-select
         column_data:
-          cascade_column_key: ''
+          cascade_source_column: state
           cascade_settings:
             '0001':
             - '0010'
@@ -366,20 +366,17 @@ tables:
       last_agent_processed_at:
         column_type: datetime
     indexes:
-    - priority
-    - state
-    - substate
-    - type
-    - assignees
-    - participants
-    - creator
-    - deleted
-    - due_date
-    - ai_processed_time
-    - modified_time
-    cascade:
-      source_column: state
-      target_column: substate
+    - - priority
+    - - state
+    - - substate
+    - - type
+    - - assignees
+    - - participants
+    - - creator
+    - - deleted
+    - - due_date
+    - - ai_processed_time
+    - - modified_time
     table_name: tickets
   TicketCommentsTable:
     columns:
@@ -398,9 +395,9 @@ tables:
       via_agent:
         column_type: bool
     indexes:
-    - ticket_id
-    - creator
-    - deleted
+    - - ticket_id
+    - - creator
+    - - deleted
     table_name: ticket_comments
   TicketActivitiesTable:
     columns:
@@ -415,8 +412,8 @@ tables:
       created_time:
         column_type: datetime
     indexes:
-    - ticket_id
-    - created_time
+    - - ticket_id
+    - - created_time
     table_name: ticket_activities
   EmailTable:
     columns:
@@ -461,10 +458,10 @@ tables:
       origin_thread_id:
         column_type: text
     indexes:
-    - title
-    - email_from
-    - sync_time
-    - is_sender
+    - - title
+    - - email_from
+    - - sync_time
+    - - is_sender
     table_name: email_{connection_id}
   ThreadTable:
     columns:
@@ -497,13 +494,13 @@ tables:
       linked_ticket:
         column_type: int64
     indexes:
-    - title
-    - modified_time
-    - deleted
-    - sync_time
-    - linked_ticket
-    - ai_processed_time
-    - record_modified_time
+    - - title
+    - - modified_time
+    - - deleted
+    - - sync_time
+    - - linked_ticket
+    - - ai_processed_time
+    - - record_modified_time
     table_name: email_thread_{connection_id}
   KnowledgeBaseTable:
     columns:
@@ -536,12 +533,12 @@ tables:
         column_data:
           list_type: float32
     indexes:
-    - creator
-    - created_time
-    - last_modifier
-    - modified_time
-    - deleted
-    - ai_processed_time
+    - - creator
+    - - created_time
+    - - last_modifier
+    - - modified_time
+    - - deleted
+    - - ai_processed_time
     table_name: knowledge_base
   TagTable:
     columns:
@@ -554,7 +551,7 @@ tables:
       description:
         column_type: text
     indexes:
-    - name
+    - - name
     table_name: tag
   PortalIssuesTable:
     columns:
@@ -587,7 +584,7 @@ tables:
       substate:
         column_type: single-select
         column_data:
-          cascade_column_key: ''
+          cascade_source_column: state
           cascade_settings:
             '0001':
             - '0010'
@@ -662,17 +659,14 @@ tables:
       deleted:
         column_type: bool
     indexes:
-    - priority
-    - state
-    - substate
-    - type
-    - creator
-    - deleted
-    - ai_processed_time
-    - modified_time
-    cascade:
-      source_column: state
-      target_column: substate
+    - - priority
+    - - state
+    - - substate
+    - - type
+    - - creator
+    - - deleted
+    - - ai_processed_time
+    - - modified_time
     table_name: portal_issues
   PortalIssueCommentsTable:
     columns:
@@ -689,9 +683,9 @@ tables:
       deleted:
         column_type: bool
     indexes:
-    - issue_id
-    - creator
-    - deleted
+    - - issue_id
+    - - creator
+    - - deleted
     table_name: portal_issue_comments
   AgentRunsTable:
     columns:
@@ -708,7 +702,7 @@ tables:
       events:
         column_type: text
     indexes:
-    - started_at
+    - - started_at
     table_name: agent_runs
   AgentActionsTable:
     columns:
@@ -720,17 +714,25 @@ tables:
         column_type: text
       source_title:
         column_type: text
-      action_type:
+      phase:
         column_type: text
-      tool_name:
-        column_type: text
-      content:
+      prompt:
         column_type: text
       result:
         column_type: text
+      action_type:
+        column_type: text
       status:
         column_type: text
-      suggestion_text:
+      step:
+        column_type: int64
+      tool_name:
+        column_type: text
+      tool_arguments:
+        column_type: text
+      observation:
+        column_type: text
+      suggestion_content:
         column_type: text
       sources:
         column_type: text
@@ -781,17 +783,19 @@ tables:
         column_data:
           list_type: float32
     indexes:
-    - title
-    - modified_time
-    - deleted
-    - sync_time
-    - page_id
-    - ai_processed_time
-    - record_modified_time
+    - - title
+    - - modified_time
+    - - deleted
+    - - sync_time
+    - - page_id
+    - - ai_processed_time
+    - - record_modified_time
     table_name: notion_{connection_id}
   GeneralTaskTable:
     columns:
       source_task_id:
+        column_type: text
+      url:
         column_type: text
       title:
         column_type: text
@@ -840,15 +844,15 @@ tables:
       linked_ticket:
         column_type: int64
     indexes:
-    - source_task_id
-    - title
-    - status
-    - priority
-    - modified_time
-    - created_time
-    - record_modified_time
-    - deleted
-    - linked_ticket
+    - - source_task_id
+    - - title
+    - - status
+    - - priority
+    - - modified_time
+    - - created_time
+    - - record_modified_time
+    - - deleted
+    - - linked_ticket
     table_name: general_task_{connection_id}
   GeneralTaskUserTable:
     columns:
@@ -859,6 +863,6 @@ tables:
       record_modified_time:
         column_type: datetime
     indexes:
-    - email
-    - record_modified_time
+    - - email
+    - - record_modified_time
     table_name: general_task_user_{connection_id}

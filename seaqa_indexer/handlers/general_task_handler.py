@@ -14,6 +14,9 @@ from seaqa_indexer.seadb_models.utils import get_table_name_from_schema
 from seaqa_indexer.utils import need_update_connection_last_sync_count
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus, GENERAL_TASK_CONNECTION_SPEC
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +26,7 @@ class GeneralTaskHandler(ConnectionHandler):
     FETCH_PAGE_SIZE = 100
 
     def gen_table_name(self, connection_id):
-        return get_table_name_from_schema('GeneralTaskTable', connection_id)
+        return get_table_name_from_schema(SchemaTableNames.GENERAL_TASK, connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         general_task_index = GeneralTaskIndex(seasearch_api)

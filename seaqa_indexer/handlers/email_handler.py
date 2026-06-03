@@ -16,6 +16,9 @@ from seaqa_indexer.utils.constants import IndexStatus, DataEventType
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.email_index import EmailIndex
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,10 +29,10 @@ class EmailHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id) -> str:
-        return get_table_name_from_schema('ThreadTable', connection_id=connection_id)
+        return get_table_name_from_schema(SchemaTableNames.THREAD, connection_id=connection_id)
 
     def gen_email_table_name(self, connection_id) -> str:
-        return get_table_name_from_schema('EmailTable', connection_id=connection_id)
+        return get_table_name_from_schema(SchemaTableNames.EMAIL, connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         email_index = EmailIndex(seasearch_api)

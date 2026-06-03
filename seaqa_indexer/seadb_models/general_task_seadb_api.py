@@ -5,6 +5,9 @@ from seaqa_indexer.seadb_models.utils import get_table_name_from_schema, get_col
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.config import GENERAL_TASK_COLUMN_MAPPINGS
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 
 class GeneralTaskSeaDBAPI:
     def __init__(self, base_id):
@@ -12,10 +15,10 @@ class GeneralTaskSeaDBAPI:
         self.seadb_api = SeaDBAPI()
 
     def _table_name(self, connection_id):
-        return get_table_name_from_schema('GeneralTaskTable', connection_id)
+        return get_table_name_from_schema(SchemaTableNames.GENERAL_TASK, connection_id)
 
     def _task_user_table_name(self, connection_id):
-        return get_table_name_from_schema('GeneralTaskUserTable', connection_id)
+        return get_table_name_from_schema(SchemaTableNames.GENERAL_TASK_USER, connection_id)
 
     def get_need_ai_tasks_by_page(self, connection_id, page_size):
         table_name = self._table_name(connection_id)
@@ -98,9 +101,9 @@ class GeneralTaskSeaDBAPI:
             if not email or not name:
                 continue
             row = {
-                get_column_name_from_schema('GeneralTaskUserTable', 'email'): email,
-                get_column_name_from_schema('GeneralTaskUserTable', 'name'): name,
-                get_column_name_from_schema('GeneralTaskUserTable', 'record_modified_time'): now,
+                get_column_name_from_schema(SchemaTableNames.GENERAL_TASK_USER, 'email'): email,
+                get_column_name_from_schema(SchemaTableNames.GENERAL_TASK_USER, 'name'): name,
+                get_column_name_from_schema(SchemaTableNames.GENERAL_TASK_USER, 'record_modified_time'): now,
             }
             existing_pk = existing_pks.get(email)
             if existing_pk:
@@ -131,9 +134,9 @@ class GeneralTaskSeaDBAPI:
         columns = table_info.get('columns', []) or []
         column_name_to_meta = {column.get('name'): column for column in columns}
         target_columns = [
-            get_column_name_from_schema('GeneralTaskTable', 'status'),
-            get_column_name_from_schema('GeneralTaskTable', 'size'),
-            get_column_name_from_schema('GeneralTaskTable', 'priority'),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'status'),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'size'),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'priority'),
         ]
         desired_values = {column_name: set() for column_name in target_columns}
         for task in tasks:
@@ -141,11 +144,11 @@ class GeneralTaskSeaDBAPI:
             size = task.get('size')
             priority = task.get('priority')
             if status:
-                desired_values[get_column_name_from_schema('GeneralTaskTable', 'status')].add(str(status))
+                desired_values[get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'status')].add(str(status))
             if size:
-                desired_values[get_column_name_from_schema('GeneralTaskTable', 'size')].add(str(size))
+                desired_values[get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'size')].add(str(size))
             if priority:
-                desired_values[get_column_name_from_schema('GeneralTaskTable', 'priority')].add(str(priority))
+                desired_values[get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'priority')].add(str(priority))
         for column_name in target_columns:
             column_meta = column_name_to_meta.get(column_name)
             if not column_meta:
@@ -188,23 +191,23 @@ class GeneralTaskSeaDBAPI:
 
         now = datetime.datetime.now(datetime.UTC).isoformat()
         return {
-            get_column_name_from_schema('GeneralTaskTable', 'source_task_id'): str(task.get('task_id') or '').strip(),
-            get_column_name_from_schema('GeneralTaskTable', 'url'): str(task.get('url') or '').strip(),
-            get_column_name_from_schema('GeneralTaskTable', 'title'): task.get('title', ''),
-            get_column_name_from_schema('GeneralTaskTable', 'status'): task.get('status'),
-            get_column_name_from_schema('GeneralTaskTable', 'size'): task.get('size'),
-            get_column_name_from_schema('GeneralTaskTable', 'priority'): task.get('priority'),
-            get_column_name_from_schema('GeneralTaskTable', 'assignees'): task.get('assignees', []),
-            get_column_name_from_schema('GeneralTaskTable', 'participants'): task.get('participants', []),
-            get_column_name_from_schema('GeneralTaskTable', 'version'): task.get('version', ''),
-            get_column_name_from_schema('GeneralTaskTable', 'others'): others,
-            get_column_name_from_schema('GeneralTaskTable', 'content'): content,
-            get_column_name_from_schema('GeneralTaskTable', 'due_date'): task.get('due_date'),
-            get_column_name_from_schema('GeneralTaskTable', 'modified_time'): task.get('modified_time') or now,
-            get_column_name_from_schema('GeneralTaskTable', 'created_time'): task.get('created_time') or now,
-            get_column_name_from_schema('GeneralTaskTable', 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-            get_column_name_from_schema('GeneralTaskTable', 'record_modified_time'): now,
-            get_column_name_from_schema('GeneralTaskTable', 'deleted'): bool(task.get('deleted', False)),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'source_task_id'): str(task.get('task_id') or '').strip(),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'url'): str(task.get('url') or '').strip(),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'title'): task.get('title', ''),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'status'): task.get('status'),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'size'): task.get('size'),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'priority'): task.get('priority'),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'assignees'): task.get('assignees', []),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'participants'): task.get('participants', []),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'version'): task.get('version', ''),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'others'): others,
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'content'): content,
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'due_date'): task.get('due_date'),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'modified_time'): task.get('modified_time') or now,
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'created_time'): task.get('created_time') or now,
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'record_modified_time'): now,
+            get_column_name_from_schema(SchemaTableNames.GENERAL_TASK, 'deleted'): bool(task.get('deleted', False)),
         }
 
     def get_total_count(self, connection_id):

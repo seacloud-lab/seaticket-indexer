@@ -35,7 +35,7 @@ def get_column_name_from_schema(schema_table_name, column_name):
     return ''
 
 
-def get_column_data _from_schema(schema_table_name, column_name):
+def get_column_data_from_schema(schema_table_name, column_name):
     """Return the column_data config for the specified column from YAML schema. O(1) dict lookup."""
     schema = get_seadb_table_schemas()
     tables = schema.get('tables') or {}

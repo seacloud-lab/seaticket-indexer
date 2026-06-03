@@ -13,6 +13,9 @@ from seaqa_indexer.index.index_store.site_index import SiteIndex
 from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
 from seaqa_indexer.crawler.utils import url_to_filename
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 logger = logging.getLogger(__name__)
 
 class SiteHandler(ConnectionHandler):
@@ -22,7 +25,7 @@ class SiteHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return get_table_name_from_schema('WebCrawlTable', connection_id=connection_id)
+        return get_table_name_from_schema(SchemaTableNames.WEB_CRAWL, connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         site_index = SiteIndex(seasearch_api)

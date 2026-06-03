@@ -7,6 +7,9 @@ from seaqa_indexer.seadb_models.utils import get_table_name_from_schema
 from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +29,7 @@ class SiteIndex(BaseConnectionIndex):
                 self.seasearch_api.bulk(index_name, bulk_params)
                 bulk_params = []
 
-        table_name = get_table_name_from_schema('WebCrawlTable', connection_id=connection_id)
+        table_name = get_table_name_from_schema(SchemaTableNames.WEB_CRAWL, connection_id=connection_id)
         while True:
             sql = f"""SELECT `_pk`, `url`, `title`, `modified_time`, `deleted`, `outdated` FROM `{table_name}` 
                     WHERE record_modified_time >= '{since}' 

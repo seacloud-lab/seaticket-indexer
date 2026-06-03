@@ -16,6 +16,9 @@ from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_
 from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
 from seaqa_indexer.utils.constants import DataEventType
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,10 +48,10 @@ class DiscourseHandler(ConnectionHandler):
         return True
 
     def gen_table_name(self, connection_id):
-        return get_table_name_from_schema('DiscourseTopicsTable', connection_id=connection_id)
+        return get_table_name_from_schema(SchemaTableNames.DISCOURSE_TOPICS, connection_id=connection_id)
 
     def gen_replies_table_name(self, connection_id):
-        return get_table_name_from_schema('DiscourseRepliesTable', connection_id=connection_id)
+        return get_table_name_from_schema(SchemaTableNames.DISCOURSE_REPLIES, connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         discourse_index = DiscourseIndex(seasearch_api)

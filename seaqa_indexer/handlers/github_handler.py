@@ -16,6 +16,9 @@ from seaqa_indexer.index.index_store.github_issues_index import GitHubIssuesInde
 from seaqa_indexer.utils.constants import DataEventType
 from seaqa_indexer.utils.seadb_api import OptionValueInvalidException
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,10 +30,10 @@ class GithubIssueHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return get_table_name_from_schema('GithubIssuesTable', connection_id=connection_id)
+        return get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
 
     def gen_comments_table_name(self, connection_id):
-        return get_table_name_from_schema('GithubIssueCommentsTable', connection_id=connection_id)
+        return get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         github_issue_index = GitHubIssuesIndex(seasearch_api)

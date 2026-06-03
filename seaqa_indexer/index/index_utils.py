@@ -24,6 +24,9 @@ from seaqa_indexer.utils import get_since_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
 
+from seaqa_indexer.seadb_models.models import SchemaTableNames
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +258,7 @@ def update_knowledge_base_summary_index(project_uuid, db_session_class, is_rebui
 
     last_kb_ai_indexed_at = kb.knowledge_base_ai_indexed_at
 
-    table_name = get_table_name_from_schema('KnowledgeBaseTable')
+    table_name = get_table_name_from_schema(SchemaTableNames.KNOWLEDGE_BASE)
     fixed_count = fix_summary(project_uuid, table_name, seadb_api)
     if fixed_count > 0:
         logger.info('Fixed %d missing embeddings for knowledge base of project: %s before indexing', fixed_count, project_uuid)
@@ -289,7 +292,7 @@ def update_tickets_summary_index(project_uuid, db_session_class, is_rebuild=Fals
 
     last_ticket_ai_indexed_at = ticket.ticket_ai_indexed_at
 
-    table_name = get_table_name_from_schema('TicketsTable')
+    table_name = get_table_name_from_schema(SchemaTableNames.TICKETS)
 
     fixed_count = fix_summary(project_uuid, table_name, seadb_api)
     if fixed_count > 0:
@@ -318,7 +321,7 @@ def update_portal_issues_summary_index(project_uuid, db_session_class, is_rebuil
 
     last_portal_issue_ai_indexed_at = portal_issue.portal_issue_ai_indexed_at
 
-    table_name = get_table_name_from_schema('PortalIssuesTable')
+    table_name = get_table_name_from_schema(SchemaTableNames.PORTAL_ISSUES)
 
     fixed_count = fix_summary(project_uuid, table_name, seadb_api)
     if fixed_count > 0:

@@ -1,6 +1,30 @@
 from seaqa_indexer.utils.constants import ConnectionType
 
 
+class SchemaTableNames:
+    """Schema table keys used in table_schemas.yaml, for get_table_name_from_schema / get_column_name_from_schema."""
+    WEB_CRAWL = 'WebCrawlTable'
+    GITHUB_ISSUES = 'GithubIssuesTable'
+    GITHUB_ISSUE_COMMENTS = 'GithubIssueCommentsTable'
+    DISCOURSE_TOPICS = 'DiscourseTopicsTable'
+    DISCOURSE_REPLIES = 'DiscourseRepliesTable'
+    SEAFILE = 'SeafileTable'
+    TICKETS = 'TicketsTable'
+    TICKET_COMMENTS = 'TicketCommentsTable'
+    TICKET_ACTIVITIES = 'TicketActivitiesTable'
+    EMAIL = 'EmailTable'
+    THREAD = 'ThreadTable'
+    KNOWLEDGE_BASE = 'KnowledgeBaseTable'
+    TAG = 'TagTable'
+    PORTAL_ISSUES = 'PortalIssuesTable'
+    PORTAL_ISSUE_COMMENTS = 'PortalIssueCommentsTable'
+    AGENT_RUNS = 'AgentRunsTable'
+    AGENT_ACTIONS = 'AgentActionsTable'
+    NOTION = 'NotionTable'
+    GENERAL_TASK = 'GeneralTaskTable'
+    GENERAL_TASK_USER = 'GeneralTaskUserTable'
+
+
 class PropertyTypes:
     TEXT = 'text'
     DATETIME = 'datetime'
