@@ -32,6 +32,7 @@ NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.SITE.value,
     ConnectionType.NOTION.value,
     ConnectionType.LINEAR.value,
+    ConnectionType.CONFLUENCE.value,
 ]
 
 LINEAR_TOKEN_REFRESH_THRESHOLD = 2 # hour
@@ -174,6 +175,14 @@ class SyncManager(Thread):
 
             self.check_and_sync(connection_id)
 
+    def handle_confluence_webhook(self, workspace_id):
+        connections = self.seaqa_db.get_confluence_connection_by_workspace_id(workspace_id)
+        for connection in connections:
+            if not connection.is_active:
+                continue
+            logger.info('Received Confluence webhook for workspace %s, triggering sync for connection %s', workspace_id, connection.id)
+            self.check_and_sync(connection.id)
+
     def check_and_sync(self, connection_id):
         now_time = time.time()
         last_sync_time = self.pending_tasks.get(connection_id, 0)
@@ -195,7 +204,7 @@ class SyncManager(Thread):
                         self.pending_tasks.pop(connection_id)
             except Exception as e:
                 logger.error('Error handing sync connection: %s' % e)
-            
+
             if now_time - self.last_linear_refresh_time >= self.linear_refresh_interval:
                 self.last_linear_refresh_time = now_time
                 self.refresh_linear_tokens()

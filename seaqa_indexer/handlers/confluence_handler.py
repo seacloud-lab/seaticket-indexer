@@ -1,0 +1,259 @@
+import datetime
+import json
+import logging
+
+from seaqa_indexer.handlers.base_handler import ConnectionHandler
+from seaqa_indexer.index.index_store.confluence_index import ConfluenceIndex
+from seaqa_indexer.index.utils import gen_index_name_by_type
+from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
+from seaqa_indexer.seadb_models.models import ConfluenceTable
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
+from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
+from seaqa_indexer.utils.confluence_api import ConfluenceAPI, refresh_confluence_access_token
+
+
+logger = logging.getLogger(__name__)
+
+
+class ConfluenceHandler(ConnectionHandler):
+    connection_type = ConnectionType.CONFLUENCE.value
+    BATCH_SIZE = 50
+
+    def gen_table_name(self, connection_id):
+        return ConfluenceTable.gen_table_name(connection_id)
+
+    def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
+        confluence_index = ConfluenceIndex(seasearch_api)
+        return confluence_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
+
+    def delete_index_by_connection_id(self, seasearch_api, connection_id):
+        index_name = gen_index_name_by_type(connection_id, self.connection_type)
+        confluence_index = ConfluenceIndex(seasearch_api)
+        confluence_index.delete_index_by_index_name(index_name)
+        self.delete_summary_vector_index_by_connection_id(seasearch_api, connection_id)
+
+    def format_vector_search_result(self, record, connection, result):
+        return {
+            'title': record.get('title', ''),
+            'modified_time': record.get('modified_time', ''),
+            'page_id': record.get('page_id') or '',
+            'url': record.get('url') or '',
+        }
+
+    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+        page_size = 100
+        updates = []
+        table_name = ConfluenceTable.gen_table_name(connection_id)
+        confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
+
+        ai_processing_count = 0
+        while True:
+            rows = confluence_seadb_api.get_need_ai_confluence_pages_by_page(connection_id, page_size)
+            if not rows:
+                break
+            for row in rows:
+                pk = row.get('_pk')
+                title = row.get('title', '')
+                content = row.get('content', '')
+                full_content = f"Title: {title}\n\nBody: {content}\n"
+                try:
+                    summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.CONFLUENCE.value, project_uuid)
+                    vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
+                except Exception as e:
+                    logger.error('Failed to process AI for Confluence page %s (pk=%s): %s', row.get('page_id', 'unknown'), pk, e)
+                    continue
+                updates.append({
+                    'pk': pk,
+                    'row': {
+                        'ai_summary': summary,
+                        'ai_summary_vector': vector,
+                        'ai_processed_time': datetime.datetime.now(datetime.UTC).isoformat()
+                    }
+                })
+                ai_processing_count += 1
+                if len(updates) >= self.BATCH_SIZE:
+                    seadb_api.update_rows(project_uuid, table_name, updates)
+                    updates = []
+            if updates:
+                seadb_api.update_rows(project_uuid, table_name, updates)
+        return ai_processing_count
+
+    def update_index(self, project_connection, seasearch_api, seaqa_db, since):
+        connection_id = project_connection.id
+        connection_status = json.loads(project_connection.status)
+        project_uuid = project_connection.project_uuid
+        confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
+        confluence_index = ConfluenceIndex(seasearch_api)
+
+        connection_status['last_index_status'] = IndexStatus.INDEXING
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+
+        index_name = gen_index_name_by_type(connection_id, project_connection.type)
+        confluence_index.create_index_if_missing(index_name)
+
+        index_count = confluence_index.update(
+            index_name,
+            connection_id,
+            connection_status,
+            seaqa_db,
+            confluence_seadb_api,
+            since,
+        )
+
+        indexed_at = datetime.datetime.now(datetime.UTC)
+        connection_status['last_indexed_count'] = index_count
+        connection_status['last_index_status'] = IndexStatus.COMPLETED
+        seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
+
+    def _serialize_oauth(self, oauth):
+        return {
+            'access_token': getattr(oauth, 'access_token', ''),
+            'refresh_token': getattr(oauth, 'refresh_token', ''),
+            'expires_at': getattr(oauth, 'expires_at', None),
+        }
+
+    def _refresh_oauth(self, project_uuid, oauth_data, seaqa_db):
+        token_json = refresh_confluence_access_token(oauth_data.get('refresh_token'))
+        access_token = token_json.get('access_token')
+        refresh_token = token_json.get('refresh_token') or oauth_data.get('refresh_token')
+        if not access_token:
+            raise RuntimeError('Confluence OAuth response missing access token.')
+
+        expires_in = token_json.get('expires_in') or 3600
+        expires_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=max(int(expires_in) - 60, 0))
+        seaqa_db.update_project_confluence_oauth(project_uuid, access_token, expires_at, refresh_token)
+
+        oauth_data.update({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'expires_at': expires_at,
+        })
+        return oauth_data
+
+    def sync(self, connection_id, project_uuid, config, old_last_sync_time,
+             connection_status, seaqa_db, sync_logger):
+        workspace_id = config.get('workspace_id')
+        if not workspace_id:
+            raise RuntimeError('Confluence workspace_id is required.')
+
+        oauth = seaqa_db.get_project_confluence_oauth(project_uuid)
+        if not oauth:
+            raise RuntimeError('Confluence OAuth not found.')
+
+        oauth_data = self._serialize_oauth(oauth)
+        expires_at = oauth_data.get('expires_at')
+        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
+            oauth_data = self._refresh_oauth(project_uuid, oauth_data, seaqa_db)
+
+        def refresh_access_token():
+            refreshed = self._refresh_oauth(project_uuid, oauth_data, seaqa_db)
+            return refreshed.get('access_token')
+
+        confluence_api = ConfluenceAPI(
+            oauth_data.get('access_token'),
+            refresh_access_token=refresh_access_token,
+        )
+        confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
+        sync_count, total_count, sync_changes = self._sync_confluence(
+            connection_id,
+            project_uuid,
+            connection_status,
+            confluence_api,
+            seaqa_db,
+            confluence_seadb_api,
+            workspace_id,
+        )
+        connection_status['last_sync_changes'] = sync_changes
+        return sync_count, total_count, False, config
+
+    def _sync_confluence(self, connection_id, project_uuid, connection_status, confluence_api, seaqa_db,
+                         confluence_seadb_api, workspace_id):
+        sync_count = 0
+        added_count = 0
+        updated_count = 0
+        deleted_count = 0
+        remote_page_ids = set()
+        cursor = None
+        page_size = 100
+        status_last_update_time = datetime.datetime.now()
+        status_last_update_count = 0
+
+        while True:
+            pages, next_cursor, has_more = confluence_api.list_pages(
+                workspace_id,
+                cursor=cursor,
+                limit=page_size,
+            )
+            if not pages and not has_more:
+                break
+
+            for page in pages:
+                page_id = page.get('page_id')
+                if not page_id:
+                    continue
+
+                remote_page_ids.add(page_id)
+                existed_page = confluence_seadb_api.get_page_by_page_id(page_id, connection_id)
+                if existed_page and existed_page.get('modified_time'):
+                    remote_modified_time = time_to_utc_time(page.get('modified_time'))
+                    local_modified_time = time_to_utc_time(str(existed_page.get('modified_time')))
+                    if remote_modified_time <= local_modified_time and not existed_page.get('deleted'):
+                        continue
+
+                confluence_seadb_api.save_or_update_page_to_db(connection_id, page, existed_page)
+                sync_count += 1
+                state_event_type = DataEventType.CONFLUENCE_PAGE_UPDATED.value if existed_page else DataEventType.CONFLUENCE_PAGE_ADDED.value
+                if existed_page:
+                    updated_count += 1
+                else:
+                    added_count += 1
+
+                self.publish_synced_record_events(
+                    get_latest_row=lambda pf=page_id: confluence_seadb_api.get_page_by_page_id(pf, connection_id),
+                    project_uuid=project_uuid,
+                    connection_id=connection_id,
+                    item_id=page_id,
+                    old_row=existed_page or None,
+                    state_event_type=state_event_type,
+                    log_object_name='confluence page',
+                )
+
+                should, new_time, new_count = need_update_connection_last_sync_count(
+                    sync_count, status_last_update_time, status_last_update_count
+                )
+                if should:
+                    connection_status['last_sync_count'] = sync_count
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                    status_last_update_time = new_time
+                    status_last_update_count = new_count
+
+            if not has_more or not next_cursor:
+                break
+            cursor = next_cursor
+
+        local_page_map = {}
+        offset = 0
+        local_page_size = 1000
+        while True:
+            local_rows = confluence_seadb_api.get_page_id_rows_by_page(connection_id, local_page_size, offset)
+            if not local_rows:
+                break
+
+            for row in local_rows:
+                page_id = row.get('page_id')
+                if page_id:
+                    local_page_map[str(page_id)] = row.get('_pk')
+            offset += local_page_size
+
+        stale_page_ids = set(local_page_map.keys()) - remote_page_ids
+        if stale_page_ids:
+            confluence_seadb_api.mark_pages_deleted(connection_id, stale_page_ids, local_page_map)
+            deleted_count = len(stale_page_ids)
+            sync_count += deleted_count
+
+        total_count = confluence_seadb_api.get_confluence_pages_count(connection_id)
+        return sync_count, total_count, {
+            'added': added_count,
+            'updated': updated_count,
+            'deleted': deleted_count,
+        }

@@ -12,9 +12,9 @@ class SeaqaDB(object):
     def get_project_connections_by_installation_id(self, installation_id):
         with self.db_session_class() as session:
             sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.is_active
-            FROM project_connection pc 
-            INNER JOIN projects p 
-            ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.deleted=false AND 
+            FROM project_connection pc
+            INNER JOIN projects p
+            ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.deleted=false AND
             JSON_UNQUOTE(JSON_EXTRACT(`config`, '$.installation_id')) = :installation_id
             """
             connections = session.execute(
@@ -31,7 +31,7 @@ class SeaqaDB(object):
                      """
             row = session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
             return row
-    
+
     def get_project_deadline_linear_oauth(self, deadline_time):
         with self.db_session_class() as session:
             sql = """SELECT access_token, refresh_token, expires_at, project_uuid
@@ -54,6 +54,20 @@ class SeaqaDB(object):
                 'expires_at': expires_at,
             })
             session.commit()
+
+    def get_confluence_connection_by_workspace_id(self, workspace_id):
+        with self.db_session_class() as session:
+            sql = """SELECT pc.id, pc.config, pc.project_uuid, pc.status, p.uuid as project_uuid, pc.last_sync_time, pc.type, pc.is_active
+            FROM project_connection pc
+            INNER JOIN projects p
+            ON p.uuid=pc.project_uuid WHERE p.deleted=false AND pc.deleted=false AND
+            pc.type = 'confluence' AND
+            JSON_UNQUOTE(JSON_EXTRACT(`config`, '$.workspace_id')) = :workspace_id
+            """
+            connections = session.execute(
+                text(sql), {'workspace_id': workspace_id}
+            ).fetchall()
+            return connections
 
     def get_project_connection_by_id(self, connection_id):
         with self.db_session_class() as session:
@@ -264,7 +278,50 @@ class SeaqaDB(object):
                      AND pc.deleted = false
                      AND pc.last_sync_time >= DATE_SUB(NOW(), INTERVAL :days DAY)"""
             return session.execute(text(sql), {'days': days}).fetchall()
-    
+
+    def get_project_confluence_oauth(self, project_uuid):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = """
+                SELECT project_uuid, access_token, refresh_token, expires_at
+                FROM project_confluence_oauth
+                WHERE project_uuid = :project_uuid
+            """
+            return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
+
+    def update_project_confluence_oauth(self, project_uuid, access_token, expires_at, refresh_token):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            exists_sql = """
+                SELECT 1
+                FROM project_confluence_oauth
+                WHERE project_uuid = :project_uuid
+            """
+            exists = session.execute(text(exists_sql), {'project_uuid': project_uuid}).fetchone()
+
+            if exists:
+                sql = """
+                    UPDATE project_confluence_oauth
+                    SET access_token = :access_token,
+                        refresh_token = :refresh_token,
+                        expires_at = :expires_at
+                    WHERE project_uuid = :project_uuid
+                """
+            else:
+                sql = """
+                    INSERT INTO project_confluence_oauth
+                    (project_uuid, access_token, refresh_token, expires_at)
+                    VALUES (:project_uuid, :access_token, :refresh_token, :expires_at)
+                """
+
+            session.execute(text(sql), {
+                'project_uuid': project_uuid,
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'expires_at': expires_at,
+            })
+            session.commit()
+
     def get_recently_updated_projects(self, days=7):
         with self.db_session_class() as session:
             sql = """SELECT uuid
@@ -302,7 +359,7 @@ class SeaqaDB(object):
             """
             session.execute(text(sql), {'cleaned_at': cleaned_at, 'connection_id': connection_id})
             session.commit()
-    
+
     def uninstall_github_app(self, project_uuid, installation_id):
         project_uuid = uuid_str_to_36_chars(project_uuid)
         with self.db_session_class() as session:
