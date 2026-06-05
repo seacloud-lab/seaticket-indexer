@@ -1,8 +1,5 @@
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.utils import get_table_name_from_schema
-
-from seaqa_indexer.seadb_models.models import SchemaTableNames
-
+from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 class PortalIssueSeaDBAPI:
@@ -11,7 +8,7 @@ class PortalIssueSeaDBAPI:
         self.seadb_api = SeaDBAPI()
 
     def get_need_ai_portal_issues_by_page(self, page_size):
-        table_name = get_table_name_from_schema(SchemaTableNames.PORTAL_ISSUES)
+        table_name = SchemaTables.PORTAL_ISSUES.table_name()
         sql = f"""
             SELECT `_pk`, `title`, `content` FROM `{table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < modified_time)
@@ -22,7 +19,7 @@ class PortalIssueSeaDBAPI:
         return res.get('results', [])
 
     def get_portal_issues_by_page(self, since, page_size, offset):
-        table_name = get_table_name_from_schema(SchemaTableNames.PORTAL_ISSUES)
+        table_name = SchemaTables.PORTAL_ISSUES.table_name()
         sql = f"""SELECT `_pk`, `title`, `content`, `deleted`, `modified_time` FROM `{table_name}`
                 WHERE modified_time >= '{since}' LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)

@@ -2,9 +2,7 @@ import datetime
 import json
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.utils import get_column_name_from_schema, get_table_name_from_schema
-
-from seaqa_indexer.seadb_models.models import SchemaTableNames
+from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 MAX_CONTENT_LENGTH = 10000
@@ -18,17 +16,17 @@ class GitHubSeaDBAPI:
     def update_issue_record(self, connection_id, issue_id, modified_time, comment_count=None, deleted=False):
 
         row = {
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'modified_time'): time_to_utc_time(modified_time).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GITHUB_ISSUES.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+            SchemaTables.GITHUB_ISSUES.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GITHUB_ISSUES.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
 
         if comment_count is not None:
-            row[get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'comment_count')] = int(comment_count)
+            row[SchemaTables.GITHUB_ISSUES.comment_count.name] = int(comment_count)
         if deleted:
-            row[get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'deleted')] = deleted
+            row[SchemaTables.GITHUB_ISSUES.deleted.name] = deleted
 
-        table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
+        table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         sql = f"SELECT _pk FROM `{table_name}` WHERE issue_id={issue_id}"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if not issues:
@@ -42,7 +40,7 @@ class GitHubSeaDBAPI:
         self.seadb_api.update_rows(self.base_id, table_name, [update_row])
 
     def get_github_issues_count(self, connection_id):
-        table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
+        table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
         response = self.seadb_api.query_rows(self.base_id, sql)
         issues_count = 0
@@ -66,31 +64,31 @@ class GitHubSeaDBAPI:
             content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'issue_id'): issue['id'],
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'issue_number'): issue['number'],
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'title'): issue.get('title'),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'author'): issue.get('user', {}).get('login', ''),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'url'): issue.get('html_url', ''),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'content'): content,
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'state'): issue.get('state'),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'assignees'): json.dumps(assignees_list),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'created_time'): time_to_utc_time(issue.get('created_at')).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'modified_time'): time_to_utc_time(issue.get('updated_at')).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'closed_time'): time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'comment_count'): issue.get('comments'),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'deleted'): False,
+            SchemaTables.GITHUB_ISSUES.issue_id.name: issue['id'],
+            SchemaTables.GITHUB_ISSUES.issue_number.name: issue['number'],
+            SchemaTables.GITHUB_ISSUES.title.name: issue.get('title'),
+            SchemaTables.GITHUB_ISSUES.author.name: issue.get('user', {}).get('login', ''),
+            SchemaTables.GITHUB_ISSUES.url.name: issue.get('html_url', ''),
+            SchemaTables.GITHUB_ISSUES.content.name: content,
+            SchemaTables.GITHUB_ISSUES.state.name: issue.get('state'),
+            SchemaTables.GITHUB_ISSUES.assignees.name: json.dumps(assignees_list),
+            SchemaTables.GITHUB_ISSUES.created_time.name: time_to_utc_time(issue.get('created_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUES.modified_time.name: time_to_utc_time(issue.get('updated_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUES.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GITHUB_ISSUES.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GITHUB_ISSUES.closed_time.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
+            SchemaTables.GITHUB_ISSUES.comment_count.name: issue.get('comments'),
+            SchemaTables.GITHUB_ISSUES.deleted.name: False,
         }
 
         if state_reason:
-            insert_row[get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'state_reason')] = state_reason
+            insert_row[SchemaTables.GITHUB_ISSUES.state_reason.name] = state_reason
 
-        insert_row[get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'labels')] = label_names
+        insert_row[SchemaTables.GITHUB_ISSUES.labels.name] = label_names
 
-        insert_row[get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'issue_type')] = type_name
+        insert_row[SchemaTables.GITHUB_ISSUES.issue_type.name] = type_name
 
-        table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
+        table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         if existed_issue:
             _pk = existed_issue.get('_pk')
             update_row = {
@@ -109,15 +107,15 @@ class GitHubSeaDBAPI:
             content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'comment_id'): comment_id,
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'issue_id'): issue_id,
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'author'): comment.get('user', {}).get('login', ''),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'content'): content,
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'created_time'): time_to_utc_time(comment.get('created_at')).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'modified_time'): time_to_utc_time(comment.get('updated_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.comment_id.name: comment_id,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.issue_id.name: issue_id,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.author.name: comment.get('user', {}).get('login', ''),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.content.name: content,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
         }
 
-        table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, connection_id=connection_id)
+        table_name = SchemaTables.GITHUB_ISSUE_COMMENTS.table_name(connection_id=connection_id)
         sql = f"SELECT `_pk` FROM `{table_name}` WHERE comment_id={comment_id} LIMIT 1"
         comments = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if comments:
@@ -158,15 +156,15 @@ class GitHubSeaDBAPI:
                 content = content[:MAX_CONTENT_LENGTH]
 
             insert_row = {
-                get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'comment_id'): comment_id,
-                get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'issue_id'): issue_id,
-                get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'author'): comment.get('user', {}).get('login', ''),
-                get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'content'): content,
-                get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'created_time'): time_to_utc_time(comment.get('created_at')).isoformat(),
-                get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'modified_time'): time_to_utc_time(comment.get('updated_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.comment_id.name: comment_id,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.issue_id.name: issue_id,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.author.name: comment.get('user', {}).get('login', ''),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.content.name: content,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
             }
 
-            table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, connection_id=connection_id)
+            table_name = SchemaTables.GITHUB_ISSUE_COMMENTS.table_name(connection_id=connection_id)
             pk = comment_id_to_pk.get(comment_id)
             if pk:
                 update_row = [
@@ -179,10 +177,10 @@ class GitHubSeaDBAPI:
             else:
                 self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
                 added_comments.append({
-                    get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'comment_id'): comment_id,
-                    get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'author'): insert_row[get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'author')],
-                    get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'content'): insert_row[get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'content')],
-                    get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'created_time'): insert_row[get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, 'created_time')],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.comment_id.name: comment_id,
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.author.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.author.name],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.content.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.content.name],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name],
                 })
 
         need_deleted_comment_ids = old_comment_ids - new_comment_ids
@@ -192,7 +190,7 @@ class GitHubSeaDBAPI:
         return added_comments
 
     def get_table_metadata(self, connection_id):
-        table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
+        table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         metadata = self.seadb_api.get_base_metadata(self.base_id)
         for table in metadata.get('tables', []):
             if table['name'] == table_name:
@@ -204,7 +202,7 @@ class GitHubSeaDBAPI:
         columns = table_info.get("columns", [])
         issue_label_column = {}
         for column in columns:
-            if column.get('name') == get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'labels'):
+            if column.get('name') == SchemaTables.GITHUB_ISSUES.labels.name:
                 issue_label_column = column
                 break
 
@@ -313,7 +311,7 @@ class GitHubSeaDBAPI:
         columns = table_info.get("columns", [])
         issue_type_column = {}
         for column in columns:
-            if column.get('name') == get_column_name_from_schema(SchemaTableNames.GITHUB_ISSUES, 'issue_type'):
+            if column.get('name') == SchemaTables.GITHUB_ISSUES.issue_type.name:
                 issue_type_column = column
                 break
 
@@ -409,7 +407,7 @@ class GitHubSeaDBAPI:
             self.seadb_api.add_column_option(self.base_id, added_option)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
-        table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
+        table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `issue_id`, `issue_number`, `title`, `content`, `state`, `state_reason`, `labels`,
                 `issue_type`, `author`, `assignees`, `url`, `modified_time`,
                 `comment_count`, `deleted`, `outdated`, `linked_ticket`
@@ -421,12 +419,12 @@ class GitHubSeaDBAPI:
 
     # *** github_issue index function ***
     def delete_comment_from_db(self, connection_id, comment_id):
-        comments_table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, connection_id=connection_id)
+        comments_table_name = SchemaTables.GITHUB_ISSUE_COMMENTS.table_name(connection_id=connection_id)
         sql = f"DELETE FROM `{comments_table_name}` WHERE comment_id = {comment_id}"
         self.seadb_api.query_rows(self.base_id, sql)
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
-        issues_table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
+        issues_table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `issue_id`, `deleted`, `outdated`, `content`, `title`, `modified_time` FROM `{issues_table_name}` 
                 WHERE record_modified_time >= '{last_indexed_at}' 
                 LIMIT {page_size} OFFSET {offset}"""
@@ -435,14 +433,14 @@ class GitHubSeaDBAPI:
         return issues
 
     def get_issue_comments_by_page(self, connection_id, issue_id, page_size, offset):
-        comments_table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUE_COMMENTS, connection_id=connection_id)
+        comments_table_name = SchemaTables.GITHUB_ISSUE_COMMENTS.table_name(connection_id=connection_id)
         sql_comments = f"""SELECT `_pk`, `comment_id`, `content` FROM `{comments_table_name}`
                         WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {offset}"""
         comments = self.seadb_api.query_rows(self.base_id, sql_comments).get('results', [])
         return comments
 
     def get_need_ai_issues_by_page(self, connection_id, page_size):
-        issues_table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
+        issues_table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         sql = f"""
             SELECT `_pk`, `title`, `content` FROM `{issues_table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
@@ -453,7 +451,7 @@ class GitHubSeaDBAPI:
         return issues
 
     def update_issue_sync_and_record_time(self, connection_id, issue_id):
-        issues_table_name = get_table_name_from_schema(SchemaTableNames.GITHUB_ISSUES, connection_id=connection_id)
+        issues_table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         issue = self.get_issue_by_issue_id(issue_id, connection_id)
         if not issue:
             return

@@ -1,26 +1,27 @@
+from seaqa_indexer.seadb_models.schema_loader import SCHEMA
 
-class SchemaTableNames:
-    """Schema table keys used in table_schemas.yaml, for get_table_name_from_schema / get_column_name_from_schema."""
-    WEB_CRAWL = 'WebCrawlTable'
-    GITHUB_ISSUES = 'GithubIssuesTable'
-    GITHUB_ISSUE_COMMENTS = 'GithubIssueCommentsTable'
-    DISCOURSE_TOPICS = 'DiscourseTopicsTable'
-    DISCOURSE_REPLIES = 'DiscourseRepliesTable'
-    SEAFILE = 'SeafileTable'
-    TICKETS = 'TicketsTable'
-    TICKET_COMMENTS = 'TicketCommentsTable'
-    TICKET_ACTIVITIES = 'TicketActivitiesTable'
-    EMAIL = 'EmailTable'
-    THREAD = 'ThreadTable'
-    KNOWLEDGE_BASE = 'KnowledgeBaseTable'
-    TAG = 'TagTable'
-    PORTAL_ISSUES = 'PortalIssuesTable'
-    PORTAL_ISSUE_COMMENTS = 'PortalIssueCommentsTable'
-    AGENT_RUNS = 'AgentRunsTable'
-    AGENT_ACTIONS = 'AgentActionsTable'
-    NOTION = 'NotionTable'
-    GENERAL_TASK = 'GeneralTaskTable'
-    GENERAL_TASK_USER = 'GeneralTaskUserTable'
+
+class SchemaTables:
+    WEB_CRAWL = SCHEMA.WebCrawlTable
+    GITHUB_ISSUES = SCHEMA.GithubIssuesTable
+    GITHUB_ISSUE_COMMENTS = SCHEMA.GithubIssueCommentsTable
+    DISCOURSE_TOPICS = SCHEMA.DiscourseTopicsTable
+    DISCOURSE_REPLIES = SCHEMA.DiscourseRepliesTable
+    SEAFILE = SCHEMA.SeafileTable
+    TICKETS = SCHEMA.TicketsTable
+    TICKET_COMMENTS = SCHEMA.TicketCommentsTable
+    TICKET_ACTIVITIES = SCHEMA.TicketActivitiesTable
+    EMAIL = SCHEMA.EmailTable
+    THREAD = SCHEMA.ThreadTable
+    KNOWLEDGE_BASE = SCHEMA.KnowledgeBaseTable
+    TAG = SCHEMA.TagTable
+    PORTAL_ISSUES = SCHEMA.PortalIssuesTable
+    PORTAL_ISSUE_COMMENTS = SCHEMA.PortalIssueCommentsTable
+    AGENT_RUNS = SCHEMA.AgentRunsTable
+    AGENT_ACTIONS = SCHEMA.AgentActionsTable
+    NOTION = SCHEMA.NotionTable
+    GENERAL_TASK = SCHEMA.GeneralTaskTable
+    GENERAL_TASK_USER = SCHEMA.GeneralTaskUserTable
 
 
 class PropertyTypes:

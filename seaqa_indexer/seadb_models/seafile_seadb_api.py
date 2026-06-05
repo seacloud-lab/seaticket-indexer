@@ -1,9 +1,8 @@
 import datetime
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.utils import get_column_name_from_schema, get_table_name_from_schema
 from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT
 
-from seaqa_indexer.seadb_models.models import SchemaTableNames
+from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 
@@ -19,16 +18,16 @@ class SeafileSeaDBAPI:
         file_id = file.get('file_id')
 
         insert_row = {
-            get_column_name_from_schema(SchemaTableNames.SEAFILE, 'file_id'): file_id,
-            get_column_name_from_schema(SchemaTableNames.SEAFILE, 'path'): path,
-            get_column_name_from_schema(SchemaTableNames.SEAFILE, 'title'): filename,
-            get_column_name_from_schema(SchemaTableNames.SEAFILE, 'content'): content[:SEADB_CONTENT_SIZE_LIMIT],
-            get_column_name_from_schema(SchemaTableNames.SEAFILE, 'modified_time'): file.get('modified_time'),
-            get_column_name_from_schema(SchemaTableNames.SEAFILE, 'sync_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.SEAFILE, 'record_modified_time'): datetime.datetime.now(datetime.UTC).isoformat(),
-            get_column_name_from_schema(SchemaTableNames.SEAFILE, 'deleted'): False,
+            SchemaTables.SEAFILE.file_id.name: file_id,
+            SchemaTables.SEAFILE.path.name: path,
+            SchemaTables.SEAFILE.title.name: filename,
+            SchemaTables.SEAFILE.content.name: content[:SEADB_CONTENT_SIZE_LIMIT],
+            SchemaTables.SEAFILE.modified_time.name: file.get('modified_time'),
+            SchemaTables.SEAFILE.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.SEAFILE.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.SEAFILE.deleted.name: False,
         }
-        table_name = get_table_name_from_schema(SchemaTableNames.SEAFILE, connection_id=connection_id)
+        table_name = SchemaTables.SEAFILE.table_name(connection_id=connection_id)
 
         if existed_file:
             _pk = existed_file.get('_pk')
@@ -44,7 +43,7 @@ class SeafileSeaDBAPI:
 
     def mark_file_as_deleted(self, connection_id, need_deleted_file_ids, file_id_to_pk):
         batch_size_limit = 100
-        table_name = get_table_name_from_schema(SchemaTableNames.SEAFILE, connection_id=connection_id)
+        table_name = SchemaTables.SEAFILE.table_name(connection_id=connection_id)
         now_time = datetime.datetime.now(datetime.UTC).isoformat()
         updates = []
 
@@ -66,13 +65,13 @@ class SeafileSeaDBAPI:
             self.seadb_api.update_rows(self.base_id, table_name, updates)
 
     def get_file_total_count(self, connection_id):
-        table_name = get_table_name_from_schema(SchemaTableNames.SEAFILE, connection_id=connection_id)
+        table_name = SchemaTables.SEAFILE.table_name(connection_id=connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
         result = self.seadb_api.query_rows(self.base_id, sql)
         return result['results'][0].get('count', 0)
 
     def get_files_by_page(self, connection_id, since, page_size, offset):
-        table_name = get_table_name_from_schema(SchemaTableNames.SEAFILE, connection_id=connection_id)
+        table_name = SchemaTables.SEAFILE.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `title`, `deleted`, `outdated`, `modified_time`, `content` FROM `{table_name}` 
                 WHERE record_modified_time >= '{since}' 
                 LIMIT {page_size} OFFSET {offset}"""
@@ -81,18 +80,18 @@ class SeafileSeaDBAPI:
         return results
 
     def delete_files_from_db(self, connection_id, deleted_seadb_pk_list):
-        table_name = get_table_name_from_schema(SchemaTableNames.SEAFILE, connection_id=connection_id)
+        table_name = SchemaTables.SEAFILE.table_name(connection_id=connection_id)
         self.seadb_api.delete_rows(self.base_id, table_name, deleted_seadb_pk_list)
 
     def get_file_by_file_id(self, connection_id, file_id):
-        table_name = get_table_name_from_schema(SchemaTableNames.SEAFILE, connection_id=connection_id)
+        table_name = SchemaTables.SEAFILE.table_name(connection_id=connection_id)
         sql = f"SELECT _pk, modified_time FROM `{table_name}` WHERE `file_id` = '{file_id}'"
         res = self.seadb_api.query_rows(self.base_id, sql)
         files = res.get('results', [])
         return files[0] if files else {}
 
     def get_need_ai_files_by_page(self, connection_id, page_size):
-        table_name = get_table_name_from_schema(SchemaTableNames.SEAFILE, connection_id=connection_id)
+        table_name = SchemaTables.SEAFILE.table_name(connection_id=connection_id)
         sql = f"""
             SELECT `_pk`, `title`, `content` FROM `{table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)

@@ -15,7 +15,6 @@ from seaqa_indexer.index.index_store.ticket_index import TicketIndex
 from seaqa_indexer.index.index_store.portal_issue_index import PortalIssueIndex
 from seaqa_indexer.index.utils import fix_summary, gen_kb_summary_index_name, gen_ticket_index_name,\
     gen_ticket_summary_index_name, gen_kb_index_name, gen_portal_issue_index_name, gen_portal_issue_summary_index_name
-from seaqa_indexer.seadb_models.utils import get_table_name_from_schema
 from seaqa_indexer.index.index_store.knowledge_base_summary_vector_index import KnowledgeBaseSummaryVectorIndex
 from seaqa_indexer.index.index_store.ticket_summary_vector_index import TicketSummaryVectorIndex
 from seaqa_indexer.index.index_store.portal_issue_summary_vector_index import PortalIssueSummaryVectorIndex
@@ -24,7 +23,7 @@ from seaqa_indexer.utils import get_since_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
 
-from seaqa_indexer.seadb_models.models import SchemaTableNames
+from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 
@@ -258,7 +257,7 @@ def update_knowledge_base_summary_index(project_uuid, db_session_class, is_rebui
 
     last_kb_ai_indexed_at = kb.knowledge_base_ai_indexed_at
 
-    table_name = get_table_name_from_schema(SchemaTableNames.KNOWLEDGE_BASE)
+    table_name = SchemaTables.KNOWLEDGE_BASE.table_name()
     fixed_count = fix_summary(project_uuid, table_name, seadb_api)
     if fixed_count > 0:
         logger.info('Fixed %d missing embeddings for knowledge base of project: %s before indexing', fixed_count, project_uuid)
@@ -292,7 +291,7 @@ def update_tickets_summary_index(project_uuid, db_session_class, is_rebuild=Fals
 
     last_ticket_ai_indexed_at = ticket.ticket_ai_indexed_at
 
-    table_name = get_table_name_from_schema(SchemaTableNames.TICKETS)
+    table_name = SchemaTables.TICKETS.table_name()
 
     fixed_count = fix_summary(project_uuid, table_name, seadb_api)
     if fixed_count > 0:
@@ -321,7 +320,7 @@ def update_portal_issues_summary_index(project_uuid, db_session_class, is_rebuil
 
     last_portal_issue_ai_indexed_at = portal_issue.portal_issue_ai_indexed_at
 
-    table_name = get_table_name_from_schema(SchemaTableNames.PORTAL_ISSUES)
+    table_name = SchemaTables.PORTAL_ISSUES.table_name()
 
     fixed_count = fix_summary(project_uuid, table_name, seadb_api)
     if fixed_count > 0:

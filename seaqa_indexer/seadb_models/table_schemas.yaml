@@ -281,7 +281,7 @@ tables:
       substate:
         column_type: single-select
         column_data:
-          cascade_source_column: state
+          cascade_column: state
           cascade_settings:
             '0001':
             - '0010'
@@ -584,7 +584,7 @@ tables:
       substate:
         column_type: single-select
         column_data:
-          cascade_source_column: state
+          cascade_column: state
           cascade_settings:
             '0001':
             - '0010'

@@ -4,7 +4,6 @@ import logging
 import os
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
-from seaqa_indexer.seadb_models.utils import get_table_name_from_schema
 from seaqa_indexer.utils.constants import ConnectionType, REPO_NAME_CACHE_TIME_OUT
 from seaqa_indexer.utils import get_file_suffix
 from seaqa_indexer.index.extract import ExtractorFactory
@@ -20,7 +19,7 @@ from seaqa_indexer.index.index_store.seafile_index import SeafileIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type, gen_content_vector_index_name
 from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
 
-from seaqa_indexer.seadb_models.models import SchemaTableNames
+from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,7 @@ class SeafileHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return get_table_name_from_schema(SchemaTableNames.SEAFILE, connection_id=connection_id)
+        return SchemaTables.SEAFILE.table_name(connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         seafile_index = SeafileIndex(seasearch_api)
