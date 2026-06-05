@@ -70,7 +70,7 @@ class DataEventType(Enum):
     DISCOURSE_TOPIC_COMMENT_ADDED = 'discourse_topic_comment_added'
     EMAIL_THREAD_ADDED = 'email_thread_added'
     EMAIL_MESSAGE_ADDED = 'email_message_added'
-    GENERAL_TASK_CREATED = 'general_task_created'
+    GENERAL_TASK_ADDED = 'general_task_added'
     GENERAL_TASK_UPDATED = 'general_task_updated'
 
     @classmethod

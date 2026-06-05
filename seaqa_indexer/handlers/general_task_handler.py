@@ -210,7 +210,7 @@ class GeneralTaskHandler(ConnectionHandler):
                         connection_id=connection_id,
                         item_id=source_task_id,
                         old_row=None,
-                        state_event_type=DataEventType.GENERAL_TASK_CREATED.value,
+                        state_event_type=DataEventType.GENERAL_TASK_ADDED.value,
                         state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
                         log_object_name='general task',
                     )
