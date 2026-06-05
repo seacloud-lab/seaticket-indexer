@@ -12,9 +12,11 @@ from seaqa_indexer.seadb_models.general_task_seadb_api import GeneralTaskSeaDBAP
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.seadb_models.models import GeneralTaskTable
 from seaqa_indexer.utils import need_update_connection_last_sync_count
-from seaqa_indexer.utils.constants import ConnectionType, IndexStatus, GENERAL_TASK_CONNECTION_SPEC
+from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus, GENERAL_TASK_CONNECTION_SPEC
 
 logger = logging.getLogger(__name__)
+
+GENERAL_TASK_EVENT_IGNORED_FIELDS = ('modified_time', 'sync_time', 'record_modified_time')
 
 
 class GeneralTaskHandler(ConnectionHandler):
@@ -196,8 +198,41 @@ class GeneralTaskHandler(ConnectionHandler):
 
             if append_rows:
                 general_task_seadb_api.append_rows(connection_id, append_rows)
+                for row in append_rows:
+                    source_task_id = row.get('source_task_id')
+                    if not source_task_id:
+                        continue
+                    self.publish_synced_record_events(
+                        get_latest_row=lambda source_task_id=source_task_id: (
+                            general_task_seadb_api.get_row_by_source_task_id(connection_id, source_task_id)
+                        ),
+                        project_uuid=project_uuid,
+                        connection_id=connection_id,
+                        item_id=source_task_id,
+                        old_row=None,
+                        state_event_type=DataEventType.GENERAL_TASK_CREATED.value,
+                        state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
+                        log_object_name='general task',
+                    )
             if update_rows:
                 general_task_seadb_api.update_rows(connection_id, update_rows)
+                for update_row in update_rows:
+                    source_task_id = update_row.get('row', {}).get('source_task_id')
+                    old_row = existing_rows_by_source_task_id.get(source_task_id)
+                    if not source_task_id or not old_row:
+                        continue
+                    self.publish_synced_record_events(
+                        get_latest_row=lambda source_task_id=source_task_id: (
+                            general_task_seadb_api.get_row_by_source_task_id(connection_id, source_task_id)
+                        ),
+                        project_uuid=project_uuid,
+                        connection_id=connection_id,
+                        item_id=source_task_id,
+                        old_row=old_row,
+                        state_event_type=DataEventType.GENERAL_TASK_UPDATED.value,
+                        state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
+                        log_object_name='general task',
+                    )
 
             page_info = data.get('page_info') or {}
             has_more = bool(page_info.get('has_more'))
