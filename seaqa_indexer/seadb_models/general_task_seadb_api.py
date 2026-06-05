@@ -98,9 +98,9 @@ class GeneralTaskSeaDBAPI:
             if not email or not name:
                 continue
             row = {
-                SchemaTables.GENERAL_TASK_USER.email.name: email,
-                SchemaTables.GENERAL_TASK_USER.name.capitalize: name,
-                SchemaTables.GENERAL_TASK_USER.record_modified_time.name: now,
+                SchemaTables.GENERAL_TASK_USER.column.email.name: email,
+                SchemaTables.GENERAL_TASK_USER.column.name.capitalize: name,
+                SchemaTables.GENERAL_TASK_USER.column.record_modified_time.name: now,
             }
             existing_pk = existing_pks.get(email)
             if existing_pk:
@@ -131,9 +131,9 @@ class GeneralTaskSeaDBAPI:
         columns = table_info.get('columns', []) or []
         column_name_to_meta = {column.get('name'): column for column in columns}
         target_columns = [
-            SchemaTables.GENERAL_TASK.status.name,
-            SchemaTables.GENERAL_TASK.size.name,
-            SchemaTables.GENERAL_TASK.priority.name,
+            SchemaTables.GENERAL_TASK.column.status.name,
+            SchemaTables.GENERAL_TASK.column.size.name,
+            SchemaTables.GENERAL_TASK.column.priority.name,
         ]
         desired_values = {column_name: set() for column_name in target_columns}
         for task in tasks:
@@ -141,11 +141,11 @@ class GeneralTaskSeaDBAPI:
             size = task.get('size')
             priority = task.get('priority')
             if status:
-                desired_values[SchemaTables.GENERAL_TASK.status.name].add(str(status))
+                desired_values[SchemaTables.GENERAL_TASK.column.status.name].add(str(status))
             if size:
-                desired_values[SchemaTables.GENERAL_TASK.size.name].add(str(size))
+                desired_values[SchemaTables.GENERAL_TASK.column.size.name].add(str(size))
             if priority:
-                desired_values[SchemaTables.GENERAL_TASK.priority.name].add(str(priority))
+                desired_values[SchemaTables.GENERAL_TASK.column.priority.name].add(str(priority))
         for column_name in target_columns:
             column_meta = column_name_to_meta.get(column_name)
             if not column_meta:
@@ -188,23 +188,23 @@ class GeneralTaskSeaDBAPI:
 
         now = datetime.datetime.now(datetime.UTC).isoformat()
         return {
-            SchemaTables.GENERAL_TASK.source_task_id.name: str(task.get('task_id') or '').strip(),
-            SchemaTables.GENERAL_TASK.url.name: str(task.get('url') or '').strip(),
-            SchemaTables.GENERAL_TASK.title.name: task.get('title', ''),
-            SchemaTables.GENERAL_TASK.status.name: task.get('status'),
-            SchemaTables.GENERAL_TASK.size.name: task.get('size'),
-            SchemaTables.GENERAL_TASK.priority.name: task.get('priority'),
-            SchemaTables.GENERAL_TASK.assignees.name: task.get('assignees', []),
-            SchemaTables.GENERAL_TASK.participants.name: task.get('participants', []),
-            SchemaTables.GENERAL_TASK.version.name: task.get('version', ''),
-            SchemaTables.GENERAL_TASK.others.name: others,
-            SchemaTables.GENERAL_TASK.content.name: content,
-            SchemaTables.GENERAL_TASK.due_date.name: task.get('due_date'),
-            SchemaTables.GENERAL_TASK.modified_time.name: task.get('modified_time') or now,
-            SchemaTables.GENERAL_TASK.created_time.name: task.get('created_time') or now,
-            SchemaTables.GENERAL_TASK.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.GENERAL_TASK.record_modified_time.name: now,
-            SchemaTables.GENERAL_TASK.deleted.name: bool(task.get('deleted', False)),
+            SchemaTables.GENERAL_TASK.column.source_task_id.name: str(task.get('task_id') or '').strip(),
+            SchemaTables.GENERAL_TASK.column.url.name: str(task.get('url') or '').strip(),
+            SchemaTables.GENERAL_TASK.column.title.name: task.get('title', ''),
+            SchemaTables.GENERAL_TASK.column.status.name: task.get('status'),
+            SchemaTables.GENERAL_TASK.column.size.name: task.get('size'),
+            SchemaTables.GENERAL_TASK.column.priority.name: task.get('priority'),
+            SchemaTables.GENERAL_TASK.column.assignees.name: task.get('assignees', []),
+            SchemaTables.GENERAL_TASK.column.participants.name: task.get('participants', []),
+            SchemaTables.GENERAL_TASK.column.version.name: task.get('version', ''),
+            SchemaTables.GENERAL_TASK.column.others.name: others,
+            SchemaTables.GENERAL_TASK.column.content.name: content,
+            SchemaTables.GENERAL_TASK.column.due_date.name: task.get('due_date'),
+            SchemaTables.GENERAL_TASK.column.modified_time.name: task.get('modified_time') or now,
+            SchemaTables.GENERAL_TASK.column.created_time.name: task.get('created_time') or now,
+            SchemaTables.GENERAL_TASK.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GENERAL_TASK.column.record_modified_time.name: now,
+            SchemaTables.GENERAL_TASK.column.deleted.name: bool(task.get('deleted', False)),
         }
 
     def get_total_count(self, connection_id):

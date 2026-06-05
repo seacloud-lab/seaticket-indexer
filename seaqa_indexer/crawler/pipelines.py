@@ -32,9 +32,9 @@ class BatchCrawlPipeline:
                 row = {
                     "pk": result.get('_pk'),
                     "row": {
-                        SchemaTables.WEB_CRAWL.deleted.name: True,
-                        SchemaTables.WEB_CRAWL.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                        SchemaTables.WEB_CRAWL.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        SchemaTables.WEB_CRAWL.column.deleted.name: True,
+                        SchemaTables.WEB_CRAWL.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     }
                 }
                 rows.append(row)
@@ -87,12 +87,12 @@ class BatchCrawlPipeline:
                 {
                     "pk": results[0].get('_pk'),
                     "row": {
-                        SchemaTables.WEB_CRAWL.title.name: title,
-                        SchemaTables.WEB_CRAWL.etag.name: etag,
-                        SchemaTables.WEB_CRAWL.modified_time.name: modified_time,
-                        SchemaTables.WEB_CRAWL.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                        SchemaTables.WEB_CRAWL.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                        SchemaTables.WEB_CRAWL.hash.name: hash,
+                        SchemaTables.WEB_CRAWL.column.title.name: title,
+                        SchemaTables.WEB_CRAWL.column.etag.name: etag,
+                        SchemaTables.WEB_CRAWL.column.modified_time.name: modified_time,
+                        SchemaTables.WEB_CRAWL.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                        SchemaTables.WEB_CRAWL.column.hash.name: hash,
                     }
                 }
             ]
@@ -101,13 +101,13 @@ class BatchCrawlPipeline:
             self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
             rows = [
                 {
-                    SchemaTables.WEB_CRAWL.url.name: url,
-                    SchemaTables.WEB_CRAWL.title.name: title,
-                    SchemaTables.WEB_CRAWL.etag.name: etag,
-                    SchemaTables.WEB_CRAWL.modified_time.name: modified_time,
-                    SchemaTables.WEB_CRAWL.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                    SchemaTables.WEB_CRAWL.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                    SchemaTables.WEB_CRAWL.hash.name: hash,
+                    SchemaTables.WEB_CRAWL.column.url.name: url,
+                    SchemaTables.WEB_CRAWL.column.title.name: title,
+                    SchemaTables.WEB_CRAWL.column.etag.name: etag,
+                    SchemaTables.WEB_CRAWL.column.modified_time.name: modified_time,
+                    SchemaTables.WEB_CRAWL.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                    SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                    SchemaTables.WEB_CRAWL.column.hash.name: hash,
                 }
             ]
             self.seadb_api.insert_rows(self.project_uuid, table_name, rows)

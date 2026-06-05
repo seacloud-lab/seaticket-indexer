@@ -5,7 +5,6 @@ import threading
 
 import yaml
 
-
 logger = logging.getLogger(__name__)
 
 _SCHEMA_LOCK = threading.Lock()
@@ -26,7 +25,7 @@ class ColumnSchema:
         if key == 'column_data':
             return self.data
         return default
-    
+
     def to_dict(self):
         data = {
             'column_name': self.name,
@@ -36,26 +35,53 @@ class ColumnSchema:
             data['column_data'] = self.data
         return data
 
-@dataclass
-class TableSchema:
-    schema_name: str
-    table_name_schema: str | None = None
-    columns: dict[str, ColumnSchema] = field(default_factory=dict)
-    indexes: list = field(default_factory=list)
+
+class ColumnNamespace:
+    def __init__(self, columns_dict):
+        self._columns = columns_dict
 
     def __getattr__(self, column_name):
         try:
-            return self.columns[column_name]
+            return self._columns[column_name]
         except KeyError as exc:
-            raise AttributeError(column_name) from exc
+            raise AttributeError(f"Column '{column_name}' not found") from exc
+
+    def __iter__(self):
+        return iter(self._columns.values())
+
+    def values(self):
+        return self._columns.values()
+
+    def __contains__(self, item):
+        return item in self._columns
 
     def get(self, key, default=None):
-        if key == 'schema_name':
-            return self.schema_name
+        return self._columns.get(key, default)
+
+    def keys(self):
+        return self._columns.keys()
+
+    def items(self):
+        return self._columns.items()
+
+@dataclass
+class TableSchema:
+    name: str
+    table_name_schema: str | None = None
+    _columns_dict: dict[str, ColumnSchema] = field(default_factory=dict)
+    indexes: list = field(default_factory=list)
+
+    @property
+    def column(self) -> ColumnNamespace:
+        return ColumnNamespace(self._columns_dict)
+
+    def get(self, key, default=None):
+        if key == 'name':
+            return self.name
         if key == 'table_name':
             return self.table_name_schema
         if key == 'columns':
-            return self.columns
+            return self._columns_dict
         if key == 'indexes':
             return self.indexes
         return default
@@ -70,7 +96,7 @@ class TableSchema:
         return self.table_name_schema
 
     def get_fields(self):
-        return list(self.columns.values())
+        return list(self._columns_dict.values())
 
 
 @dataclass
@@ -91,7 +117,7 @@ class SchemaRegistry:
 
 def _build_schema_registry(raw_schema):
     tables = {}
-    for schema_name, table_schema in (raw_schema.get('tables') or {}).items():
+    for table_name, table_schema in (raw_schema.get('tables') or {}).items():
         columns = {}
         for column_name, column_schema in (table_schema.get('columns') or {}).items():
             columns[column_name] = ColumnSchema(
@@ -99,10 +125,10 @@ def _build_schema_registry(raw_schema):
                 type=column_schema.get('column_type'),
                 data=column_schema.get('column_data') or {},
             )
-        tables[schema_name] = TableSchema(
-            schema_name=schema_name,
+        tables[table_name] = TableSchema(
+            name=table_name,
             table_name_schema=table_schema.get('table_name'),
-            columns=columns,
+            _columns_dict=columns,
             indexes=table_schema.get('indexes') or [],
         )
     return SchemaRegistry(tables=tables)
@@ -131,5 +157,6 @@ def preload_seadb_table_schemas():
 
 def get_seadb_table_schemas():
     return preload_seadb_table_schemas()
+
 
 SCHEMA = get_seadb_table_schemas()

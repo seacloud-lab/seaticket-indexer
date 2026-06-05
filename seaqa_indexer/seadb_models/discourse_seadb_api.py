@@ -30,17 +30,17 @@ class DiscourseSeaDBAPI:
         topic_created_time = topic_data.get('created_at')
 
         rows = [{
-            SchemaTables.DISCOURSE_TOPICS.topic_id.name: topic_id,
-            SchemaTables.DISCOURSE_TOPICS.title.name: title,
-            SchemaTables.DISCOURSE_TOPICS.slug.name: slug,
-            SchemaTables.DISCOURSE_TOPICS.views.name: views,
-            SchemaTables.DISCOURSE_TOPICS.category_id.name: category_id,
-            SchemaTables.DISCOURSE_TOPICS.modified_time.name: time_to_utc_time(modified_time).isoformat(),
-            SchemaTables.DISCOURSE_TOPICS.deleted.name: False,
-            SchemaTables.DISCOURSE_TOPICS.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.DISCOURSE_TOPICS.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.DISCOURSE_TOPICS.created_time.name: time_to_utc_time(topic_created_time).isoformat(),
-            SchemaTables.DISCOURSE_TOPICS.resolved.name: resolved,
+            SchemaTables.DISCOURSE_TOPICS.column.topic_id.name: topic_id,
+            SchemaTables.DISCOURSE_TOPICS.column.title.name: title,
+            SchemaTables.DISCOURSE_TOPICS.column.slug.name: slug,
+            SchemaTables.DISCOURSE_TOPICS.column.views.name: views,
+            SchemaTables.DISCOURSE_TOPICS.column.category_id.name: category_id,
+            SchemaTables.DISCOURSE_TOPICS.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+            SchemaTables.DISCOURSE_TOPICS.column.deleted.name: False,
+            SchemaTables.DISCOURSE_TOPICS.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.DISCOURSE_TOPICS.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.DISCOURSE_TOPICS.column.created_time.name: time_to_utc_time(topic_created_time).isoformat(),
+            SchemaTables.DISCOURSE_TOPICS.column.resolved.name: resolved,
         }]
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
@@ -89,15 +89,15 @@ class DiscourseSeaDBAPI:
         updates = [{
             "pk": primary_key,
             "row": {
-                SchemaTables.DISCOURSE_TOPICS.title.name: title,
-                SchemaTables.DISCOURSE_TOPICS.slug.name: slug,
-                SchemaTables.DISCOURSE_TOPICS.views.name: views,
-                SchemaTables.DISCOURSE_TOPICS.category_id.name: category_id,
-                SchemaTables.DISCOURSE_TOPICS.modified_time.name: time_to_utc_time(modified_time).isoformat(),
-                SchemaTables.DISCOURSE_TOPICS.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                SchemaTables.DISCOURSE_TOPICS.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                SchemaTables.DISCOURSE_TOPICS.deleted.name: False,
-                SchemaTables.DISCOURSE_TOPICS.resolved.name: resolved,
+                SchemaTables.DISCOURSE_TOPICS.column.title.name: title,
+                SchemaTables.DISCOURSE_TOPICS.column.slug.name: slug,
+                SchemaTables.DISCOURSE_TOPICS.column.views.name: views,
+                SchemaTables.DISCOURSE_TOPICS.column.category_id.name: category_id,
+                SchemaTables.DISCOURSE_TOPICS.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+                SchemaTables.DISCOURSE_TOPICS.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                SchemaTables.DISCOURSE_TOPICS.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                SchemaTables.DISCOURSE_TOPICS.column.deleted.name: False,
+                SchemaTables.DISCOURSE_TOPICS.column.resolved.name: resolved,
             }
         }]
         return self.seadb_api.update_rows(self.base_id, table_name, updates)
@@ -131,12 +131,12 @@ class DiscourseSeaDBAPI:
         if content and len(content) > MAX_CONTENT_LENGTH:
             content = content[:MAX_CONTENT_LENGTH]
         rows = [{
-            SchemaTables.DISCOURSE_REPLIES.topic_id.name: topic_id,
-            SchemaTables.DISCOURSE_REPLIES.post_number.name: post_number,
-            SchemaTables.DISCOURSE_REPLIES.content.name: content,
-            SchemaTables.DISCOURSE_REPLIES.author.name: author,
-            SchemaTables.DISCOURSE_REPLIES.accepted_answer.name: accepted_answer,
-            SchemaTables.DISCOURSE_REPLIES.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+            SchemaTables.DISCOURSE_REPLIES.column.topic_id.name: topic_id,
+            SchemaTables.DISCOURSE_REPLIES.column.post_number.name: post_number,
+            SchemaTables.DISCOURSE_REPLIES.column.content.name: content,
+            SchemaTables.DISCOURSE_REPLIES.column.author.name: author,
+            SchemaTables.DISCOURSE_REPLIES.column.accepted_answer.name: accepted_answer,
+            SchemaTables.DISCOURSE_REPLIES.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
         }]
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
@@ -153,12 +153,12 @@ class DiscourseSeaDBAPI:
         updates = [{
             "pk": reply_pk,
             "row": {
-                SchemaTables.DISCOURSE_REPLIES.content.name: content,
-                SchemaTables.DISCOURSE_REPLIES.author.name: author,
-                SchemaTables.DISCOURSE_REPLIES.modified_time.name: time_to_utc_time(modified_time).isoformat(),
-                SchemaTables.DISCOURSE_REPLIES.topic_id.name: topic_id,
-                SchemaTables.DISCOURSE_REPLIES.post_number.name: post_number,
-                SchemaTables.DISCOURSE_REPLIES.accepted_answer.name: accepted_answer,
+                SchemaTables.DISCOURSE_REPLIES.column.content.name: content,
+                SchemaTables.DISCOURSE_REPLIES.column.author.name: author,
+                SchemaTables.DISCOURSE_REPLIES.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+                SchemaTables.DISCOURSE_REPLIES.column.topic_id.name: topic_id,
+                SchemaTables.DISCOURSE_REPLIES.column.post_number.name: post_number,
+                SchemaTables.DISCOURSE_REPLIES.column.accepted_answer.name: accepted_answer,
             }
         }]
         return self.seadb_api.update_rows(

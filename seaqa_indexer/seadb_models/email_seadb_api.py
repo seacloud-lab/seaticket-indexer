@@ -88,12 +88,12 @@ class EmailSeaDBAPI:
 
     def save_thread_to_db(self, connection_id, thread):
         insert_row = {
-            SchemaTables.THREAD.title.name: thread['subject'],
-            SchemaTables.THREAD.modified_time.name: time_to_utc_time(thread['last_updated_at']).isoformat(),
-            SchemaTables.THREAD.unread.name: thread.get('unread'),
-            SchemaTables.THREAD.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.THREAD.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.THREAD.deleted.name: False
+            SchemaTables.THREAD.column.title.name: thread['subject'],
+            SchemaTables.THREAD.column.modified_time.name: time_to_utc_time(thread['last_updated_at']).isoformat(),
+            SchemaTables.THREAD.column.unread.name: thread.get('unread'),
+            SchemaTables.THREAD.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.THREAD.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.THREAD.column.deleted.name: False
         }
 
         table_name = SchemaTables.THREAD.table_name(connection_id=connection_id)

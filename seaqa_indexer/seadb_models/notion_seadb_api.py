@@ -29,16 +29,16 @@ class NotionSeaDBAPI:
             content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
-            SchemaTables.NOTION.title.name: notion_page.get('title'),
-            SchemaTables.NOTION.content.name: content,
-            SchemaTables.NOTION.created_time.name: time_to_utc_time(notion_page.get('created_time')).isoformat(),
-            SchemaTables.NOTION.modified_time.name: time_to_utc_time(notion_page.get('last_modified_time')).isoformat(),
-            SchemaTables.NOTION.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.NOTION.creator.name: notion_page.get('creator'),
-            SchemaTables.NOTION.last_modifier.name: notion_page.get('last_modifier'),
-            SchemaTables.NOTION.page_id.name: notion_page.get('page_id'),
-            SchemaTables.NOTION.parent_page_id.name: notion_page.get('parent_page_id'),
-            SchemaTables.NOTION.deleted.name: notion_page.get('in_trash', False),
+            SchemaTables.NOTION.column.title.name: notion_page.get('title'),
+            SchemaTables.NOTION.column.content.name: content,
+            SchemaTables.NOTION.column.created_time.name: time_to_utc_time(notion_page.get('created_time')).isoformat(),
+            SchemaTables.NOTION.column.modified_time.name: time_to_utc_time(notion_page.get('last_modified_time')).isoformat(),
+            SchemaTables.NOTION.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.NOTION.column.creator.name: notion_page.get('creator'),
+            SchemaTables.NOTION.column.last_modifier.name: notion_page.get('last_modifier'),
+            SchemaTables.NOTION.column.page_id.name: notion_page.get('page_id'),
+            SchemaTables.NOTION.column.parent_page_id.name: notion_page.get('parent_page_id'),
+            SchemaTables.NOTION.column.deleted.name: notion_page.get('in_trash', False),
         }
         table_name = SchemaTables.NOTION.table_name(connection_id=connection_id)
         if existed_page:
@@ -98,10 +98,10 @@ class NotionSeaDBAPI:
         update_row = {
             "pk": pk,
             "row": {
-                SchemaTables.NOTION.deleted.name: True,
-                SchemaTables.NOTION.modified_time.name: modified_time,
-                SchemaTables.NOTION.sync_time.name: now_datetime,
-                SchemaTables.NOTION.record_modified_time.name: now_datetime,
+                SchemaTables.NOTION.column.deleted.name: True,
+                SchemaTables.NOTION.column.modified_time.name: modified_time,
+                SchemaTables.NOTION.column.sync_time.name: now_datetime,
+                SchemaTables.NOTION.column.record_modified_time.name: now_datetime,
             },
         }
         self.seadb_api.update_rows(self.base_id, table_name, [update_row])

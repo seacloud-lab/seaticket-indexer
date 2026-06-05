@@ -18,14 +18,14 @@ class SeafileSeaDBAPI:
         file_id = file.get('file_id')
 
         insert_row = {
-            SchemaTables.SEAFILE.file_id.name: file_id,
-            SchemaTables.SEAFILE.path.name: path,
-            SchemaTables.SEAFILE.title.name: filename,
-            SchemaTables.SEAFILE.content.name: content[:SEADB_CONTENT_SIZE_LIMIT],
-            SchemaTables.SEAFILE.modified_time.name: file.get('modified_time'),
-            SchemaTables.SEAFILE.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.SEAFILE.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.SEAFILE.deleted.name: False,
+            SchemaTables.SEAFILE.column.file_id.name: file_id,
+            SchemaTables.SEAFILE.column.path.name: path,
+            SchemaTables.SEAFILE.column.title.name: filename,
+            SchemaTables.SEAFILE.column.content.name: content[:SEADB_CONTENT_SIZE_LIMIT],
+            SchemaTables.SEAFILE.column.modified_time.name: file.get('modified_time'),
+            SchemaTables.SEAFILE.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.SEAFILE.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.SEAFILE.column.deleted.name: False,
         }
         table_name = SchemaTables.SEAFILE.table_name(connection_id=connection_id)
 

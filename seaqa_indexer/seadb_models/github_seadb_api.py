@@ -16,15 +16,15 @@ class GitHubSeaDBAPI:
     def update_issue_record(self, connection_id, issue_id, modified_time, comment_count=None, deleted=False):
 
         row = {
-            SchemaTables.GITHUB_ISSUES.modified_time.name: time_to_utc_time(modified_time).isoformat(),
-            SchemaTables.GITHUB_ISSUES.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.GITHUB_ISSUES.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GITHUB_ISSUES.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+            SchemaTables.GITHUB_ISSUES.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GITHUB_ISSUES.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
         }
 
         if comment_count is not None:
-            row[SchemaTables.GITHUB_ISSUES.comment_count.name] = int(comment_count)
+            row[SchemaTables.GITHUB_ISSUES.column.comment_count.name] = int(comment_count)
         if deleted:
-            row[SchemaTables.GITHUB_ISSUES.deleted.name] = deleted
+            row[SchemaTables.GITHUB_ISSUES.column.deleted.name] = deleted
 
         table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         sql = f"SELECT _pk FROM `{table_name}` WHERE issue_id={issue_id}"
@@ -64,29 +64,29 @@ class GitHubSeaDBAPI:
             content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
-            SchemaTables.GITHUB_ISSUES.issue_id.name: issue['id'],
-            SchemaTables.GITHUB_ISSUES.issue_number.name: issue['number'],
-            SchemaTables.GITHUB_ISSUES.title.name: issue.get('title'),
-            SchemaTables.GITHUB_ISSUES.author.name: issue.get('user', {}).get('login', ''),
-            SchemaTables.GITHUB_ISSUES.url.name: issue.get('html_url', ''),
-            SchemaTables.GITHUB_ISSUES.content.name: content,
-            SchemaTables.GITHUB_ISSUES.state.name: issue.get('state'),
-            SchemaTables.GITHUB_ISSUES.assignees.name: json.dumps(assignees_list),
-            SchemaTables.GITHUB_ISSUES.created_time.name: time_to_utc_time(issue.get('created_at')).isoformat(),
-            SchemaTables.GITHUB_ISSUES.modified_time.name: time_to_utc_time(issue.get('updated_at')).isoformat(),
-            SchemaTables.GITHUB_ISSUES.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.GITHUB_ISSUES.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.GITHUB_ISSUES.closed_time.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
-            SchemaTables.GITHUB_ISSUES.comment_count.name: issue.get('comments'),
-            SchemaTables.GITHUB_ISSUES.deleted.name: False,
+            SchemaTables.GITHUB_ISSUES.column.issue_id.name: issue['id'],
+            SchemaTables.GITHUB_ISSUES.column.issue_number.name: issue['number'],
+            SchemaTables.GITHUB_ISSUES.column.title.name: issue.get('title'),
+            SchemaTables.GITHUB_ISSUES.column.author.name: issue.get('user', {}).get('login', ''),
+            SchemaTables.GITHUB_ISSUES.column.url.name: issue.get('html_url', ''),
+            SchemaTables.GITHUB_ISSUES.column.content.name: content,
+            SchemaTables.GITHUB_ISSUES.column.state.name: issue.get('state'),
+            SchemaTables.GITHUB_ISSUES.column.assignees.name: json.dumps(assignees_list),
+            SchemaTables.GITHUB_ISSUES.column.created_time.name: time_to_utc_time(issue.get('created_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUES.column.modified_time.name: time_to_utc_time(issue.get('updated_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUES.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GITHUB_ISSUES.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.GITHUB_ISSUES.column.closed_time.name: time_to_utc_time(issue.get('closed_at')).isoformat() if issue.get('closed_at') else None,
+            SchemaTables.GITHUB_ISSUES.column.comment_count.name: issue.get('comments'),
+            SchemaTables.GITHUB_ISSUES.column.deleted.name: False,
         }
 
         if state_reason:
-            insert_row[SchemaTables.GITHUB_ISSUES.state_reason.name] = state_reason
+            insert_row[SchemaTables.GITHUB_ISSUES.column.state_reason.name] = state_reason
 
-        insert_row[SchemaTables.GITHUB_ISSUES.labels.name] = label_names
+        insert_row[SchemaTables.GITHUB_ISSUES.column.labels.name] = label_names
 
-        insert_row[SchemaTables.GITHUB_ISSUES.issue_type.name] = type_name
+        insert_row[SchemaTables.GITHUB_ISSUES.column.issue_type.name] = type_name
 
         table_name = SchemaTables.GITHUB_ISSUES.table_name(connection_id=connection_id)
         if existed_issue:
@@ -107,12 +107,12 @@ class GitHubSeaDBAPI:
             content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
-            SchemaTables.GITHUB_ISSUE_COMMENTS.comment_id.name: comment_id,
-            SchemaTables.GITHUB_ISSUE_COMMENTS.issue_id.name: issue_id,
-            SchemaTables.GITHUB_ISSUE_COMMENTS.author.name: comment.get('user', {}).get('login', ''),
-            SchemaTables.GITHUB_ISSUE_COMMENTS.content.name: content,
-            SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
-            SchemaTables.GITHUB_ISSUE_COMMENTS.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.comment_id.name: comment_id,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.issue_id.name: issue_id,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.author.name: comment.get('user', {}).get('login', ''),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.content.name: content,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
         }
 
         table_name = SchemaTables.GITHUB_ISSUE_COMMENTS.table_name(connection_id=connection_id)
@@ -156,12 +156,12 @@ class GitHubSeaDBAPI:
                 content = content[:MAX_CONTENT_LENGTH]
 
             insert_row = {
-            SchemaTables.GITHUB_ISSUE_COMMENTS.comment_id.name: comment_id,
-            SchemaTables.GITHUB_ISSUE_COMMENTS.issue_id.name: issue_id,
-            SchemaTables.GITHUB_ISSUE_COMMENTS.author.name: comment.get('user', {}).get('login', ''),
-            SchemaTables.GITHUB_ISSUE_COMMENTS.content.name: content,
-            SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
-            SchemaTables.GITHUB_ISSUE_COMMENTS.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.comment_id.name: comment_id,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.issue_id.name: issue_id,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.author.name: comment.get('user', {}).get('login', ''),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.content.name: content,
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.created_time.name: time_to_utc_time(comment.get('created_at')).isoformat(),
+            SchemaTables.GITHUB_ISSUE_COMMENTS.column.modified_time.name: time_to_utc_time(comment.get('updated_at')).isoformat(),
             }
 
             table_name = SchemaTables.GITHUB_ISSUE_COMMENTS.table_name(connection_id=connection_id)
@@ -177,10 +177,10 @@ class GitHubSeaDBAPI:
             else:
                 self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
                 added_comments.append({
-                    SchemaTables.GITHUB_ISSUE_COMMENTS.comment_id.name: comment_id,
-                    SchemaTables.GITHUB_ISSUE_COMMENTS.author.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.author.name],
-                    SchemaTables.GITHUB_ISSUE_COMMENTS.content.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.content.name],
-                    SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.comment_id.name: comment_id,
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.author.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.author.name],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.content.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.content.name],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.created_time.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name],
                 })
 
         need_deleted_comment_ids = old_comment_ids - new_comment_ids
@@ -202,7 +202,7 @@ class GitHubSeaDBAPI:
         columns = table_info.get("columns", [])
         issue_label_column = {}
         for column in columns:
-            if column.get('name') == SchemaTables.GITHUB_ISSUES.labels.name:
+            if column.get('name') == SchemaTables.GITHUB_ISSUES.column.labels.name:
                 issue_label_column = column
                 break
 
@@ -311,7 +311,7 @@ class GitHubSeaDBAPI:
         columns = table_info.get("columns", [])
         issue_type_column = {}
         for column in columns:
-            if column.get('name') == SchemaTables.GITHUB_ISSUES.issue_type.name:
+            if column.get('name') == SchemaTables.GITHUB_ISSUES.column.issue_type.name:
                 issue_type_column = column
                 break
 
