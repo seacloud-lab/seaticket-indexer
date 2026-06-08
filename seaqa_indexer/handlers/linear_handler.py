@@ -3,7 +3,7 @@ import datetime
 import logging
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
-from seaqa_indexer.seadb_models.models import LinearIssueTable, LinearCommentsTable
+from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.utils.linear_api import LinearAPI
 from seaqa_indexer.seadb_models.linear_seadb_api import LinearSeaDBAPI
@@ -20,10 +20,10 @@ class LinearIssueHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return LinearIssueTable.gen_table_name(connection_id)
+        return SchemaTables.LINEAR_ISSUES.table_name(connection_id)
 
     def gen_comments_table_name(self, connection_id):
-        return LinearCommentsTable.gen_table_name(connection_id)
+        return SchemaTables.LINEAR_ISSUE_COMMENTS.table_name(connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         linear_issue_index = LinearIssuesIndex(seasearch_api)

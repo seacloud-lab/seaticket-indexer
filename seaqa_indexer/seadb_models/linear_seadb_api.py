@@ -3,7 +3,7 @@ import json
 
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.models import LinearIssueTable, LinearCommentsTable
+from seaqa_indexer.seadb_models.models import SchemaTables
 
 MAX_CONTENT_LENGTH = 10000
 
@@ -14,7 +14,7 @@ class LinearSeaDBAPI:
         self.seadb_api = SeaDBAPI()
 
     def get_linear_issues_count(self, connection_id):
-        table_name = LinearIssueTable.gen_table_name(connection_id)
+        table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
         response = self.seadb_api.query_rows(self.base_id, sql)
         issues_count = 0
@@ -23,7 +23,7 @@ class LinearSeaDBAPI:
         return issues_count
 
     def get_table_metadata(self, connection_id):
-        table_name = LinearIssueTable.gen_table_name(connection_id)
+        table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         metadata = self.seadb_api.get_base_metadata(self.base_id)
         for table in metadata.get('tables', []):
             if table.get('name') == table_name:
@@ -31,7 +31,7 @@ class LinearSeaDBAPI:
         return {}
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
-        table_name = LinearIssueTable.gen_table_name(connection_id)
+        table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         sql = f"SELECT `_pk`, `issue_id`, `modified_time`, `deleted` FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and response.get('results'):
@@ -44,7 +44,7 @@ class LinearSeaDBAPI:
         columns = table_info.get('columns', []) or []
         label_column = {}
         for column in columns:
-            if column.get('name') == LinearIssueTable.labels.name:
+            if column.get('name') == SchemaTables.LINEAR_ISSUES.column.labels.name:
                 label_column = column
                 break
 
@@ -62,7 +62,7 @@ class LinearSeaDBAPI:
         columns = table_info.get('columns', []) or []
         state_column = {}
         for column in columns:
-            if column.get('name') == LinearIssueTable.state.name:
+            if column.get('name') == SchemaTables.LINEAR_ISSUES.column.state.name:
                 state_column = column
                 break
 
@@ -166,7 +166,7 @@ class LinearSeaDBAPI:
         columns = table_info.get('columns', []) or []
         label_column = {}
         for column in columns:
-            if column.get('name') == LinearIssueTable.labels.name:
+            if column.get('name') == SchemaTables.LINEAR_ISSUES.column.labels.name:
                 label_column = column
                 break
 
@@ -179,7 +179,7 @@ class LinearSeaDBAPI:
         columns = table_info.get('columns', []) or []
         state_column = {}
         for column in columns:
-            if column.get('name') == LinearIssueTable.state.name:
+            if column.get('name') == SchemaTables.LINEAR_ISSUES.column.state.name:
                 state_column = column
                 break
 
@@ -213,25 +213,25 @@ class LinearSeaDBAPI:
             author = issue.get('user', {}).get('name')
 
         insert_row = {
-            LinearIssueTable.issue_id.name: issue_id,
-            LinearIssueTable.identifier.name: issue.get('identifier'),
-            LinearIssueTable.title.name: title,
-            LinearIssueTable.content.name: content,
-            LinearIssueTable.state.name: (issue.get('state') or {}).get('name'),
-            LinearIssueTable.author.name: author,
-            LinearIssueTable.assignees.name: json.dumps(assignees_list),
-            LinearIssueTable.created_time.name: time_to_utc_time(issue.get('createdAt')).isoformat(),
-            LinearIssueTable.modified_time.name: time_to_utc_time(issue.get('updatedAt')).isoformat(),
-            LinearIssueTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            LinearIssueTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            LinearIssueTable.closed_time.name: time_to_utc_time(issue.get('completedAt')).isoformat() if issue.get('completedAt') else None,
-            LinearIssueTable.due_date.name: issue.get('dueDate'),
-            LinearIssueTable.labels.name: label_names if label_names else None,
-            LinearIssueTable.priority.name: issue.get('priority'),
-            LinearIssueTable.deleted.name: False,
+            SchemaTables.LINEAR_ISSUES.column.issue_id.name: issue_id,
+            SchemaTables.LINEAR_ISSUES.column.identifier.name: issue.get('identifier'),
+            SchemaTables.LINEAR_ISSUES.column.title.name: title,
+            SchemaTables.LINEAR_ISSUES.column.content.name: content,
+            SchemaTables.LINEAR_ISSUES.column.state.name: (issue.get('state') or {}).get('name'),
+            SchemaTables.LINEAR_ISSUES.column.author.name: author,
+            SchemaTables.LINEAR_ISSUES.column.assignees.name: json.dumps(assignees_list),
+            SchemaTables.LINEAR_ISSUES.column.created_time.name: time_to_utc_time(issue.get('createdAt')).isoformat(),
+            SchemaTables.LINEAR_ISSUES.column.modified_time.name: time_to_utc_time(issue.get('updatedAt')).isoformat(),
+            SchemaTables.LINEAR_ISSUES.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.LINEAR_ISSUES.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.LINEAR_ISSUES.column.closed_time.name: time_to_utc_time(issue.get('completedAt')).isoformat() if issue.get('completedAt') else None,
+            SchemaTables.LINEAR_ISSUES.column.due_date.name: issue.get('dueDate'),
+            SchemaTables.LINEAR_ISSUES.column.labels.name: label_names if label_names else None,
+            SchemaTables.LINEAR_ISSUES.column.priority.name: issue.get('priority'),
+            SchemaTables.LINEAR_ISSUES.column.deleted.name: False,
         }
 
-        table_name = LinearIssueTable.gen_table_name(connection_id)
+        table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         if existed_issue:
             _pk = existed_issue.get('_pk')
             update_row = {
@@ -243,7 +243,7 @@ class LinearSeaDBAPI:
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 
     def mark_issue_deleted(self, connection_id, issue_id):
-        table_name = LinearIssueTable.gen_table_name(connection_id)
+        table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         sql = f"SELECT _pk FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if not issues:
@@ -252,16 +252,16 @@ class LinearSeaDBAPI:
         update_row = {
             "pk": _pk,
             "row": {
-                LinearIssueTable.deleted.name: True,
-                LinearIssueTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                LinearIssueTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                SchemaTables.LINEAR_ISSUES.column.deleted.name: True,
+                SchemaTables.LINEAR_ISSUES.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                SchemaTables.LINEAR_ISSUES.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             }
         }
         self.seadb_api.update_rows(self.base_id, table_name, [update_row])
         return True
 
     def mark_issue_active(self, connection_id, issue_id):
-        table_name = LinearIssueTable.gen_table_name(connection_id)
+        table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         sql = f"SELECT _pk FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
         issues = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if not issues:
@@ -270,9 +270,9 @@ class LinearSeaDBAPI:
         update_row = {
             "pk": _pk,
             "row": {
-                LinearIssueTable.deleted.name: False,
-                LinearIssueTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                LinearIssueTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                SchemaTables.LINEAR_ISSUES.column.deleted.name: False,
+                SchemaTables.LINEAR_ISSUES.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                SchemaTables.LINEAR_ISSUES.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             }
         }
         self.seadb_api.update_rows(self.base_id, table_name, [update_row])
@@ -304,15 +304,15 @@ class LinearSeaDBAPI:
             if content and len(content) > MAX_CONTENT_LENGTH:
                 content = content[:MAX_CONTENT_LENGTH]
             insert_row = {
-                LinearCommentsTable.comment_id.name: comment_id,
-                LinearCommentsTable.content.name: content,
-                LinearCommentsTable.issue_id.name: issue_id,
-                LinearCommentsTable.author.name: (comment.get('user') or {}).get('name'),
-                LinearCommentsTable.created_time.name: time_to_utc_time(comment.get('createdAt')).isoformat(),
-                LinearCommentsTable.modified_time.name: time_to_utc_time(comment.get('updatedAt')).isoformat(),
+                SchemaTables.LINEAR_ISSUE_COMMENTS.column.comment_id.name: comment_id,
+                SchemaTables.LINEAR_ISSUE_COMMENTS.column.content.name: content,
+                SchemaTables.LINEAR_ISSUE_COMMENTS.column.issue_id.name: issue_id,
+                SchemaTables.LINEAR_ISSUE_COMMENTS.column.author.name: (comment.get('user') or {}).get('name'),
+                SchemaTables.LINEAR_ISSUE_COMMENTS.column.created_time.name: time_to_utc_time(comment.get('createdAt')).isoformat(),
+                SchemaTables.LINEAR_ISSUE_COMMENTS.column.modified_time.name: time_to_utc_time(comment.get('updatedAt')).isoformat(),
             }
 
-            comments_table_name = LinearCommentsTable.gen_table_name(connection_id)
+            comments_table_name = SchemaTables.LINEAR_ISSUE_COMMENTS.table_name(connection_id)
             pk = comment_id_to_pk.get(comment_id)
             if pk:
                 update_row = [
@@ -330,12 +330,12 @@ class LinearSeaDBAPI:
             self.delete_comment_from_db(connection_id, comment_id)
 
     def delete_comment_from_db(self, connection_id, comment_id):
-        comments_table_name = LinearCommentsTable.gen_table_name(connection_id)
+        comments_table_name = SchemaTables.LINEAR_ISSUE_COMMENTS.table_name(connection_id)
         sql = f"DELETE FROM `{comments_table_name}` WHERE comment_id = '{comment_id}'"
         self.seadb_api.query_rows(self.base_id, sql)
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
-        issues_table_name = LinearIssueTable.gen_table_name(connection_id)
+        issues_table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         if last_indexed_at:
             sql = f"""SELECT `_pk`, `issue_id`, `deleted`, `outdated`, `content`, `title`, `modified_time` FROM `{issues_table_name}` 
                     WHERE record_modified_time >= '{last_indexed_at}' 
@@ -347,20 +347,20 @@ class LinearSeaDBAPI:
         return res.get('results', [])
 
     def get_issue_ids_by_page(self, connection_id, page_size, offset):
-        issues_table_name = LinearIssueTable.gen_table_name(connection_id)
+        issues_table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         sql = f"""SELECT issue_id, deleted FROM `{issues_table_name}` 
                 LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
         return res.get('results', [])
 
     def get_issue_comments_by_page(self, connection_id, issue_id, page_size, offset):
-        comments_table_name = LinearCommentsTable.gen_table_name(connection_id)
+        comments_table_name = SchemaTables.LINEAR_ISSUE_COMMENTS.table_name(connection_id)
         sql = f"SELECT `_pk`, `comment_id`, `content` FROM `{comments_table_name}` WHERE issue_id = '{issue_id}' LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return comments
 
     def get_need_ai_issues_by_page(self, connection_id, page_size):
-        issues_table_name = LinearIssueTable.gen_table_name(connection_id)
+        issues_table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
         sql = f"""
             SELECT `_pk`, `title`, `content` FROM `{issues_table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
