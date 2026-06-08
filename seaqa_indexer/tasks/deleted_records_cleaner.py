@@ -8,7 +8,7 @@ from seaqa_indexer.utils.seadb_api import SeaDBAPI, TableNotFound
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.seasearch_api import SeaSearchAPI
 from seaqa_indexer.handlers import get_handler
-from seaqa_indexer.seadb_models.models import TicketsTable, TicketCommentsTable, PortalIssuesTable, PortalIssueCommentsTable, KnowledgeBaseTable
+from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 logger = logging.getLogger(__name__)
@@ -51,8 +51,8 @@ class DeletedRecordsCleanerTimer(Thread):
     
     def clean_deleted_portal_issue_records(self, seadb_api, project_uuid, cutoff_time):
         page_size = 1000
-        portal_issue_table_name = PortalIssuesTable.gen_table_name()
-        portal_issue_comment_table_name = PortalIssueCommentsTable.gen_table_name()
+        portal_issue_table_name = SchemaTables.PORTAL_ISSUES.table_name()
+        portal_issue_comment_table_name = SchemaTables.PORTAL_ISSUE_COMMENTS.table_name()
         total_deleted = 0
 
         while True:
@@ -86,8 +86,8 @@ class DeletedRecordsCleanerTimer(Thread):
     
     def clean_deleted_ticket_records(self, seadb_api, project_uuid, cutoff_time):
         page_size = 1000
-        ticket_table_name = TicketsTable.gen_table_name()
-        ticket_comment_table_name = TicketCommentsTable.gen_table_name()
+        ticket_table_name = SchemaTables.TICKETS.table_name()
+        ticket_comment_table_name = SchemaTables.TICKET_COMMENTS.table_name()
         total_deleted = 0
 
         while True:
@@ -117,7 +117,7 @@ class DeletedRecordsCleanerTimer(Thread):
     
     def clean_deleted_kb_records(self, seadb_api, project_uuid, cutoff_time):
         page_size = 1000
-        kb_table_name = KnowledgeBaseTable.gen_table_name()
+        kb_table_name = SchemaTables.KNOWLEDGE_BASE.table_name()
         total_deleted = 0
 
         while True:

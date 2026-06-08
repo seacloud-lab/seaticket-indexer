@@ -5,7 +5,6 @@ import datetime
 from dateutil.relativedelta import relativedelta
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
-from seaqa_indexer.seadb_models.models import EmailTable, ThreadTable
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
 from seaqa_indexer.utils.mail_viewer import get_mail_viewer_from_config, EmailConfigError, EmailViewError, EmailAuthProviderError
@@ -15,6 +14,9 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus, DataEventType
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.email_index import EmailIndex
+
+from seaqa_indexer.seadb_models.models import SchemaTables
+
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +28,10 @@ class EmailHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id) -> str:
-        return ThreadTable.gen_table_name(connection_id)
+        return SchemaTables.THREAD.table_name(connection_id=connection_id)
 
     def gen_email_table_name(self, connection_id) -> str:
-        return EmailTable.gen_table_name(connection_id)
+        return SchemaTables.EMAIL.table_name(connection_id=connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         email_index = EmailIndex(seasearch_api)

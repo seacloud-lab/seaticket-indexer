@@ -1,0 +1,868 @@
+tables:
+  WebCrawlTable:
+    columns:
+      url:
+        column_type: text
+      title:
+        column_type: text
+      etag:
+        column_type: text
+      modified_time:
+        column_type: datetime
+      sync_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      outdated:
+        column_type: bool
+      record_modified_time:
+        column_type: datetime
+      hash:
+        column_type: text
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+    indexes:
+    - - url
+    - - modified_time
+    - - deleted
+    - - ai_processed_time
+    - - record_modified_time
+    table_name: site_{connection_id}
+  GithubIssuesTable:
+    columns:
+      issue_id:
+        column_type: int64
+      issue_number:
+        column_type: int64
+      title:
+        column_type: text
+      ai_title:
+        column_type: text
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      state:
+        column_type: single-select
+        column_data:
+          options:
+          - id: '0001'
+            name: open
+            color: '#1A7F37'
+            text_color: '#FFFFFF'
+          - id: '0002'
+            name: closed
+            color: '#8250DF'
+            text_color: '#FFFFFF'
+      state_reason:
+        column_type: single-select
+        column_data:
+          options:
+          - id: '0001'
+            name: completed
+            color: '#8250DF'
+            text_color: '#FFFFFF'
+          - id: '0002'
+            name: not_planned
+            color: '#59636E'
+            text_color: '#FFFFFF'
+          - id: '0003'
+            name: duplicate
+            color: '#59636E'
+            text_color: '#FFFFFF'
+          - id: '0004'
+            name: reopened
+            color: '#1A7F37'
+            text_color: '#FFFFFF'
+      labels:
+        column_type: multiple-select
+      issue_type:
+        column_type: single-select
+      author:
+        column_type: text
+      assignees:
+        column_type: text
+      url:
+        column_type: text
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      sync_time:
+        column_type: datetime
+      closed_time:
+        column_type: datetime
+      comment_count:
+        column_type: int64
+      deleted:
+        column_type: bool
+      outdated:
+        column_type: bool
+      record_modified_time:
+        column_type: datetime
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+      linked_ticket:
+        column_type: int64
+    indexes:
+    - - issue_id
+    - - state
+    - - state_reason
+    - - labels
+    - - title
+    - - author
+    - - created_time
+    - - closed_time
+    - - deleted
+    - - linked_ticket
+    - - ai_processed_time
+    - - record_modified_time
+    table_name: github_issue_{connection_id}
+  GithubIssueCommentsTable:
+    columns:
+      comment_id:
+        column_type: int64
+      issue_id:
+        column_type: int64
+      author:
+        column_type: text
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+    indexes:
+    - - issue_id
+    - - comment_id
+    table_name: github_issue_comments_{connection_id}
+  DiscourseTopicsTable:
+    columns:
+      topic_id:
+        column_type: int64
+      title:
+        column_type: text
+      slug:
+        column_type: text
+      views:
+        column_type: int64
+      category_id:
+        column_type: int64
+      modified_time:
+        column_type: datetime
+      resolved:
+        column_type: bool
+      deleted:
+        column_type: bool
+      outdated:
+        column_type: bool
+      record_modified_time:
+        column_type: datetime
+      sync_time:
+        column_type: datetime
+      created_time:
+        column_type: datetime
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+      linked_ticket:
+        column_type: int64
+    indexes:
+    - - topic_id
+    - - sync_time
+    - - deleted
+    - - linked_ticket
+    - - ai_processed_time
+    - - record_modified_time
+    table_name: discourse_forum_{connection_id}
+  DiscourseRepliesTable:
+    columns:
+      topic_id:
+        column_type: int64
+      post_number:
+        column_type: int64
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      author:
+        column_type: text
+      modified_time:
+        column_type: datetime
+      accepted_answer:
+        column_type: bool
+    indexes:
+    - - topic_id
+    - - post_number
+    - - modified_time
+    table_name: discourse_forum_replies_{connection_id}
+  SeafileTable:
+    columns:
+      file_id:
+        column_type: text
+      path:
+        column_type: text
+      title:
+        column_type: text
+      modified_time:
+        column_type: datetime
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      sync_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      outdated:
+        column_type: bool
+      record_modified_time:
+        column_type: datetime
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+    indexes:
+    - - path
+    - - title
+    - - deleted
+    - - ai_processed_time
+    - - record_modified_time
+    table_name: seafile_{connection_id}
+  TicketsTable:
+    columns:
+      title:
+        column_type: text
+      content:
+        column_type: text
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+      state:
+        column_type: single-select
+        column_data:
+          options:
+          - id: '0001'
+            name: open
+            color: '#1A7F37'
+            text_color: '#FFFFFF'
+          - id: '0002'
+            name: closed
+            color: '#8250DF'
+            text_color: '#FFFFFF'
+      substate:
+        column_type: single-select
+        column_data:
+          cascade_column: state
+          cascade_settings:
+            '0001':
+            - '0010'
+            - '0011'
+            - '0012'
+            - '0013'
+            '0002':
+            - '0014'
+            - '0015'
+            - '0016'
+          options:
+          - id: '0010'
+            name: New
+            color: '#59CB74'
+            text_color: '#FFFFFF'
+          - id: '0011'
+            name: Working on
+            color: '#46A1FD'
+            text_color: '#FFFFFF'
+          - id: '0012'
+            name: Backlog
+            color: '#9C9C9E'
+            text_color: '#FFFFFF'
+          - id: '0013'
+            name: Waiting on user
+            color: '#EAA775'
+            text_color: '#FFFFFF'
+          - id: '0014'
+            name: Completed
+            color: '#8250DF'
+            text_color: '#FFFFFF'
+          - id: '0015'
+            name: Not planned
+            color: '#59636E'
+            text_color: '#FFFFFF'
+          - id: '0016'
+            name: Duplicate
+            color: '#59636E'
+            text_color: '#FFFFFF'
+      type:
+        column_type: single-select
+        column_data:
+          options:
+          - id: '0001'
+            name: Bug
+            color: '#ffebe9'
+            text_color: '#000000'
+          - id: '0002'
+            name: Feature
+            color: '#ddf4ff'
+            text_color: '#000000'
+          - id: '0003'
+            name: Question
+            color: '#fff8c5'
+            text_color: '#000000'
+      tags:
+        column_type: list
+        column_data:
+          list_type: int64
+      assignees:
+        column_type: list
+      participants:
+        column_type: list
+      linked_connection_records:
+        column_type: list
+      priority:
+        column_type: int64
+      creator:
+        column_type: text
+      comment_count:
+        column_type: int64
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      closed_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      due_date:
+        column_type: datetime
+      last_agent_processed_at:
+        column_type: datetime
+    indexes:
+    - - priority
+    - - state
+    - - substate
+    - - type
+    - - assignees
+    - - participants
+    - - creator
+    - - deleted
+    - - due_date
+    - - ai_processed_time
+    - - modified_time
+    table_name: tickets
+  TicketCommentsTable:
+    columns:
+      ticket_id:
+        column_type: int64
+      content:
+        column_type: text
+      creator:
+        column_type: text
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      via_agent:
+        column_type: bool
+    indexes:
+    - - ticket_id
+    - - creator
+    - - deleted
+    table_name: ticket_comments
+  TicketActivitiesTable:
+    columns:
+      ticket_id:
+        column_type: int64
+      activity_type:
+        column_type: text
+      detail:
+        column_type: text
+      creator:
+        column_type: text
+      created_time:
+        column_type: datetime
+    indexes:
+    - - ticket_id
+    - - created_time
+    table_name: ticket_activities
+  EmailTable:
+    columns:
+      email_from:
+        column_type: text
+      email_to:
+        column_type: text
+      message_id:
+        column_type: text
+      title:
+        column_type: text
+      cc:
+        column_type: text
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      text_content:
+        column_type: text
+        column_data:
+          compressed: true
+      html_content:
+        column_type: text
+        column_data:
+          compressed: true
+      modified_time:
+        column_type: datetime
+      reply_to_message_id:
+        column_type: text
+      attachments:
+        column_type: list
+      is_sender:
+        column_type: bool
+      sync_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      thread_id:
+        column_type: int64
+      email_id:
+        column_type: text
+      origin_thread_id:
+        column_type: text
+    indexes:
+    - - title
+    - - email_from
+    - - sync_time
+    - - is_sender
+    table_name: email_{connection_id}
+  ThreadTable:
+    columns:
+      title:
+        column_type: text
+      modified_time:
+        column_type: datetime
+      unread:
+        column_type: bool
+      sync_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      tags:
+        column_type: list
+        column_data:
+          list_type: int64
+      outdated:
+        column_type: bool
+      record_modified_time:
+        column_type: datetime
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+      linked_ticket:
+        column_type: int64
+    indexes:
+    - - title
+    - - modified_time
+    - - deleted
+    - - sync_time
+    - - linked_ticket
+    - - ai_processed_time
+    - - record_modified_time
+    table_name: email_thread_{connection_id}
+  KnowledgeBaseTable:
+    columns:
+      title:
+        column_type: text
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      tags:
+        column_type: list
+        column_data:
+          list_type: int64
+      ai_summary:
+        column_type: text
+      creator:
+        column_type: text
+      last_modifier:
+        column_type: text
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+    indexes:
+    - - creator
+    - - created_time
+    - - last_modifier
+    - - modified_time
+    - - deleted
+    - - ai_processed_time
+    table_name: knowledge_base
+  TagTable:
+    columns:
+      name:
+        column_type: text
+      color:
+        column_type: text
+      text_color:
+        column_type: text
+      description:
+        column_type: text
+    indexes:
+    - - name
+    table_name: tag
+  PortalIssuesTable:
+    columns:
+      title:
+        column_type: text
+      content:
+        column_type: text
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+      creator:
+        column_type: text
+      state:
+        column_type: single-select
+        column_data:
+          options:
+          - id: '0001'
+            name: open
+            color: '#1A7F37'
+            text_color: '#FFFFFF'
+          - id: '0002'
+            name: closed
+            color: '#8250DF'
+            text_color: '#FFFFFF'
+      substate:
+        column_type: single-select
+        column_data:
+          cascade_column: state
+          cascade_settings:
+            '0001':
+            - '0010'
+            - '0011'
+            - '0012'
+            - '0013'
+            '0002':
+            - '0014'
+            - '0015'
+            - '0016'
+          options:
+          - id: '0010'
+            name: New
+            color: '#59CB74'
+            text_color: '#FFFFFF'
+          - id: '0011'
+            name: Working on
+            color: '#46A1FD'
+            text_color: '#FFFFFF'
+          - id: '0012'
+            name: Backlog
+            color: '#9C9C9E'
+            text_color: '#FFFFFF'
+          - id: '0013'
+            name: Waiting on user
+            color: '#EAA775'
+            text_color: '#FFFFFF'
+          - id: '0014'
+            name: Completed
+            color: '#8250DF'
+            text_color: '#FFFFFF'
+          - id: '0015'
+            name: Not planned
+            color: '#59636E'
+            text_color: '#FFFFFF'
+          - id: '0016'
+            name: Duplicate
+            color: '#59636E'
+            text_color: '#FFFFFF'
+      type:
+        column_type: single-select
+        column_data:
+          options:
+          - id: '0001'
+            name: Bug
+            color: '#ffebe9'
+            text_color: '#000000'
+          - id: '0002'
+            name: Feature
+            color: '#ddf4ff'
+            text_color: '#000000'
+          - id: '0003'
+            name: Question
+            color: '#fff8c5'
+            text_color: '#000000'
+      tags:
+        column_type: list
+        column_data:
+          list_type: int64
+      priority:
+        column_type: int64
+      linked_ticket:
+        column_type: int64
+      comment_count:
+        column_type: int64
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      closed_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+    indexes:
+    - - priority
+    - - state
+    - - substate
+    - - type
+    - - creator
+    - - deleted
+    - - ai_processed_time
+    - - modified_time
+    table_name: portal_issues
+  PortalIssueCommentsTable:
+    columns:
+      issue_id:
+        column_type: int64
+      content:
+        column_type: text
+      creator:
+        column_type: text
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+    indexes:
+    - - issue_id
+    - - creator
+    - - deleted
+    table_name: portal_issue_comments
+  AgentRunsTable:
+    columns:
+      status:
+        column_type: text
+      started_at:
+        column_type: datetime
+      finished_at:
+        column_type: datetime
+      items_processed:
+        column_type: int64
+      error_message:
+        column_type: text
+      events:
+        column_type: text
+    indexes:
+    - - started_at
+    table_name: agent_runs
+  AgentActionsTable:
+    columns:
+      run_id:
+        column_type: int64
+      source_type:
+        column_type: text
+      source_id:
+        column_type: text
+      source_title:
+        column_type: text
+      phase:
+        column_type: text
+      prompt:
+        column_type: text
+      result:
+        column_type: text
+      action_type:
+        column_type: text
+      status:
+        column_type: text
+      step:
+        column_type: int64
+      tool_name:
+        column_type: text
+      tool_arguments:
+        column_type: text
+      observation:
+        column_type: text
+      suggestion_content:
+        column_type: text
+      sources:
+        column_type: text
+      statistics:
+        column_type: text
+      created_at:
+        column_type: datetime
+      executed_at:
+        column_type: datetime
+    indexes:
+    - - run_id
+      - created_at
+    table_name: agent_actions
+  NotionTable:
+    columns:
+      title:
+        column_type: text
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      creator:
+        column_type: text
+      last_modifier:
+        column_type: text
+      ai_summary:
+        column_type: text
+      parent_page_id:
+        column_type: text
+      modified_time:
+        column_type: datetime
+      sync_time:
+        column_type: datetime
+      record_modified_time:
+        column_type: datetime
+      outdated:
+        column_type: bool
+      created_time:
+        column_type: datetime
+      page_id:
+        column_type: text
+      deleted:
+        column_type: bool
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+    indexes:
+    - - title
+    - - modified_time
+    - - deleted
+    - - sync_time
+    - - page_id
+    - - ai_processed_time
+    - - record_modified_time
+    table_name: notion_{connection_id}
+  GeneralTaskTable:
+    columns:
+      source_task_id:
+        column_type: text
+      url:
+        column_type: text
+      title:
+        column_type: text
+      status:
+        column_type: single-select
+      size:
+        column_type: single-select
+      priority:
+        column_type: single-select
+      assignees:
+        column_type: list
+      participants:
+        column_type: list
+      version:
+        column_type: text
+      others:
+        column_type: text
+        column_data:
+          compressed: true
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      due_date:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      created_time:
+        column_type: datetime
+      sync_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      outdated:
+        column_type: bool
+      record_modified_time:
+        column_type: datetime
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+      linked_ticket:
+        column_type: int64
+    indexes:
+    - - source_task_id
+    - - title
+    - - status
+    - - priority
+    - - modified_time
+    - - created_time
+    - - record_modified_time
+    - - deleted
+    - - linked_ticket
+    table_name: general_task_{connection_id}
+  GeneralTaskUserTable:
+    columns:
+      email:
+        column_type: text
+      name:
+        column_type: text
+      record_modified_time:
+        column_type: datetime
+    indexes:
+    - - email
+    - - record_modified_time
+    table_name: general_task_user_{connection_id}

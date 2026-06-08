@@ -2,8 +2,9 @@ import logging
 import datetime
 
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.models import DiscourseTopicsTable, DiscourseRepliesTable
 from seaqa_indexer.utils import time_to_utc_time
+from seaqa_indexer.seadb_models.models import SchemaTables
+
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ class DiscourseSeaDBAPI:
 
     # Topics operations
     def insert_topic(self, connection_id, topic_id, topic_data):
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_TOPICS.table_name(connection_id=connection_id)
 
         title = topic_data.get('title')
         slug = topic_data.get('slug')
@@ -29,22 +30,22 @@ class DiscourseSeaDBAPI:
         topic_created_time = topic_data.get('created_at')
 
         rows = [{
-            DiscourseTopicsTable.topic_id.name: topic_id,
-            DiscourseTopicsTable.title.name: title,
-            DiscourseTopicsTable.slug.name: slug,
-            DiscourseTopicsTable.views.name: views,
-            DiscourseTopicsTable.category_id.name: category_id,
-            DiscourseTopicsTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
-            DiscourseTopicsTable.deleted.name: False,
-            DiscourseTopicsTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            DiscourseTopicsTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            DiscourseTopicsTable.created_time.name: time_to_utc_time(topic_created_time).isoformat(),
-            DiscourseTopicsTable.resolved.name: resolved,
+            SchemaTables.DISCOURSE_TOPICS.column.topic_id.name: topic_id,
+            SchemaTables.DISCOURSE_TOPICS.column.title.name: title,
+            SchemaTables.DISCOURSE_TOPICS.column.slug.name: slug,
+            SchemaTables.DISCOURSE_TOPICS.column.views.name: views,
+            SchemaTables.DISCOURSE_TOPICS.column.category_id.name: category_id,
+            SchemaTables.DISCOURSE_TOPICS.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+            SchemaTables.DISCOURSE_TOPICS.column.deleted.name: False,
+            SchemaTables.DISCOURSE_TOPICS.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.DISCOURSE_TOPICS.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.DISCOURSE_TOPICS.column.created_time.name: time_to_utc_time(topic_created_time).isoformat(),
+            SchemaTables.DISCOURSE_TOPICS.column.resolved.name: resolved,
         }]
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
     def get_topics_by_page(self, connection_id, since, page_size, offset):
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_TOPICS.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `topic_id`, `deleted`, `outdated`, `title`, `modified_time` FROM `{table_name}` 
                 WHERE record_modified_time >= '{since}' 
                 LIMIT {page_size} OFFSET {offset}"""
@@ -53,7 +54,7 @@ class DiscourseSeaDBAPI:
         return results
 
     def get_topic_by_topic_id(self, connection_id, topic_id):
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_TOPICS.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `topic_id`, `title`, `slug`, `views`, `category_id`, `modified_time`, `resolved`,
                 `deleted`, `outdated`, `record_modified_time`, `sync_time`, `created_time`, `ai_processed_time`
                 FROM `{table_name}` WHERE `topic_id` = {topic_id}"""
@@ -63,7 +64,7 @@ class DiscourseSeaDBAPI:
         return {}
 
     def get_reply_by_id(self, connection_id, topic_id, post_number):
-        table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_REPLIES.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `topic_id`, `post_number`, `content`, `author`, `modified_time`, `accepted_answer`
                 FROM `{table_name}` WHERE `topic_id` = {topic_id} AND `post_number` = {post_number}"""
         response = self.seadb_api.query_rows(self.base_id, sql)
@@ -72,7 +73,7 @@ class DiscourseSeaDBAPI:
         return {}
 
     def update_topic(self, connection_id, primary_key, topic_data):
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_TOPICS.table_name(connection_id=connection_id)
 
         title = topic_data.get('title')
         slug = topic_data.get('slug')
@@ -88,22 +89,22 @@ class DiscourseSeaDBAPI:
         updates = [{
             "pk": primary_key,
             "row": {
-                DiscourseTopicsTable.title.name: title,
-                DiscourseTopicsTable.slug.name: slug,
-                DiscourseTopicsTable.views.name: views,
-                DiscourseTopicsTable.category_id.name: category_id,
-                DiscourseTopicsTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
-                DiscourseTopicsTable.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                DiscourseTopicsTable.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-                DiscourseTopicsTable.deleted.name: False,
-                DiscourseTopicsTable.resolved.name: resolved,
+                SchemaTables.DISCOURSE_TOPICS.column.title.name: title,
+                SchemaTables.DISCOURSE_TOPICS.column.slug.name: slug,
+                SchemaTables.DISCOURSE_TOPICS.column.views.name: views,
+                SchemaTables.DISCOURSE_TOPICS.column.category_id.name: category_id,
+                SchemaTables.DISCOURSE_TOPICS.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+                SchemaTables.DISCOURSE_TOPICS.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                SchemaTables.DISCOURSE_TOPICS.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+                SchemaTables.DISCOURSE_TOPICS.column.deleted.name: False,
+                SchemaTables.DISCOURSE_TOPICS.column.resolved.name: resolved,
             }
         }]
         return self.seadb_api.update_rows(self.base_id, table_name, updates)
 
     def delete_topic(self, connection_id, topic_id):
         """Logically delete topic record"""
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_TOPICS.table_name(connection_id=connection_id)
         topic = self.get_topic_by_topic_id(connection_id, topic_id)
         if not topic:
             logger.debug(f"Topic {topic_id} not found in connection {connection_id}, skipping deletion")
@@ -120,7 +121,7 @@ class DiscourseSeaDBAPI:
         return self.seadb_api.update_rows(self.base_id, table_name, updates)
 
     def insert_reply(self, connection_id, topic_id, reply):
-        table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_REPLIES.table_name(connection_id=connection_id)
         post_number = reply.get('post_number')
         content = reply.get('cooked')
         author = reply.get('username')
@@ -130,17 +131,17 @@ class DiscourseSeaDBAPI:
         if content and len(content) > MAX_CONTENT_LENGTH:
             content = content[:MAX_CONTENT_LENGTH]
         rows = [{
-            DiscourseRepliesTable.topic_id.name: topic_id,
-            DiscourseRepliesTable.post_number.name: post_number,
-            DiscourseRepliesTable.content.name: content,
-            DiscourseRepliesTable.author.name: author,
-            DiscourseRepliesTable.accepted_answer.name: accepted_answer,
-            DiscourseRepliesTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+            SchemaTables.DISCOURSE_REPLIES.column.topic_id.name: topic_id,
+            SchemaTables.DISCOURSE_REPLIES.column.post_number.name: post_number,
+            SchemaTables.DISCOURSE_REPLIES.column.content.name: content,
+            SchemaTables.DISCOURSE_REPLIES.column.author.name: author,
+            SchemaTables.DISCOURSE_REPLIES.column.accepted_answer.name: accepted_answer,
+            SchemaTables.DISCOURSE_REPLIES.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
         }]
         return self.seadb_api.insert_rows(self.base_id, table_name, rows)
 
     def update_reply(self, connection_id, reply_pk, topic_id, reply):
-        table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_REPLIES.table_name(connection_id=connection_id)
         post_number = reply.get('post_number')
         content = reply.get('cooked', '')
         author = reply.get('username')
@@ -152,12 +153,12 @@ class DiscourseSeaDBAPI:
         updates = [{
             "pk": reply_pk,
             "row": {
-                DiscourseRepliesTable.content.name: content,
-                DiscourseRepliesTable.author.name: author,
-                DiscourseRepliesTable.modified_time.name: time_to_utc_time(modified_time).isoformat(),
-                DiscourseRepliesTable.topic_id.name: topic_id,
-                DiscourseRepliesTable.post_number.name: post_number,
-                DiscourseRepliesTable.accepted_answer.name: accepted_answer,
+                SchemaTables.DISCOURSE_REPLIES.column.content.name: content,
+                SchemaTables.DISCOURSE_REPLIES.column.author.name: author,
+                SchemaTables.DISCOURSE_REPLIES.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
+                SchemaTables.DISCOURSE_REPLIES.column.topic_id.name: topic_id,
+                SchemaTables.DISCOURSE_REPLIES.column.post_number.name: post_number,
+                SchemaTables.DISCOURSE_REPLIES.column.accepted_answer.name: accepted_answer,
             }
         }]
         return self.seadb_api.update_rows(
@@ -209,12 +210,12 @@ class DiscourseSeaDBAPI:
         return added_replies
 
     def delete_reply_from_db(self, connection_id, topic_id, post_number):
-        table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_REPLIES.table_name(connection_id=connection_id)
         sql = f"DELETE FROM `{table_name}` WHERE topic_id = {topic_id} AND post_number = {post_number}"
         return self.seadb_api.query_rows(self.base_id, sql)
 
     def update_topic_sync_and_record_time(self, connection_id, topic_id):
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_TOPICS.table_name(connection_id=connection_id)
         topic = self.get_topic_by_topic_id(connection_id, topic_id)
         if not topic:
             return None
@@ -229,14 +230,14 @@ class DiscourseSeaDBAPI:
         return self.seadb_api.update_rows(self.base_id, table_name, updates)
 
     def get_topic_replies_by_page(self, connection_id, topic_id, page_size, offset):
-        table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_REPLIES.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `post_number`, `content` FROM `{table_name}`
                 WHERE topic_id = {topic_id} LIMIT {page_size} OFFSET {offset}"""
         replies = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return replies
 
     def get_topic_first_reply(self, connection_id, topic_id):
-        table_name = DiscourseRepliesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_REPLIES.table_name(connection_id=connection_id)
         if not topic_id:
             return {}
 
@@ -247,7 +248,7 @@ class DiscourseSeaDBAPI:
         return {}
 
     def get_topic_count(self, connection_id):
-        topics_table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        topics_table_name = SchemaTables.DISCOURSE_TOPICS.table_name(connection_id=connection_id)
 
         topics_sql = f"SELECT COUNT(*) as count FROM `{topics_table_name}`"
         topics_result = self.seadb_api.query_rows(self.base_id, topics_sql)
@@ -258,7 +259,7 @@ class DiscourseSeaDBAPI:
         return topic_count
 
     def get_need_ai_topics(self, connection_id, page_size):
-        table_name = DiscourseTopicsTable.gen_table_name(connection_id)
+        table_name = SchemaTables.DISCOURSE_TOPICS.table_name(connection_id=connection_id)
         sql = f"""SELECT _pk, topic_id, title FROM `{table_name}`
         WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
         LIMIT {page_size}"""
