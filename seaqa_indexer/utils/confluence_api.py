@@ -92,7 +92,44 @@ class ConfluenceAPI:
             'url': urljoin(base_url, webui_path) if webui_path else '',
         }
 
-    def list_pages(self, workspace_id, cursor=None, limit=100):
+    def get_user_display_name(self, account_id, workspace_id):
+        """Resolve an Atlassian account ID to a user display name.
+        Follows the same pattern as NotionAPI.get_user_info()."""
+        if not account_id:
+            return ''
+        url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/rest/api/user'
+        params = {'accountId': account_id}
+        try:
+            resp = self._request('GET', url, params=params)
+            data = resp.json()
+            return data.get('displayName') or account_id
+        except Exception:
+            return account_id
+
+    def list_spaces(self, workspace_id, cursor=None, limit=100):
+        url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/api/v2/spaces'
+        params = {'limit': limit}
+        if cursor:
+            params['cursor'] = cursor
+
+        response = self._request('GET', url, params=params)
+        data = response.json()
+        results = data.get('results') or []
+        spaces = [
+            {
+                'id': str(space['id']),
+                'key': space.get('key') or '',
+                'name': space.get('name') or '',
+                'type': space.get('type') or '',
+                'status': space.get('status') or '',
+            }
+            for space in results
+            if space.get('id') is not None
+        ]
+        next_cursor = self._extract_next_cursor(data, response)
+        return spaces, next_cursor, bool(next_cursor)
+
+    def list_pages(self, workspace_id, cursor=None, limit=100, space_ids=None):
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/api/v2/pages'
         params = {
             'limit': limit,
@@ -101,6 +138,8 @@ class ConfluenceAPI:
         }
         if cursor:
             params['cursor'] = cursor
+        if space_ids:
+            params['space-id'] = space_ids
 
         response = self._request('GET', url, params=params)
         data = response.json()

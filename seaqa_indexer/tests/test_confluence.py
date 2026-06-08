@@ -294,6 +294,138 @@ class TestConfluenceHandlerSync:
         assert callable(handler.publish_synced_record_events)
 
 
+class TestConfluenceAPIListSpaces:
+    """Tests for ConfluenceAPI.list_spaces method."""
+
+    def test_list_spaces_empty_results(self):
+        api = ConfluenceAPI('test-token')
+        mock_response = Mock()
+        mock_response.json.return_value = {'results': [], '_links': {}}
+        mock_response.headers = {}
+        with patch.object(api, '_request', return_value=mock_response):
+            spaces, cursor, has_more = api.list_spaces('ws-1')
+            assert spaces == []
+            assert has_more is False
+
+    def test_list_spaces_returns_parsed_data(self):
+        api = ConfluenceAPI('test-token')
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            'results': [
+                {'id': '100', 'key': 'TEAM', 'name': 'Team Space', 'type': 'global', 'status': 'current'},
+            ],
+            '_links': {},
+        }
+        mock_response.headers = {}
+        with patch.object(api, '_request', return_value=mock_response):
+            spaces, cursor, has_more = api.list_spaces('ws-1')
+            assert len(spaces) == 1
+            assert spaces[0]['id'] == '100'
+            assert spaces[0]['key'] == 'TEAM'
+            assert spaces[0]['name'] == 'Team Space'
+
+    def test_list_spaces_filters_null_id(self):
+        api = ConfluenceAPI('test-token')
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            'results': [
+                {'key': 'NOID', 'name': 'No ID Space'},
+                {'id': '200', 'key': 'OK', 'name': 'OK Space'},
+            ],
+            '_links': {},
+        }
+        mock_response.headers = {}
+        with patch.object(api, '_request', return_value=mock_response):
+            spaces, cursor, has_more = api.list_spaces('ws-1')
+            assert len(spaces) == 1
+            assert spaces[0]['id'] == '200'
+
+
+class TestConfluenceAPIListPagesWithSpaceFilter:
+    """Tests for list_pages with space_ids parameter."""
+
+    def test_list_pages_without_space_ids_passes_none(self):
+        """When no space_ids, space-id param should not be in request."""
+        api = ConfluenceAPI('test-token')
+        mock_response = Mock()
+        mock_response.json.return_value = {'results': [], '_links': {}}
+        mock_response.headers = {}
+        with patch.object(api, '_request', return_value=mock_response) as mock_req:
+            api.list_pages('ws-1', space_ids=None)
+            _, call_kwargs = mock_req.call_args
+            params = call_kwargs.get('params', {})
+            assert 'space-id' not in params
+
+    def test_list_pages_with_space_ids_passes_filter(self):
+        """When space_ids provided, space-id param should be passed."""
+        api = ConfluenceAPI('test-token')
+        mock_response = Mock()
+        mock_response.json.return_value = {'results': [], '_links': {}}
+        mock_response.headers = {}
+        with patch.object(api, '_request', return_value=mock_response) as mock_req:
+            api.list_pages('ws-1', space_ids=['100', '200'])
+            _, call_kwargs = mock_req.call_args
+            params = call_kwargs.get('params', {})
+            assert 'space-id' in params
+            assert params['space-id'] == ['100', '200']
+
+
+class TestConfluenceHandlerSyncWithSpaces:
+    """Tests for _sync_confluence with space_ids parameter."""
+
+    def test_sync_without_space_ids_calls_list_pages_once_per_cursor(self):
+        """Without space_ids, should call list_pages with space_ids=None (single iteration)."""
+        handler = ConfluenceHandler()
+        handler.mq = Mock()
+
+        mock_api = Mock()
+        mock_api.list_pages.return_value = ([], None, False)
+
+        mock_seadb = Mock()
+        mock_seadb.get_page_id_rows_by_page.return_value = []
+        mock_seadb.get_confluence_pages_count.return_value = 0
+
+        mock_seaqa_db = Mock()
+
+        handler._sync_confluence(
+            1, 'proj-1', {'last_sync_count': 0},
+            mock_api, mock_seaqa_db, mock_seadb, 'ws-1', space_ids=None,
+        )
+
+        # Should have been called at least once with space_ids=None
+        call_found = False
+        for call in mock_api.list_pages.call_args_list:
+            _, kwargs = call
+            if kwargs.get('space_ids') is None:
+                call_found = True
+                break
+        assert call_found
+
+    def test_sync_with_space_ids_calls_list_pages_per_space(self):
+        """With space_ids, should call list_pages for each space."""
+        handler = ConfluenceHandler()
+        handler.mq = Mock()
+
+        mock_api = Mock()
+        mock_api.list_pages.return_value = ([], None, False)
+
+        mock_seadb = Mock()
+        mock_seadb.get_page_id_rows_by_page.return_value = []
+        mock_seadb.get_confluence_pages_count.return_value = 0
+
+        mock_seaqa_db = Mock()
+
+        handler._sync_confluence(
+            1, 'proj-1', {'last_sync_count': 0},
+            mock_api, mock_seaqa_db, mock_seadb, 'ws-1', space_ids=['100', '200'],
+        )
+
+        # Should have been called with space_ids=['100'] and space_ids=['200']
+        space_id_calls = [c[1].get('space_ids') for c in mock_api.list_pages.call_args_list]
+        assert ['100'] in space_id_calls
+        assert ['200'] in space_id_calls
+
+
 class TestDataEventTypes:
     """Tests for Confluence data event types."""
 

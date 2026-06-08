@@ -154,6 +154,7 @@ class ConfluenceHandler(ConnectionHandler):
             refresh_access_token=refresh_access_token,
         )
         confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
+        space_ids = config.get('space_ids') or []
         sync_count, total_count, sync_changes = self._sync_confluence(
             connection_id,
             project_uuid,
@@ -162,74 +163,99 @@ class ConfluenceHandler(ConnectionHandler):
             seaqa_db,
             confluence_seadb_api,
             workspace_id,
+            space_ids,
         )
         connection_status['last_sync_changes'] = sync_changes
         return sync_count, total_count, False, config
 
     def _sync_confluence(self, connection_id, project_uuid, connection_status, confluence_api, seaqa_db,
-                         confluence_seadb_api, workspace_id):
+                         confluence_seadb_api, workspace_id, space_ids=None):
         sync_count = 0
         added_count = 0
         updated_count = 0
         deleted_count = 0
         remote_page_ids = set()
-        cursor = None
         page_size = 100
         status_last_update_time = datetime.datetime.now()
         status_last_update_count = 0
+        user_cache = {}
 
-        while True:
-            pages, next_cursor, has_more = confluence_api.list_pages(
-                workspace_id,
-                cursor=cursor,
-                limit=page_size,
-            )
-            if not pages and not has_more:
-                break
+        def _resolve_user(account_id):
+            if not account_id:
+                return ''
+            if account_id not in user_cache:
+                user_cache[account_id] = confluence_api.get_user_display_name(account_id, workspace_id)
+            return user_cache[account_id]
 
-            for page in pages:
-                page_id = page.get('page_id')
-                if not page_id:
-                    continue
+        # Determine the list of space contexts to sync.
+        # If space_ids is empty, sync all pages in the workspace (no filter).
+        space_contexts = space_ids if space_ids else [None]
 
-                remote_page_ids.add(page_id)
-                existed_page = confluence_seadb_api.get_page_by_page_id(page_id, connection_id)
-                if existed_page and existed_page.get('modified_time'):
-                    remote_modified_time = time_to_utc_time(page.get('modified_time'))
-                    local_modified_time = time_to_utc_time(str(existed_page.get('modified_time')))
-                    if remote_modified_time <= local_modified_time and not existed_page.get('deleted'):
+        for space_id in space_contexts:
+            cursor = None
+            while True:
+                pages, next_cursor, has_more = confluence_api.list_pages(
+                    workspace_id,
+                    cursor=cursor,
+                    limit=page_size,
+                    space_ids=[space_id] if space_id else None,
+                )
+                if not pages and not has_more:
+                    break
+
+                for page in pages:
+                    print(page, '----------------------------')
+                    page_id = page.get('page_id')
+                    if not page_id:
                         continue
 
-                confluence_seadb_api.save_or_update_page_to_db(connection_id, page, existed_page)
-                sync_count += 1
-                state_event_type = DataEventType.CONFLUENCE_PAGE_UPDATED.value if existed_page else DataEventType.CONFLUENCE_PAGE_ADDED.value
-                if existed_page:
-                    updated_count += 1
-                else:
-                    added_count += 1
+                    # Resolve user display names (same pattern as Notion)
+                    creator_id = page.get('creator')
+                    last_modifier_id = page.get('last_modifier')
+                    page['creator'] = _resolve_user(creator_id)
+                    if last_modifier_id and last_modifier_id == creator_id:
+                        page['last_modifier'] = page['creator']
+                    else:
+                        page['last_modifier'] = _resolve_user(last_modifier_id)
 
-                self.publish_synced_record_events(
-                    get_latest_row=lambda pf=page_id: confluence_seadb_api.get_page_by_page_id(pf, connection_id),
-                    project_uuid=project_uuid,
-                    connection_id=connection_id,
-                    item_id=page_id,
-                    old_row=existed_page or None,
-                    state_event_type=state_event_type,
-                    log_object_name='confluence page',
-                )
+                    remote_page_ids.add(page_id)
+                    existed_page = confluence_seadb_api.get_page_by_page_id(page_id, connection_id)
+                    if existed_page and existed_page.get('modified_time'):
+                        remote_modified_time = time_to_utc_time(page.get('modified_time'))
+                        local_modified_time = time_to_utc_time(str(existed_page.get('modified_time')))
+                        if remote_modified_time <= local_modified_time and not existed_page.get('deleted'):
+                            continue
 
-                should, new_time, new_count = need_update_connection_last_sync_count(
-                    sync_count, status_last_update_time, status_last_update_count
-                )
-                if should:
-                    connection_status['last_sync_count'] = sync_count
-                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                    status_last_update_time = new_time
-                    status_last_update_count = new_count
+                    confluence_seadb_api.save_or_update_page_to_db(connection_id, page, existed_page)
+                    sync_count += 1
+                    state_event_type = DataEventType.CONFLUENCE_PAGE_UPDATED.value if existed_page else DataEventType.CONFLUENCE_PAGE_ADDED.value
+                    if existed_page:
+                        updated_count += 1
+                    else:
+                        added_count += 1
 
-            if not has_more or not next_cursor:
-                break
-            cursor = next_cursor
+                    self.publish_synced_record_events(
+                        get_latest_row=lambda pf=page_id: confluence_seadb_api.get_page_by_page_id(pf, connection_id),
+                        project_uuid=project_uuid,
+                        connection_id=connection_id,
+                        item_id=page_id,
+                        old_row=existed_page or None,
+                        state_event_type=state_event_type,
+                        log_object_name='confluence page',
+                    )
+
+                    should, new_time, new_count = need_update_connection_last_sync_count(
+                        sync_count, status_last_update_time, status_last_update_count
+                    )
+                    if should:
+                        connection_status['last_sync_count'] = sync_count
+                        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                        status_last_update_time = new_time
+                        status_last_update_count = new_count
+
+                if not has_more or not next_cursor:
+                    break
+                cursor = next_cursor
 
         local_page_map = {}
         offset = 0
