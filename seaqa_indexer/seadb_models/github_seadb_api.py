@@ -178,9 +178,9 @@ class GitHubSeaDBAPI:
                 self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
                 added_comments.append({
                     SchemaTables.GITHUB_ISSUE_COMMENTS.column.comment_id.name: comment_id,
-                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.author.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.author.name],
-                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.content.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.content.name],
-                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.created_time.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.created_time.name],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.author.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.column.author.name],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.content.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.column.content.name],
+                    SchemaTables.GITHUB_ISSUE_COMMENTS.column.created_time.name: insert_row[SchemaTables.GITHUB_ISSUE_COMMENTS.column.created_time.name],
                 })
 
         need_deleted_comment_ids = old_comment_ids - new_comment_ids
