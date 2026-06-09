@@ -2,7 +2,7 @@ import logging
 import re
 import requests
 
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, urlparse
 
 from seaqa_indexer.config import CONFLUENCE_CLIENT_ID, CONFLUENCE_CLIENT_SECRET
 
@@ -42,20 +42,6 @@ class ConfluenceAPI:
             'Accept': 'application/json',
         }
 
-    def _request(self, method, url, retried=False, **kwargs):
-        headers = dict(kwargs.pop('headers', {}) or {})
-        headers.update(self._gen_headers())
-        response = self.session.request(method, url, headers=headers, timeout=self.timeout, **kwargs)
-
-        if response.status_code == 401 and self.refresh_access_token and not retried:
-            new_access_token = self.refresh_access_token()
-            if new_access_token:
-                self.access_token = new_access_token
-                return self._request(method, url, retried=True, **kwargs)
-
-        response.raise_for_status()
-        return response
-
     def _extract_next_cursor(self, data, response):
         next_link = (data.get('_links') or {}).get('next')
         if next_link:
@@ -80,6 +66,18 @@ class ConfluenceAPI:
         storage_body = body.get('storage') or {}
         webui_path = page_links.get('webui') or ''
 
+        # _links.base may or may not include /wiki (e.g. https://site.atlassian.net
+        # vs https://site.atlassian.net/wiki). _links.webui may be /spaces/... or
+        # /wiki/spaces/... . The correct Confluence page URL always needs exactly one
+        # /wiki segment. Normalize both parts and concatenate (not urljoin, which
+        # would replace the path).
+        if base_url:
+            base_url = base_url.rstrip('/')
+            if not base_url.endswith('/wiki'):
+                base_url = base_url + '/wiki'
+        if webui_path and webui_path.startswith('/wiki/'):
+            webui_path = webui_path[5:]  # strip leading /wiki, base_url already has it
+
         return {
             'page_id': str(page.get('id')),
             'title': page.get('title') or '',
@@ -89,7 +87,7 @@ class ConfluenceAPI:
             'creator': page.get('authorId') or '',
             'last_modifier': version.get('authorId') or page.get('lastOwnerId') or page.get('authorId') or '',
             'parent_page_id': str(page.get('parentId')) if page.get('parentId') is not None else '',
-            'url': urljoin(base_url, webui_path) if webui_path else '',
+            'url': base_url + webui_path if (base_url and webui_path) else '',
         }
 
     def get_user_display_name(self, account_id, workspace_id):
@@ -100,11 +98,20 @@ class ConfluenceAPI:
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/rest/api/user'
         params = {'accountId': account_id}
         try:
-            resp = self._request('GET', url, params=params)
-            data = resp.json()
-            return data.get('displayName') or account_id
+            headers = self._gen_headers()
+            resp = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
+
+            if resp.status_code == 401 and self.refresh_access_token:
+                new_access_token = self.refresh_access_token()
+                if new_access_token:
+                    self.access_token = new_access_token
+                    headers = self._gen_headers()
+                    resp = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
+
+            resp.raise_for_status()
+            return resp.json().get('displayName')
         except Exception:
-            return account_id
+            return ''
 
     def list_spaces(self, workspace_id, cursor=None, limit=100):
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/api/v2/spaces'
@@ -112,7 +119,17 @@ class ConfluenceAPI:
         if cursor:
             params['cursor'] = cursor
 
-        response = self._request('GET', url, params=params)
+        headers = self._gen_headers()
+        response = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
+
+        if response.status_code == 401 and self.refresh_access_token:
+            new_access_token = self.refresh_access_token()
+            if new_access_token:
+                self.access_token = new_access_token
+                headers = self._gen_headers()
+                response = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
+
+        response.raise_for_status()
         data = response.json()
         results = data.get('results') or []
         spaces = [
@@ -141,7 +158,17 @@ class ConfluenceAPI:
         if space_ids:
             params['space-id'] = space_ids
 
-        response = self._request('GET', url, params=params)
+        headers = self._gen_headers()
+        response = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
+
+        if response.status_code == 401 and self.refresh_access_token:
+            new_access_token = self.refresh_access_token()
+            if new_access_token:
+                self.access_token = new_access_token
+                headers = self._gen_headers()
+                response = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
+
+        response.raise_for_status()
         data = response.json()
         base_url = (data.get('_links') or {}).get('base') or ''
         results = data.get('results') or []

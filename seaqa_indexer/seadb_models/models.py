@@ -24,6 +24,7 @@ class SchemaTables:
     GENERAL_TASK_USER = SCHEMA.GeneralTaskUserTable
     LINEAR_ISSUES = SCHEMA.LinearIssuesTable
     LINEAR_ISSUE_COMMENTS = SCHEMA.LinearIssueCommentsTable
+    CONFLUENCE = SCHEMA.ConfluenceTable
 
 
 class PropertyTypes:

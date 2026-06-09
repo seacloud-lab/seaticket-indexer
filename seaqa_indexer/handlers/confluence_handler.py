@@ -6,7 +6,7 @@ from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.index.index_store.confluence_index import ConfluenceIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
-from seaqa_indexer.seadb_models.models import ConfluenceTable
+from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
 from seaqa_indexer.utils.confluence_api import ConfluenceAPI, refresh_confluence_access_token
@@ -20,7 +20,7 @@ class ConfluenceHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return ConfluenceTable.gen_table_name(connection_id)
+        return SchemaTables.CONFLUENCE.table_name(connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         confluence_index = ConfluenceIndex(seasearch_api)
@@ -43,7 +43,7 @@ class ConfluenceHandler(ConnectionHandler):
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
         updates = []
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
 
         ai_processing_count = 0
@@ -204,7 +204,6 @@ class ConfluenceHandler(ConnectionHandler):
                     break
 
                 for page in pages:
-                    print(page, '----------------------------')
                     page_id = page.get('page_id')
                     if not page_id:
                         continue

@@ -4,7 +4,7 @@ import html2text
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.models import ConfluenceTable
+from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 class ConfluenceSeaDBAPI:
@@ -13,7 +13,7 @@ class ConfluenceSeaDBAPI:
         self.seadb_api = SeaDBAPI()
 
     def get_confluence_pages_count(self, connection_id):
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
         response = self.seadb_api.query_rows(self.base_id, sql)
         page_count = 0
@@ -43,34 +43,34 @@ class ConfluenceSeaDBAPI:
 
         now_iso = datetime.datetime.now(datetime.UTC).isoformat()
         insert_row = {
-            ConfluenceTable.title.name: confluence_page.get('title'),
-            ConfluenceTable.content.name: content,
-            ConfluenceTable.url.name: confluence_page.get('url'),
-            ConfluenceTable.created_time.name: self._to_isoformat(confluence_page.get('created_time')),
-            ConfluenceTable.modified_time.name: self._to_isoformat(confluence_page.get('modified_time')),
-            ConfluenceTable.sync_time.name: now_iso,
-            ConfluenceTable.record_modified_time.name: now_iso,
-            ConfluenceTable.creator.name: confluence_page.get('creator'),
-            ConfluenceTable.last_modifier.name: confluence_page.get('last_modifier'),
-            ConfluenceTable.page_id.name: confluence_page.get('page_id'),
-            ConfluenceTable.parent_page_id.name: confluence_page.get('parent_page_id'),
-            ConfluenceTable.deleted.name: bool(confluence_page.get('deleted', False)),
+            SchemaTables.CONFLUENCE.column.title.name: confluence_page.get('title'),
+            SchemaTables.CONFLUENCE.column.content.name: content,
+            SchemaTables.CONFLUENCE.column.url.name: confluence_page.get('url'),
+            SchemaTables.CONFLUENCE.column.created_time.name: self._to_isoformat(confluence_page.get('created_time')),
+            SchemaTables.CONFLUENCE.column.modified_time.name: self._to_isoformat(confluence_page.get('modified_time')),
+            SchemaTables.CONFLUENCE.column.sync_time.name: now_iso,
+            SchemaTables.CONFLUENCE.column.record_modified_time.name: now_iso,
+            SchemaTables.CONFLUENCE.column.creator.name: confluence_page.get('creator'),
+            SchemaTables.CONFLUENCE.column.last_modifier.name: confluence_page.get('last_modifier'),
+            SchemaTables.CONFLUENCE.column.page_id.name: confluence_page.get('page_id'),
+            SchemaTables.CONFLUENCE.column.parent_page_id.name: confluence_page.get('parent_page_id'),
+            SchemaTables.CONFLUENCE.column.deleted.name: bool(confluence_page.get('deleted', False)),
         }
 
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         if existed_page:
-            insert_row.pop(ConfluenceTable.outdated.name, None)
+            insert_row.pop(SchemaTables.CONFLUENCE.column.outdated.name, None)
             update_row = {
                 'pk': existed_page.get('_pk'),
                 'row': insert_row,
             }
             self.seadb_api.update_rows(self.base_id, table_name, [update_row])
         else:
-            insert_row[ConfluenceTable.outdated.name] = False
+            insert_row[SchemaTables.CONFLUENCE.column.outdated.name] = False
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 
     def get_page_by_page_id(self, page_id, connection_id):
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         sql = f"SELECT `_pk`, `modified_time`, `deleted` FROM `{table_name}` WHERE page_id='{page_id}'"
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
@@ -78,7 +78,7 @@ class ConfluenceSeaDBAPI:
         return {}
 
     def get_confluence_pages_by_page(self, connection_id, last_indexed_at, page_size, offset):
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         sql = f"""SELECT `_pk`, `title`, `content`, `url`, `modified_time`, `page_id`, `deleted`, `outdated`
                 FROM `{table_name}`
                 WHERE record_modified_time >= '{last_indexed_at}'
@@ -87,7 +87,7 @@ class ConfluenceSeaDBAPI:
         return response.get('results', [])
 
     def get_need_ai_confluence_pages_by_page(self, connection_id, page_size):
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         sql = f"""
             SELECT `_pk`, `title`, `content` FROM `{table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time)
@@ -99,7 +99,7 @@ class ConfluenceSeaDBAPI:
         return response.get('results', [])
 
     def get_page_id_rows_by_page(self, connection_id, page_size, offset):
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         sql = f"""
             SELECT `_pk`, `page_id`, `deleted` FROM `{table_name}`
             WHERE (deleted IS NULL OR deleted = false)
@@ -109,22 +109,22 @@ class ConfluenceSeaDBAPI:
         return response.get('results', [])
 
     def mark_page_deleted(self, connection_id, pk, modified_time=None):
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         now_iso = datetime.datetime.now(datetime.UTC).isoformat()
         update_row = {
             'pk': pk,
             'row': {
-                ConfluenceTable.deleted.name: True,
-                ConfluenceTable.modified_time.name: modified_time or now_iso,
-                ConfluenceTable.sync_time.name: now_iso,
-                ConfluenceTable.record_modified_time.name: now_iso,
+                SchemaTables.CONFLUENCE.column.deleted.name: True,
+                SchemaTables.CONFLUENCE.column.modified_time.name: modified_time or now_iso,
+                SchemaTables.CONFLUENCE.column.sync_time.name: now_iso,
+                SchemaTables.CONFLUENCE.column.record_modified_time.name: now_iso,
             }
         }
         self.seadb_api.update_rows(self.base_id, table_name, [update_row])
 
     def mark_pages_deleted(self, connection_id, stale_page_ids, local_page_map):
         batch_size_limit = 100
-        table_name = ConfluenceTable.gen_table_name(connection_id)
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         now_iso = datetime.datetime.now(datetime.UTC).isoformat()
         updates = []
 
@@ -135,10 +135,10 @@ class ConfluenceSeaDBAPI:
             updates.append({
                 'pk': pk,
                 'row': {
-                    ConfluenceTable.deleted.name: True,
-                    ConfluenceTable.modified_time.name: now_iso,
-                    ConfluenceTable.sync_time.name: now_iso,
-                    ConfluenceTable.record_modified_time.name: now_iso,
+                    SchemaTables.CONFLUENCE.column.deleted.name: True,
+                    SchemaTables.CONFLUENCE.column.modified_time.name: now_iso,
+                    SchemaTables.CONFLUENCE.column.sync_time.name: now_iso,
+                    SchemaTables.CONFLUENCE.column.record_modified_time.name: now_iso,
                 }
             })
             if len(updates) >= batch_size_limit:

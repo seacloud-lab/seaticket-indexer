@@ -954,3 +954,49 @@ tables:
     - - issue_id
     - - comment_id
     table_name: linear_issue_comments_{connection_id}
+  ConfluenceTable:
+    columns:
+      page_id:
+        column_type: text
+      parent_page_id:
+        column_type: text
+      title:
+        column_type: text
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      url:
+        column_type: text
+      creator:
+        column_type: text
+      last_modifier:
+        column_type: text
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      sync_time:
+        column_type: datetime
+      record_modified_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      outdated:
+        column_type: bool
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+    indexes:
+    - - page_id
+    - - title
+    - - modified_time
+    - - created_time
+    - - record_modified_time
+    - - deleted
+    table_name: confluence_{connection_id}
