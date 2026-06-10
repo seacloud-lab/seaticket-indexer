@@ -197,15 +197,22 @@ class GeneralTaskHandler(ConnectionHandler):
                     status_last_update_count = new_update_count
 
             if append_rows:
-                general_task_seadb_api.append_rows(connection_id, append_rows)
-                for row in append_rows:
+                inserted_pks = general_task_seadb_api.append_rows(connection_id, append_rows)
+                if len(inserted_pks) != len(append_rows):
+                    logger.warning(
+                        'General task append returned %d pks for %d rows on connection %s',
+                        len(inserted_pks), len(append_rows), connection_id,
+                    )
+                for row, pk in zip(append_rows, inserted_pks):
                     source_task_id = row.get('source_task_id')
                     if not source_task_id:
                         continue
+                    latest_row = {
+                        **row,
+                        '_pk': pk,
+                    }
                     self.publish_synced_record_events(
-                        get_latest_row=lambda source_task_id=source_task_id: (
-                            general_task_seadb_api.get_row_by_source_task_id(connection_id, source_task_id)
-                        ),
+                        get_latest_row=lambda latest_row=latest_row: latest_row,
                         project_uuid=project_uuid,
                         connection_id=connection_id,
                         item_id=source_task_id,
@@ -221,10 +228,13 @@ class GeneralTaskHandler(ConnectionHandler):
                     old_row = existing_rows_by_source_task_id.get(source_task_id)
                     if not source_task_id or not old_row:
                         continue
+                    latest_row = {
+                        **old_row,
+                        **update_row.get('row', {}),
+                        '_pk': update_row.get('pk'),
+                    }
                     self.publish_synced_record_events(
-                        get_latest_row=lambda source_task_id=source_task_id: (
-                            general_task_seadb_api.get_row_by_source_task_id(connection_id, source_task_id)
-                        ),
+                        get_latest_row=lambda latest_row=latest_row: latest_row,
                         project_uuid=project_uuid,
                         connection_id=connection_id,
                         item_id=source_task_id,
