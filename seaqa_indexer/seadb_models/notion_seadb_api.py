@@ -74,7 +74,7 @@ class NotionSeaDBAPI:
         notion_table_name = SchemaTables.NOTION.table_name(connection_id=connection_id)
         sql = f"""
             SELECT `_pk`, `title`, `content` FROM `{notion_table_name}`
-            WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
+            WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time) AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """
         res = self.seadb_api.query_rows(self.base_id, sql)

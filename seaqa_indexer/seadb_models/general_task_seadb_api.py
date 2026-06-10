@@ -22,7 +22,7 @@ class GeneralTaskSeaDBAPI:
         sql = f"""
             SELECT _pk, title, status, size, priority, assignees, participants, others, content, modified_time, due_date, created_time
             FROM `{table_name}`
-            WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time)
+            WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time)
               AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """
