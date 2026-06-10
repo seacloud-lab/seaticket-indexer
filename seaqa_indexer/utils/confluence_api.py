@@ -1,3 +1,4 @@
+import datetime
 import logging
 import re
 import requests
@@ -10,36 +11,57 @@ from seaqa_indexer.config import CONFLUENCE_CLIENT_ID, CONFLUENCE_CLIENT_SECRET
 logger = logging.getLogger(__name__)
 
 
-def refresh_confluence_access_token(refresh_token, timeout=30):
-    if not all([CONFLUENCE_CLIENT_ID, CONFLUENCE_CLIENT_SECRET, refresh_token]):
-        raise RuntimeError('Confluence OAuth settings are invalid.')
-
-    payload = {
-        'grant_type': 'refresh_token',
-        'client_id': CONFLUENCE_CLIENT_ID,
-        'client_secret': CONFLUENCE_CLIENT_SECRET,
-        'refresh_token': refresh_token,
-    }
-    response = requests.post(
-        'https://auth.atlassian.com/oauth/token',
-        json=payload,
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
 class ConfluenceAPI:
-    def __init__(self, access_token, timeout=60, refresh_access_token=None):
+    def __init__(self, access_token, refresh_token=None, timeout=60):
         self.access_token = access_token
+        self.refresh_token = refresh_token
+        self.expires_at = None
+        self.client_id = CONFLUENCE_CLIENT_ID
+        self.client_secret = CONFLUENCE_CLIENT_SECRET
         self.timeout = timeout
-        self.refresh_access_token = refresh_access_token
+        self.token_url = 'https://auth.atlassian.com/oauth/token'
         self.session = requests.Session()
 
     def _gen_headers(self):
         return {
             'Authorization': f'Bearer {self.access_token}',
             'Accept': 'application/json',
+        }
+
+    def refresh_access_token(self):
+        """Refresh the Confluence OAuth access token.
+
+        Uses the stored refresh_token to obtain a new access token from
+        Atlassian, updates instance state, and returns the new token data.
+        """
+        if not all([self.client_id, self.client_secret, self.refresh_token]):
+            raise RuntimeError('Confluence OAuth settings are invalid.')
+
+        payload = {
+            'grant_type': 'refresh_token',
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'refresh_token': self.refresh_token,
+        }
+        response = requests.post(
+            self.token_url,
+            json=payload,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        self.access_token = data.get('access_token')
+        new_refresh_token = data.get('refresh_token')
+        if new_refresh_token:
+            self.refresh_token = new_refresh_token
+
+        expires_in = data.get('expires_in') or 3600
+        self.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(int(expires_in) - 60, 0))
+
+        return {
+            'access_token': self.access_token,
+            'refresh_token': self.refresh_token,
+            'expires_at': self.expires_at,
         }
 
     def _extract_next_cursor(self, data, response):
@@ -98,16 +120,7 @@ class ConfluenceAPI:
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/rest/api/user'
         params = {'accountId': account_id}
         try:
-            headers = self._gen_headers()
-            resp = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
-
-            if resp.status_code == 401 and self.refresh_access_token:
-                new_access_token = self.refresh_access_token()
-                if new_access_token:
-                    self.access_token = new_access_token
-                    headers = self._gen_headers()
-                    resp = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
-
+            resp = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
             resp.raise_for_status()
             return resp.json().get('displayName')
         except Exception:
@@ -119,16 +132,7 @@ class ConfluenceAPI:
         if cursor:
             params['cursor'] = cursor
 
-        headers = self._gen_headers()
-        response = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
-
-        if response.status_code == 401 and self.refresh_access_token:
-            new_access_token = self.refresh_access_token()
-            if new_access_token:
-                self.access_token = new_access_token
-                headers = self._gen_headers()
-                response = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
-
+        response = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
         response.raise_for_status()
         data = response.json()
         results = data.get('results') or []
@@ -158,16 +162,7 @@ class ConfluenceAPI:
         if space_ids:
             params['space-id'] = space_ids
 
-        headers = self._gen_headers()
-        response = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
-
-        if response.status_code == 401 and self.refresh_access_token:
-            new_access_token = self.refresh_access_token()
-            if new_access_token:
-                self.access_token = new_access_token
-                headers = self._gen_headers()
-                response = self.session.get(url, headers=headers, params=params, timeout=self.timeout)
-
+        response = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
         response.raise_for_status()
         data = response.json()
         base_url = (data.get('_links') or {}).get('base') or ''

@@ -9,7 +9,7 @@ from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
-from seaqa_indexer.utils.confluence_api import ConfluenceAPI, refresh_confluence_access_token
+from seaqa_indexer.utils.confluence_api import ConfluenceAPI
 
 
 logger = logging.getLogger(__name__)
@@ -56,12 +56,8 @@ class ConfluenceHandler(ConnectionHandler):
                 title = row.get('title', '')
                 content = row.get('content', '')
                 full_content = f"Title: {title}\n\nBody: {content}\n"
-                try:
-                    summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.CONFLUENCE.value, project_uuid)
-                    vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
-                except Exception as e:
-                    logger.error('Failed to process AI for Confluence page %s (pk=%s): %s', row.get('page_id', 'unknown'), pk, e)
-                    continue
+                summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.CONFLUENCE.value, project_uuid)
+                vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
                     'pk': pk,
                     'row': {
@@ -105,31 +101,6 @@ class ConfluenceHandler(ConnectionHandler):
         connection_status['last_index_status'] = IndexStatus.COMPLETED
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
-    def _serialize_oauth(self, oauth):
-        return {
-            'access_token': getattr(oauth, 'access_token', ''),
-            'refresh_token': getattr(oauth, 'refresh_token', ''),
-            'expires_at': getattr(oauth, 'expires_at', None),
-        }
-
-    def _refresh_oauth(self, project_uuid, oauth_data, seaqa_db):
-        token_json = refresh_confluence_access_token(oauth_data.get('refresh_token'))
-        access_token = token_json.get('access_token')
-        refresh_token = token_json.get('refresh_token') or oauth_data.get('refresh_token')
-        if not access_token:
-            raise RuntimeError('Confluence OAuth response missing access token.')
-
-        expires_in = token_json.get('expires_in') or 3600
-        expires_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=max(int(expires_in) - 60, 0))
-        seaqa_db.update_project_confluence_oauth(project_uuid, access_token, expires_at, refresh_token)
-
-        oauth_data.update({
-            'access_token': access_token,
-            'refresh_token': refresh_token,
-            'expires_at': expires_at,
-        })
-        return oauth_data
-
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
         workspace_id = config.get('workspace_id')
@@ -140,19 +111,20 @@ class ConfluenceHandler(ConnectionHandler):
         if not oauth:
             raise RuntimeError('Confluence OAuth not found.')
 
-        oauth_data = self._serialize_oauth(oauth)
-        expires_at = oauth_data.get('expires_at')
+        access_token = oauth.access_token
+        refresh_token = oauth.refresh_token
+        expires_at = oauth.expires_at
+
+        # Refresh proactively if the token has expired
         if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
-            oauth_data = self._refresh_oauth(project_uuid, oauth_data, seaqa_db)
+            api = ConfluenceAPI(access_token, refresh_token)
+            new_tokens = api.refresh_access_token()
+            access_token = new_tokens['access_token']
+            refresh_token = new_tokens['refresh_token']
+            expires_at = new_tokens['expires_at']
+            seaqa_db.update_project_confluence_oauth(project_uuid, access_token, expires_at, refresh_token)
 
-        def refresh_access_token():
-            refreshed = self._refresh_oauth(project_uuid, oauth_data, seaqa_db)
-            return refreshed.get('access_token')
-
-        confluence_api = ConfluenceAPI(
-            oauth_data.get('access_token'),
-            refresh_access_token=refresh_access_token,
-        )
+        confluence_api = ConfluenceAPI(access_token, refresh_token)
         confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
         space_ids = config.get('space_ids') or []
         sync_count, total_count, sync_changes = self._sync_confluence(
@@ -165,6 +137,7 @@ class ConfluenceHandler(ConnectionHandler):
             workspace_id,
             space_ids,
         )
+
         connection_status['last_sync_changes'] = sync_changes
         return sync_count, total_count, False, config
 
