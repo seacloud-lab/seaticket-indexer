@@ -62,7 +62,7 @@ class SiteHandler(ConnectionHandler):
         while True:
             sql = f"""
                 SELECT _pk, url FROM `{table_name}`
-                WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time) AND (deleted IS NULL OR deleted = false)
+                WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time) AND (deleted IS NULL OR deleted = false)
                 LIMIT {page_size}
             """
             result = seadb_api.query_rows(project_uuid, sql)
