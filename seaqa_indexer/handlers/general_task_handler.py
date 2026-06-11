@@ -257,4 +257,4 @@ class GeneralTaskHandler(ConnectionHandler):
             params['next_cursor'] = next_cursor
 
         total_count = general_task_seadb_api.get_total_count(connection_id)
-        return sync_count, total_count, False, config, datetime.datetime.fromisoformat(sync_before)
+        return sync_count, total_count, False, config

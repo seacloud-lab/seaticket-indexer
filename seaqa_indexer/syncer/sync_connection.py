@@ -61,11 +61,9 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             connection_id, project_uuid, config, old_last_sync_time,
             connection_status, seaqa_db, sync_logger
         )
-        if len(sync_result) == 5:
-            sync_count, total_count, is_update_config, config, last_sync_time = sync_result
-        else:
-            sync_count, total_count, is_update_config, config = sync_result
-            last_sync_time = datetime.datetime.now(datetime.UTC)
+
+        sync_count, total_count, is_update_config, config = sync_result
+        last_sync_time = datetime.datetime.now(datetime.UTC)
 
         if sync_count is None:
             connection_status['last_sync_status'] = CrawlStatus.FAILED
