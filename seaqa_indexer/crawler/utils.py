@@ -89,7 +89,7 @@ def load_existing_site_info(connection_id, project_uuid, existing_site_info, sea
     offset = 0
     table_name = SchemaTables.WEB_CRAWL.table_name(connection_id=connection_id)
     while True:
-        sql = f"""SELECT `{SchemaTables.WEB_CRAWL.column.url}`, 
+        sql = f"""SELECT `{SchemaTables.WEB_CRAWL.column.url.name}`, 
         `{SchemaTables.WEB_CRAWL.column.etag.name}`, 
         `{SchemaTables.WEB_CRAWL.column.modified_time.name}`, 
         `{SchemaTables.WEB_CRAWL.column.hash.name}`
