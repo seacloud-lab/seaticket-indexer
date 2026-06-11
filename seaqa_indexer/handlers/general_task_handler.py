@@ -11,12 +11,14 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.seadb_models.general_task_seadb_api import GeneralTaskSeaDBAPI
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils import need_update_connection_last_sync_count
-from seaqa_indexer.utils.constants import ConnectionType, IndexStatus, GENERAL_TASK_CONNECTION_SPEC
+from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus, GENERAL_TASK_CONNECTION_SPEC
 
 from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 logger = logging.getLogger(__name__)
+
+GENERAL_TASK_EVENT_IGNORED_FIELDS = ('modified_time', 'sync_time', 'record_modified_time')
 
 
 class GeneralTaskHandler(ConnectionHandler):
@@ -197,9 +199,52 @@ class GeneralTaskHandler(ConnectionHandler):
                     status_last_update_count = new_update_count
 
             if append_rows:
-                general_task_seadb_api.append_rows(connection_id, append_rows)
+                inserted_pks = general_task_seadb_api.append_rows(connection_id, append_rows)
+                if len(inserted_pks) != len(append_rows):
+                    logger.warning(
+                        'General task append returned %d pks for %d rows on connection %s',
+                        len(inserted_pks), len(append_rows), connection_id,
+                    )
+                for row, pk in zip(append_rows, inserted_pks):
+                    source_task_id = row.get('source_task_id')
+                    if not source_task_id:
+                        continue
+                    latest_row = {
+                        **row,
+                        '_pk': pk,
+                    }
+                    self.publish_synced_record_events(
+                        get_latest_row=lambda latest_row=latest_row: latest_row,
+                        project_uuid=project_uuid,
+                        connection_id=connection_id,
+                        item_id=source_task_id,
+                        old_row=None,
+                        state_event_type=DataEventType.GENERAL_TASK_ADDED.value,
+                        state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
+                        log_object_name='general task',
+                    )
             if update_rows:
                 general_task_seadb_api.update_rows(connection_id, update_rows)
+                for update_row in update_rows:
+                    source_task_id = update_row.get('row', {}).get('source_task_id')
+                    old_row = existing_rows_by_source_task_id.get(source_task_id)
+                    if not source_task_id or not old_row:
+                        continue
+                    latest_row = {
+                        **old_row,
+                        **update_row.get('row', {}),
+                        '_pk': update_row.get('pk'),
+                    }
+                    self.publish_synced_record_events(
+                        get_latest_row=lambda latest_row=latest_row: latest_row,
+                        project_uuid=project_uuid,
+                        connection_id=connection_id,
+                        item_id=source_task_id,
+                        old_row=old_row,
+                        state_event_type=DataEventType.GENERAL_TASK_UPDATED.value,
+                        state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
+                        log_object_name='general task',
+                    )
 
             page_info = data.get('page_info') or {}
             has_more = bool(page_info.get('has_more'))

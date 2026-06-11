@@ -57,10 +57,14 @@ class GeneralTaskSeaDBAPI:
         return results[0].get('_pk')
 
     def get_rows_by_source_task_ids(self, connection_id, source_task_ids):
+        if not source_task_ids:
+            return {}
         table_name = self._table_name(connection_id)
         escaped_ids = "', '".join(source_task_id.replace("'", "''") for source_task_id in source_task_ids)
         sql = (
-            f"SELECT _pk, source_task_id, modified_time, deleted "
+            f"SELECT _pk, source_task_id, url, title, status, size, priority, assignees, participants, "
+            f"version, others, content, due_date, modified_time, created_time, sync_time, deleted, "
+            f"outdated, record_modified_time, linked_ticket "
             f"FROM `{table_name}` "
             f"WHERE source_task_id IN ('{escaped_ids}')"
         )
@@ -78,9 +82,14 @@ class GeneralTaskSeaDBAPI:
 
     def append_rows(self, connection_id, rows):
         if not rows:
-            return
+            return []
         table_name = self._table_name(connection_id)
-        self.seadb_api.insert_rows(self.base_id, table_name, rows)
+        resp = self.seadb_api.insert_rows(self.base_id, table_name, rows) or {}
+        return resp.get('pks') or []
+
+    def get_row_by_source_task_id(self, connection_id, source_task_id):
+        rows = self.get_rows_by_source_task_ids(connection_id, [source_task_id])
+        return rows.get(source_task_id)
 
     def upsert_user_mappings(self, connection_id, user_mappings):
         if not user_mappings:
