@@ -6,6 +6,7 @@ from seaqa_indexer.utils.constants import CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_
 from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.handlers import get_handler
+from seaqa_indexer.syncer.utils import send_connection_sync_result_msg
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,8 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     sync_logger = SyncLogger(db_session_class).init(connection_id)
     sync_logger.log(f"Start sync connection: {connection_id}")
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
+    project_uuid = project_connection.project_uuid
+    
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
         sync_logger.log(f'connection: {connection_id} not found')
@@ -45,6 +48,11 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
+    is_sync_success = False
+
+    is_first_sync = False
+    if not old_last_sync_time:
+        is_first_sync = True
 
     try:
         conn_handler = get_handler(connection_type)
@@ -54,6 +62,8 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             connection_status['last_sync_status'] = CrawlStatus.FAILED
             seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             sync_logger.stop_capture()
+            if is_first_sync:
+                send_connection_sync_result_msg(mq, project_uuid, connection_id, is_sync_success)
             return
 
         conn_handler.mq = mq
@@ -71,6 +81,8 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             connection_status['last_sync_status'] = CrawlStatus.FAILED
             seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             sync_logger.stop_capture()
+            if is_first_sync:
+                send_connection_sync_result_msg(mq, project_uuid, connection_id, is_sync_success)
             return
 
     except Exception as e:
@@ -108,6 +120,8 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         sync_logger.stop_capture()
+        if is_first_sync:
+            send_connection_sync_result_msg(mq, project_uuid, connection_id, is_sync_success)
         return
 
     # finish sync
@@ -147,3 +161,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     mq.lpush('ai_process_task', json.dumps(msg_content))
     if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
         mq.lpush('content_vector_index_task', json.dumps({'connection_id': connection_id}))
+    
+    is_sync_success = True
+    if is_first_sync:
+        send_connection_sync_result_msg(mq, project_uuid, connection_id, is_sync_success)
