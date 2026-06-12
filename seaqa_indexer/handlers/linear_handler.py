@@ -68,7 +68,8 @@ class LinearIssueHandler(ConnectionHandler):
                 content = row.get('content', '')
 
                 full_content = f"Title: {title}\n\nBody: {content}\n"
-                summary, vector = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.LINEAR.value, project_uuid)
+                summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.LINEAR.value, project_uuid)
+                vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
                     "pk": pk,
                     "row": {
