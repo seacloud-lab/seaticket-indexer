@@ -92,7 +92,7 @@ class ConnectionHandler(ABC):
         while True:
             sql = f"""
                 SELECT _pk FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
+                WHERE deleted = true AND record_modified_time < '{cutoff_time}'
                 LIMIT {page_size}
             """
             result = seadb_api.query_rows(project_uuid, sql)

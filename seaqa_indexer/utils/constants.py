@@ -30,6 +30,7 @@ class ConnectionType(Enum):
     SITE = 'site'
     SEAFILE = 'seafile'
     NOTION = 'notion'
+    LINEAR = 'linear'
 
     @classmethod
     def is_valid(cls, value):

@@ -1,6 +1,7 @@
 import json
 import time
 import logging
+import datetime
 from threading import Thread
 from copy import deepcopy
 
@@ -11,6 +12,7 @@ from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus
+from seaqa_indexer.utils.linear_api import LinearAPI
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,10 @@ NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.GENERAL_TASK.value,
     ConnectionType.SITE.value,
     ConnectionType.NOTION.value,
+    ConnectionType.LINEAR.value,
 ]
+
+LINEAR_TOKEN_REFRESH_THRESHOLD = 2 # hour
 
 
 class SyncManager(Thread):
@@ -40,9 +45,35 @@ class SyncManager(Thread):
         self.db_session_class = init_db_session_class()
         self.mq = get_mq(REDIS_HOST, REDIS_PORT, REDIS_PASSWORD)
         self.seaqa_db = SeaqaDB(self.db_session_class)
+        self.linear_refresh_interval = 60 * 60
+        self.last_linear_refresh_time = 0
+
+    def refresh_linear_tokens(self):
+        now_time = datetime.datetime.now(datetime.UTC)
+        refresh_deadline = now_time + datetime.timedelta(hours=LINEAR_TOKEN_REFRESH_THRESHOLD)
+
+        project_linear_auth_records = self.seaqa_db.get_project_deadline_linear_oauth(refresh_deadline.isoformat())
+        for linear_oauth in project_linear_auth_records:
+
+            linear_api = LinearAPI(
+                access_token=linear_oauth.access_token,
+                refresh_token=linear_oauth.refresh_token,
+            )
+            try:
+                data = linear_api.refresh_access_token()
+                access_token = data.get("access_token")
+                refresh_token = data.get("refresh_token")
+                expires_at = data.get("expires_at")
+
+                self.seaqa_db.update_project_linear_oauth(linear_oauth.project_uuid, access_token, expires_at, refresh_token)
+            except Exception as e:
+                # This error may be caused by the user revoking authorization.
+                logger.warning('project_uuid: %s refresh linear access_token failed, error: %s', linear_oauth.project_uuid, e)
+                continue
 
     def add_sync_task(self, connection_id):
         logger.info('add sync task: %s', connection_id)
+
         msg_content = {
             'connection_id': connection_id,
         }
@@ -164,4 +195,8 @@ class SyncManager(Thread):
                         self.pending_tasks.pop(connection_id)
             except Exception as e:
                 logger.error('Error handing sync connection: %s' % e)
+            
+            if now_time - self.last_linear_refresh_time >= self.linear_refresh_interval:
+                self.last_linear_refresh_time = now_time
+                self.refresh_linear_tokens()
             time.sleep(30)

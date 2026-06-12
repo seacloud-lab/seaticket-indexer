@@ -147,6 +147,8 @@ S3_SECRET_KEY = configs.get('S3_SECRET_KEY', '')
 
 GITHUB_APP_ID = configs.get('GITHUB_APP_ID', '')
 GITHUB_PRIVATE_KEY_PATH = configs.get('GITHUB_PRIVATE_KEY_PATH', '')
+LINEAR_CLIENT_ID = configs.get('LINEAR_CLIENT_ID')
+LINEAR_CLIENT_SECRET = configs.get('LINEAR_CLIENT_SECRET')
 
 try:
     with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:

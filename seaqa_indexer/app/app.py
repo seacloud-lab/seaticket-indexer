@@ -3,6 +3,7 @@ import logging
 from seaqa_indexer.server.http_server import HttpServer
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 from seaqa_indexer.index.index_manager import IndexManager
+from seaqa_indexer.tasks.linear_issues_cleaner import LinearIssuesCleaner
 from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.notion_page_cleaner import NotionPageCleaner
 from seaqa_indexer.tasks.seafile_file_cleaner import SeafileFileCleaner
@@ -30,6 +31,7 @@ class SeaqaIndexerApp(object):
         self.notion_page_cleaner = NotionPageCleaner()
         self.seafile_file_cleaner = SeafileFileCleaner()
         self.deleted_records_cleaner = DeletedRecordsCleaner()
+        self.linear_issues_cleaner = LinearIssuesCleaner()
 
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
 
@@ -52,6 +54,7 @@ class SeaqaIndexerApp(object):
         self.notion_page_cleaner.start()
         self.seafile_file_cleaner.start()
         self.deleted_records_cleaner.start()
+        self.linear_issues_cleaner.start()
         self.http_server.start()
 
     def _start_worker(self, module_name, worker_label):
