@@ -155,3 +155,5 @@ try:
         GITHUB_PRIVATE_KEY = f.read()
 except:
     GITHUB_PRIVATE_KEY = ''
+
+WORKER_CHECK_INTERVAL = configs.get('WORKER_CHECK_INTERVAL', 10)
