@@ -27,6 +27,8 @@ class SchemaTables:
     CONFLUENCE = SCHEMA.ConfluenceTable
     DISCORD_THREADS = SCHEMA.DiscordThreadsTable
     DISCORD_THREAD_MESSAGES = SCHEMA.DiscordThreadMessagesTable
+    JIRA_ISSUES = SCHEMA.JiraIssuesTable
+    JIRA_ISSUE_COMMENTS = SCHEMA.JiraIssueCommentsTable
 
 
 class PropertyTypes:

@@ -5,7 +5,7 @@ import logging
 from collections import defaultdict
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
-from seaqa_indexer.seadb_models.models import JiraIssuesTable, JiraIssueCommentsTable
+from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.seadb_models.jira_seadb_api import JiraSeaDBAPI
 from seaqa_indexer.index.index_store.jira_issues_index import JiraIssuesIndex
@@ -23,10 +23,10 @@ class JiraIssueHandler(ConnectionHandler):
     BATCH_SIZE = 50
 
     def gen_table_name(self, connection_id):
-        return JiraIssuesTable.gen_table_name(connection_id)
+        return SchemaTables.JIRA_ISSUES.table_name(connection_id)
 
     def gen_comments_table_name(self, connection_id):
-        return JiraIssueCommentsTable.gen_table_name(connection_id)
+        return SchemaTables.JIRA_ISSUE_COMMENTS.table_name(connection_id)
 
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         jira_issue_index = JiraIssuesIndex(seasearch_api)

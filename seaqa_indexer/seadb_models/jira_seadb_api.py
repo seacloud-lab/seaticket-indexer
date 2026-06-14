@@ -2,7 +2,7 @@ import datetime
 
 from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.seadb_models.models import JiraIssuesTable, JiraIssueCommentsTable
+from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils.jira_utils import normalize_jira_text
 
 
@@ -15,7 +15,7 @@ class JiraSeaDBAPI:
         self.seadb_api = SeaDBAPI()
 
     def get_table_metadata(self, connection_id):
-        table_name = JiraIssuesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
         metadata = self.seadb_api.get_base_metadata(self.base_id)
         for table in metadata.get('tables', []):
             if table['name'] == table_name:
@@ -99,7 +99,7 @@ class JiraSeaDBAPI:
                 'color': '#FFFFFF',
                 'text_color': '#000000'
             })
-        return self._upsert_select_column_options(table_metadata, JiraIssuesTable.priority.name, options)
+        return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.priority.name, options)
 
     def add_or_update_jira_status_options(self, table_metadata, statuses):
         category_colors = {
@@ -119,7 +119,7 @@ class JiraSeaDBAPI:
                 option['color'] = color
                 option['text_color'] = '#FFFFFF'
             options.append(option)
-        return self._upsert_select_column_options(table_metadata, JiraIssuesTable.status.name, options)
+        return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.status.name, options)
 
     def add_or_update_jira_issue_type_options(self, table_metadata, issue_types):
         options = []
@@ -132,7 +132,7 @@ class JiraSeaDBAPI:
                 'color': '#FFFFFF',
                 'text_color': '#000000'
             })
-        return self._upsert_select_column_options(table_metadata, JiraIssuesTable.issue_type.name, options)
+        return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.issue_type.name, options)
 
     def add_or_update_jira_assignee_options(self, table_metadata, issues):
         names = set()
@@ -150,10 +150,10 @@ class JiraSeaDBAPI:
             }
             for name in sorted(names)
         ]
-        return self._upsert_select_column_options(table_metadata, JiraIssuesTable.assignees.name, options)
+        return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.assignees.name, options)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
-        table_name = JiraIssuesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
         sql = f"SELECT * FROM `{table_name}` WHERE `issue_id` = {issue_id}"
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
@@ -170,23 +170,23 @@ class JiraSeaDBAPI:
             content = content[:MAX_CONTENT_LENGTH]
 
         insert_row = {
-            JiraIssuesTable.issue_id.name: int(issue.get('id')),
-            JiraIssuesTable.issue_key.name: issue.get('key'),
-            JiraIssuesTable.title.name: fields_data.get('summary'),
-            JiraIssuesTable.content.name:content,
-            JiraIssuesTable.status.name: (fields_data.get('status') or {}).get('name'),
-            JiraIssuesTable.priority.name: (fields_data.get('priority') or {}).get('name'),
-            JiraIssuesTable.assignees.name: (fields_data.get('assignee') or {}).get('displayName'),
-            JiraIssuesTable.issue_type.name: (fields_data.get('issuetype') or {}).get('name'),
-            JiraIssuesTable.due_date.name: fields_data.get('duedate'),
-            JiraIssuesTable.created_time.name: time_to_utc_time(fields_data.get('created')).isoformat(),
-            JiraIssuesTable.modified_time.name: time_to_utc_time(fields_data.get('updated')).isoformat(),
-            JiraIssuesTable.sync_time.name: now_datetime,
-            JiraIssuesTable.record_modified_time.name: now_datetime,
-            JiraIssuesTable.deleted.name: False,
+            SchemaTables.JIRA_ISSUES.column.issue_id.name: int(issue.get('id')),
+            SchemaTables.JIRA_ISSUES.column.issue_key.name: issue.get('key'),
+            SchemaTables.JIRA_ISSUES.column.title.name: fields_data.get('summary'),
+            SchemaTables.JIRA_ISSUES.column.content.name:content,
+            SchemaTables.JIRA_ISSUES.column.status.name: (fields_data.get('status') or {}).get('name'),
+            SchemaTables.JIRA_ISSUES.column.priority.name: (fields_data.get('priority') or {}).get('name'),
+            SchemaTables.JIRA_ISSUES.column.assignees.name: (fields_data.get('assignee') or {}).get('displayName'),
+            SchemaTables.JIRA_ISSUES.column.issue_type.name: (fields_data.get('issuetype') or {}).get('name'),
+            SchemaTables.JIRA_ISSUES.column.due_date.name: fields_data.get('duedate'),
+            SchemaTables.JIRA_ISSUES.column.created_time.name: time_to_utc_time(fields_data.get('created')).isoformat(),
+            SchemaTables.JIRA_ISSUES.column.modified_time.name: time_to_utc_time(fields_data.get('updated')).isoformat(),
+            SchemaTables.JIRA_ISSUES.column.sync_time.name: now_datetime,
+            SchemaTables.JIRA_ISSUES.column.record_modified_time.name: now_datetime,
+            SchemaTables.JIRA_ISSUES.column.deleted.name: False,
         }
 
-        table_name = JiraIssuesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
         if existed_issue:
             _pk = existed_issue.get('_pk')
             update_row = {
@@ -219,15 +219,15 @@ class JiraSeaDBAPI:
             content = comment.get('body', {}).get('content')
 
             insert_row = {
-                JiraIssueCommentsTable.comment_id.name: int(comment_id),
-                JiraIssueCommentsTable.issue_id.name: issue_id,
-                JiraIssueCommentsTable.author.name: (comment.get('author') or {}).get('displayName'),
-                JiraIssueCommentsTable.content.name: normalize_jira_text(content),
-                JiraIssueCommentsTable.created_time.name: time_to_utc_time(comment.get('created')).isoformat(),
-                JiraIssueCommentsTable.modified_time.name: time_to_utc_time(comment.get('updated')).isoformat(),
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.comment_id.name: int(comment_id),
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.issue_id.name: issue_id,
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.author.name: (comment.get('author') or {}).get('displayName'),
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.content.name: normalize_jira_text(content),
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.created_time.name: time_to_utc_time(comment.get('created')).isoformat(),
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.modified_time.name: time_to_utc_time(comment.get('updated')).isoformat(),
             }
 
-            table_name = JiraIssueCommentsTable.gen_table_name(connection_id)
+            table_name = SchemaTables.JIRA_ISSUE_COMMENTS.table_name(connection_id)
             pk = comment_id_to_pk.get(comment_id)
             if pk:
                 update_row = [
@@ -245,7 +245,7 @@ class JiraSeaDBAPI:
             self.delete_comment_from_db(connection_id, comment_id)
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
-        issues_table_name = JiraIssuesTable.gen_table_name(connection_id)
+        issues_table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
         sql = f"""SELECT * FROM `{issues_table_name}` 
                 WHERE record_modified_time >= '{last_indexed_at}' 
                 LIMIT {page_size} OFFSET {offset}"""
@@ -254,7 +254,7 @@ class JiraSeaDBAPI:
         return issues
 
     def get_need_ai_issues_by_page(self, connection_id, page_size):
-        issues_table_name = JiraIssuesTable.gen_table_name(connection_id)
+        issues_table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
         sql = f"""
             SELECT * FROM `{issues_table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time)
@@ -267,12 +267,12 @@ class JiraSeaDBAPI:
         return issues
 
     def delete_comment_from_db(self, connection_id, comment_id):
-        comments_table_name = JiraIssueCommentsTable.gen_table_name(connection_id)
+        comments_table_name = SchemaTables.JIRA_ISSUE_COMMENTS.table_name(connection_id)
         sql = f"DELETE FROM `{comments_table_name}` WHERE comment_id = {comment_id}"
         self.seadb_api.query_rows(self.base_id, sql)
 
     def get_jira_issues_count(self, connection_id):
-        table_name = JiraIssuesTable.gen_table_name(connection_id)
+        table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
         sql = f"SELECT COUNT(*) as count FROM `{table_name}`"
         response = self.seadb_api.query_rows(self.base_id, sql)
         issues_count = 0
@@ -281,7 +281,7 @@ class JiraSeaDBAPI:
         return issues_count
 
     def get_issue_comments_by_page(self, connection_id, issue_id, page_size, offset):
-        comments_table_name = JiraIssueCommentsTable.gen_table_name(connection_id)
+        comments_table_name = SchemaTables.JIRA_ISSUE_COMMENTS.table_name(connection_id)
         sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql_comments).get('results', [])
         return comments
