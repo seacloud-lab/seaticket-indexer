@@ -718,6 +718,8 @@ tables:
         column_type: text
       prompt:
         column_type: text
+      input:
+        column_type: text
       result:
         column_type: text
       action_type:
@@ -853,6 +855,8 @@ tables:
     - - record_modified_time
     - - deleted
     - - linked_ticket
+    - - sync_time
+    - - ai_processed_time
     table_name: general_task_{connection_id}
   GeneralTaskUserTable:
     columns:
