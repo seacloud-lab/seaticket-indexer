@@ -3,6 +3,13 @@ import os
 
 from seaqa_indexer.utils import run
 
+_shutdown = False
+
+
+def set_shutdown():
+    global _shutdown
+    _shutdown = True
+
 
 def kill_web_crawler_task_worker():
     cmd = [
@@ -45,6 +52,7 @@ def kill_content_vector_index_task_worker():
 
 
 def signal_term_handler(signal, frame):
+    set_shutdown()
     kill_web_crawler_task_worker()
     kill_index_task_worker()
     kill_connection_sync_task_worker()

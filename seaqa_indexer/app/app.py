@@ -1,5 +1,8 @@
 import logging
+import threading
+import time
 
+from seaqa_indexer.config import WORKER_CHECK_INTERVAL
 from seaqa_indexer.server.http_server import HttpServer
 from seaqa_indexer.crawler.web_crawl_manager import WebCrawlManager
 from seaqa_indexer.index.index_manager import IndexManager
@@ -14,10 +17,13 @@ from seaqa_indexer.index.ticket_index_master import TicketIndexMaster
 from seaqa_indexer.index.portal_issue_index_master import PortalIssueIndexMaster
 from seaqa_indexer.syncer.sync_manager import SyncManager
 from seaqa_indexer.utils import get_python_executable, run
+from seaqa_indexer.app.signal_handler import _shutdown
 
 
 class SeaqaIndexerApp(object):
     def __init__(self, ):
+        self._worker_processes = {}
+
         self.web_crawl_manager = WebCrawlManager()
         self.sync_manager = SyncManager()
 
@@ -43,6 +49,8 @@ class SeaqaIndexerApp(object):
         self._start_worker('seaqa_indexer.ai_processor.ai_process_task_worker', 'ai process worker')
         self._start_worker('seaqa_indexer.index.content_vector_index_task_worker', 'content vector index worker')
 
+        self._start_worker_monitor()
+
         self.sync_manager.start()
 
         self.kb_index_master.start()
@@ -57,10 +65,31 @@ class SeaqaIndexerApp(object):
         self.linear_issues_cleaner.start()
         self.http_server.start()
 
+    def _start_worker_monitor(self):
+        def monitor():
+            while not _shutdown:
+                time.sleep(WORKER_CHECK_INTERVAL)
+                for worker_label in list(self._worker_processes.keys()):
+                    info = self._worker_processes.get(worker_label)
+                    if info is None:
+                        continue
+                    proc = info['process']
+                    if proc.poll() is not None:
+                        logging.warning('%s (PID: %d) has exited with code %s, restarting...',
+                                        worker_label, proc.pid, proc.returncode)
+                        self._start_worker(info['module_name'], worker_label)
+
+        t = threading.Thread(target=monitor, daemon=True)
+        t.start()
+
     def _start_worker(self, module_name, worker_label):
         try:
             cmd = [get_python_executable(), '-m', module_name]
-            run(cmd)
-            logging.info('%s is started', worker_label)
+            proc = run(cmd)
+            self._worker_processes[worker_label] = {
+                'process': proc,
+                'module_name': module_name,
+            }
+            logging.info('%s (PID: %d) is started', worker_label, proc.pid)
         except Exception as e:
             logging.exception('error when start %s: %s', worker_label, e)
