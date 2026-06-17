@@ -109,13 +109,13 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
             email_seadb_api.update_email_thread_id(connection_id, message_id, insert_thread_id)
 
 
-def send_connection_sync_result_msg(mq, project_uuid, connection_id, is_success):
+def send_connection_sync_result_msg(mq, project_uuid, connection_id, status):
     try:
         msg_content = json.dumps(
             {
                 'project_uuid': uuid_str_to_36_chars(project_uuid), 
                 'connection_id': connection_id, 
-                'is_success': is_success,
+                'status': status,
                 'type': 'connection-sync'
             }
         )

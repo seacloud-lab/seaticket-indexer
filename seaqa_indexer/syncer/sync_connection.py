@@ -53,6 +53,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     is_first_sync = False
     if not old_last_sync_time:
         is_first_sync = True
+        send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.CRAWLING)
 
     try:
         conn_handler = get_handler(connection_type)
@@ -63,7 +64,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             sync_logger.stop_capture()
             if is_first_sync:
-                send_connection_sync_result_msg(mq, project_uuid, connection_id, is_sync_success)
+                send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.FAILED)
             return
 
         conn_handler.mq = mq
@@ -82,7 +83,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
             sync_logger.stop_capture()
             if is_first_sync:
-                send_connection_sync_result_msg(mq, project_uuid, connection_id, is_sync_success)
+                send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.FAILED)
             return
 
     except Exception as e:
@@ -121,7 +122,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         sync_logger.stop_capture()
         if is_first_sync:
-            send_connection_sync_result_msg(mq, project_uuid, connection_id, is_sync_success)
+            send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.FAILED)
         return
 
     # finish sync
@@ -162,6 +163,5 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
         mq.lpush('content_vector_index_task', json.dumps({'connection_id': connection_id}))
     
-    is_sync_success = True
     if is_first_sync:
-        send_connection_sync_result_msg(mq, project_uuid, connection_id, is_sync_success)
+        send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.COMPLETED)
