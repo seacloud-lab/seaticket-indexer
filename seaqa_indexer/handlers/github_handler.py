@@ -146,7 +146,8 @@ class GithubIssueHandler(ConnectionHandler):
         try:
             github_api = GitHubAPI(installation_id)
         except GitHubAppNotInstalled:
-            sync_logger.log(f"Github app installation_id is incorrect")
+            seaqa_db.uninstall_github_app(project_uuid, installation_id)
+            sync_logger.log(f"The installation_id for the Github app is incorrect; you need to reinstall it.")
             return None, None, None, None
         github_seadb_api = GitHubSeaDBAPI(project_uuid)
 
