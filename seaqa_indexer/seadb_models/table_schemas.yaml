@@ -732,6 +732,8 @@ tables:
         column_type: text
       observation:
         column_type: text
+      suggestion_text:
+        column_type: text
       suggestion_content:
         column_type: text
       sources:
