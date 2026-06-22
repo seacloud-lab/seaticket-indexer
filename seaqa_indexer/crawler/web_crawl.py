@@ -84,7 +84,7 @@ class WebCrawl:
         self.sync_logger.log(f"No sitemap found for site {url}")
         return None
 
-    def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back,
+    def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, is_first_sync, success_call_back,
               fail_call_back):
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
@@ -94,13 +94,14 @@ class WebCrawl:
             sitemap_url,
             project_uuid,
             connection_status,
+            is_first_sync,
             success_call_back,
             fail_call_back,
         )
 
         d.addCallback(self.start_crawl)
 
-    def prepare_crawler(self, site_id, site_url, sitemap_url, project_uuid, connection_status, success_call_back,
+    def prepare_crawler(self, site_id, site_url, sitemap_url, project_uuid, connection_status, is_first_sync, success_call_back,
                         fail_call_back):
         """Prepare crawler parameters, execute in thread pool"""
         return {
@@ -109,6 +110,7 @@ class WebCrawl:
             'sitemap_url': sitemap_url,
             'project_uuid': project_uuid,
             'connection_status': connection_status,
+            'is_first_sync': is_first_sync,
             'success_call_back': success_call_back,
             'fail_call_back': fail_call_back,
         }
@@ -120,6 +122,7 @@ class WebCrawl:
         sitemap_url = crawler_params['sitemap_url']
         project_uuid = crawler_params['project_uuid']
         connection_status = crawler_params['connection_status']
+        is_first_sync = crawler_params['is_first_sync']
         success_call_back = crawler_params['success_call_back']
         fail_call_back = crawler_params['fail_call_back']
 
@@ -150,6 +153,6 @@ class WebCrawl:
                 sync_logger=self.sync_logger
             )
 
-        d.addCallback(success_call_back, (site_id, project_uuid))
-        d.addErrback(fail_call_back, (site_id, site_url, connection_status))
+        d.addCallback(success_call_back, (site_id, project_uuid, is_first_sync))
+        d.addErrback(fail_call_back, (site_id, site_url, connection_status, is_first_sync))
         return d
