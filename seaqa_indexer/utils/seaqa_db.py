@@ -1,6 +1,6 @@
 import logging
 from sqlalchemy import text
-from seaqa_indexer.utils import uuid_str_to_32_chars
+from seaqa_indexer.utils import uuid_str_to_32_chars, uuid_str_to_36_chars
 
 logger = logging.getLogger('__name__')
 
@@ -301,4 +301,14 @@ class SeaqaDB(object):
                 WHERE id = :connection_id
             """
             session.execute(text(sql), {'cleaned_at': cleaned_at, 'connection_id': connection_id})
+            session.commit()
+    
+    def uninstall_github_app(self, project_uuid, installation_id):
+        project_uuid = uuid_str_to_36_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = """
+                DELETE FROM project_github_app_installation
+                WHERE project_uuid=:project_uuid and installation_id=:installation_id       
+            """
+            session.execute(text(sql), {'project_uuid': project_uuid, 'installation_id': installation_id})
             session.commit()
