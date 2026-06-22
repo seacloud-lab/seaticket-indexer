@@ -16,8 +16,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     sync_logger = SyncLogger(db_session_class).init(connection_id)
     sync_logger.log(f"Start sync connection: {connection_id}")
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
-    project_uuid = project_connection.project_uuid
-    
+
     if not project_connection:
         logger.warning('connection: %s not found', connection_id)
         sync_logger.log(f'connection: {connection_id} not found')
@@ -48,7 +47,6 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
-    is_sync_success = False
 
     is_first_sync = False
     if not old_last_sync_time:
@@ -146,7 +144,6 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     except Exception as e:
         logger.error('Failed to publish connection_update for project %s, connection %s: %s', project_uuid, connection_id, e)
 
-
     logger.info('Finish sync connection: %s, last sync count %s', connection_id, sync_count)
     sync_logger.log(f'Finish sync connection: {connection_id}')
     sync_logger.stop_capture()
@@ -160,6 +157,6 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     mq.lpush('ai_process_task', json.dumps(msg_content))
     if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
         mq.lpush('content_vector_index_task', json.dumps({'connection_id': connection_id}))
-    
+
     if is_first_sync:
         send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.COMPLETED)
