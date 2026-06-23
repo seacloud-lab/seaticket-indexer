@@ -11,7 +11,6 @@ from seaqa_indexer.seadb_models.jira_seadb_api import JiraSeaDBAPI
 from seaqa_indexer.index.index_store.jira_issues_index import JiraIssuesIndex
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.utils import gen_index_name_by_type
-from seaqa_indexer.ai_processor.utils import generate_summary
 from seaqa_indexer.utils.jira_issues_api import JiraAPI
 
 
@@ -90,9 +89,8 @@ class JiraIssueHandler(ConnectionHandler):
 
         jira_api = JiraAPI(base_url, user_email, api_token)
         jira_seadb_api = JiraSeaDBAPI(project_uuid)
-        all_deletes = self._sync_jira_select_options(connection_id, space_key, jira_api, jira_seadb_api)
 
-        sync_count, total_count = self._sync_jira_issues(
+        sync_count, total_count, all_deletes = self._sync_jira_issues(
             connection_id,
             jira_api,
             space_key,
@@ -109,47 +107,6 @@ class JiraIssueHandler(ConnectionHandler):
                 jira_seadb_api.seadb_api.delete_column_option(project_uuid, table_id, c_key, option_names=option_names)
         return sync_count, total_count, False, config
 
-    def _collect_deletions(self, accumulator, new_data):
-        for t_id, columns in new_data.items():
-            for c_key, names in columns[0].items():
-                accumulator[t_id][c_key].extend(names)
-
-    def _sync_jira_select_options(self, connection_id, space_key, jira_api, jira_seadb_api):
-        table_metadata = jira_seadb_api.get_table_metadata(connection_id)
-        if not table_metadata:
-            return
-
-        all_deletes = defaultdict(lambda: defaultdict(list))
-
-        priorities, issue_types = jira_api.get_createmeta(space_key)
-        need_deleted_priority_options = jira_seadb_api.add_or_update_jira_priority_options(table_metadata, priorities)
-        self._collect_deletions(all_deletes, need_deleted_priority_options)
-
-        statuses = jira_api.get_statuses(space_key)
-        need_deleted_status_options = jira_seadb_api.add_or_update_jira_status_options(table_metadata, statuses)
-        self._collect_deletions(all_deletes, need_deleted_status_options)
-
-        need_deleted_type_options = jira_seadb_api.add_or_update_jira_issue_type_options(table_metadata, issue_types)
-        self._collect_deletions(all_deletes, need_deleted_type_options)
-
-        return all_deletes
-
-    def _get_need_deleted_assignee_name_options(self, need_deleted_assignee_options_chunk, need_deleted_assignee_option_set):
-        all_deleted_assignee_names = list(
-            name_list
-            for table_list in need_deleted_assignee_options_chunk.values()
-            for item in table_list
-            for name_list in item.values()
-        )
-
-        if all_deleted_assignee_names and all_deleted_assignee_names[0]:
-            names_list = all_deleted_assignee_names[0]
-            if need_deleted_assignee_option_set:
-                need_deleted_assignee_option_set.intersection_update(names_list)
-            else:
-                need_deleted_assignee_option_set.update(names_list)
-        return need_deleted_assignee_option_set
-
     def _sync_jira_issues(self, connection_id, jira_api, space_key,
                           old_last_sync_time, connection_status, seaqa_db, jira_seadb_api):
         page_size = 50
@@ -157,9 +114,21 @@ class JiraIssueHandler(ConnectionHandler):
         sync_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
+        all_deletes = defaultdict(lambda: defaultdict(list))
+
         table_metadata = jira_seadb_api.get_table_metadata(connection_id)
-        need_deleted_assignee_option_set = set()
-        table_id = column_key = None
+        if table_metadata:
+            priorities, issue_types = jira_api.get_createmeta(space_key)
+            for new_data in [
+                jira_seadb_api.sync_jira_priority_options(table_metadata, priorities),
+                jira_seadb_api.sync_jira_status_options(table_metadata, jira_api.get_statuses(space_key)),
+                jira_seadb_api.sync_jira_issue_type_options(table_metadata, issue_types),
+            ]:
+                if not new_data:
+                    continue
+                for t_id, columns in new_data.items():
+                    for c_key, names in columns[0].items():
+                        all_deletes[t_id][c_key].extend(names)
 
         while True:
             data = jira_api.search_issues(space_key, old_last_sync_time, start_at, page_size)
@@ -168,13 +137,6 @@ class JiraIssueHandler(ConnectionHandler):
 
             if not issues:
                 break
-            need_deleted_assignee_options_chunk = jira_seadb_api.add_or_update_jira_assignee_options(table_metadata, issues)
-            need_deleted_assignee_option_set = self._get_need_deleted_assignee_name_options(need_deleted_assignee_options_chunk,
-                                                                                            need_deleted_assignee_option_set)
-            if need_deleted_assignee_options_chunk and table_id is None:
-                table_id, table_list = next(iter(need_deleted_assignee_options_chunk.items()))
-                first_item = table_list[0]
-                column_key = next(iter(first_item.keys()))
             for issue in issues:
                 fields_data = issue.get('fields', {}) or {}
                 issue_id = issue.get('id')
@@ -204,18 +166,9 @@ class JiraIssueHandler(ConnectionHandler):
             if start_at >= total:
                 break
 
-        if need_deleted_assignee_option_set and table_id and column_key:
-            project_uuid = jira_seadb_api.base_id
-            jira_seadb_api.seadb_api.delete_column_option(
-                project_uuid,
-                table_id,
-                column_key,
-                option_names=list(need_deleted_assignee_option_set),
-            )
-
         total_count = jira_seadb_api.get_jira_issues_count(connection_id)
 
-        return sync_count, total_count
+        return sync_count, total_count, all_deletes
 
     def clean_connection_data(self, storage, seadb_api, project_uuid,
                               connection_id, tables):
@@ -244,7 +197,8 @@ class JiraIssueHandler(ConnectionHandler):
                 title = row.get('title', '')
                 content = row.get('content', '')
                 full_content = f"Title: {title}\n\nContent: {content}\n"
-                summary, vector = generate_summary(full_content, ConnectionType.JIRA_ISSUE.value, project_uuid)
+                summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.JIRA_ISSUE.value, project_uuid)
+                vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
                     "pk": pk,
                     "row": {

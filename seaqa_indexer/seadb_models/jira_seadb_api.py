@@ -29,79 +29,103 @@ class JiraSeaDBAPI:
         return {}
 
     def _upsert_select_column_options(self, table_metadata, column_name, options):
+        """Sync select column options using id as the unique key (matching GitHub pattern).
+
+        options: list of dicts with keys: id, name, color, text_color
+        """
         column = self._get_column(table_metadata, column_name)
         if not column:
             return
         table_id = table_metadata.get('id')
         column_key = column.get('key')
         existing_options = (column.get('data') or {}).get('options') or []
-        existing_map = {opt.get('name'): opt for opt in existing_options if opt.get('name')}
-        existing_names = set(existing_map.keys())
-        new_names = set()
+        existing_map = {}
+        for opt in existing_options:
+            opt_data = opt.get('data') or {}
+            opt_id = opt_data.get('id')
+            if opt_id:
+                existing_map[opt_id] = opt
+
+        new_ids = set()
 
         for option in options:
+            opt_id = option.get('id')
             name = option.get('name')
-            new_names.add(name)
-            if not name:
+            if not opt_id or not name:
                 continue
+            new_ids.add(opt_id)
             color = option.get('color')
             text_color = option.get('text_color')
-            existing = existing_map.get(name)
+
+            existing = existing_map.get(opt_id)
             if not existing:
                 option_payload = {
                     'table_id': table_id,
                     'column_key': column_key,
                     'option_name': name,
+                    'option_data': {
+                        'id': opt_id,
+                        'color': color,
+                        'text_color': text_color,
+                    },
                 }
-                option_data = {}
-                if color:
-                    option_data['color'] = color
-                if text_color:
-                    option_data['text_color'] = text_color
-                if option_data:
-                    option_payload['option_data'] = option_data
                 self.seadb_api.add_column_option(self.base_id, option_payload)
                 continue
 
-            existing_color = existing.get('color')
-            existing_text_color = existing.get('text_color') or existing.get('textColor')
-            update_data = {}
-            if color and existing_color != color:
-                update_data['color'] = color
-            if text_color and existing_text_color != text_color:
-                update_data['text_color'] = text_color
-            if update_data:
-                payload = {
-                    'table_id': table_id,
-                    'column_key': column_key,
-                    'option_id': existing.get('id'),
-                    'update_option_data': update_data,
+            existing_name = existing.get('name')
+            existing_data = existing.get('data') or {}
+            existing_color = existing_data.get('color')
+            existing_text_color = existing_data.get('text_color')
+
+            update_option_data = {}
+            if color and color != existing_color:
+                update_option_data['color'] = color
+            if text_color and text_color != existing_text_color:
+                update_option_data['text_color'] = text_color
+            if update_option_data:
+                update_option_data['id'] = opt_id
+
+            new_name = name if name != existing_name else None
+
+            if new_name or update_option_data:
+                self.seadb_api.update_column_option(
+                    self.base_id, table_id, column_key,
+                    option_id=existing.get('id'),
+                    new_option_name=new_name,
+                    update_option_data=update_option_data or None,
+                )
+
+        need_deleted_ids = set(existing_map.keys()) - new_ids
+        if need_deleted_ids:
+            need_deleted_names = [
+                existing_map[opt_id].get('name')
+                for opt_id in need_deleted_ids
+                if existing_map[opt_id].get('name')
+            ]
+            if need_deleted_names:
+                return {
+                    table_id: [{
+                        column_key: need_deleted_names
+                    }]
                 }
-                self.seadb_api.update_column_option(self.base_id, payload)
-        need_deleted_names = existing_names - new_names
-        if need_deleted_names:
-            need_deleted = {
-                table_id: [{
-                    column_key: list(need_deleted_names)
-                }]
-            }
-            return need_deleted
         return {}
 
-    def add_or_update_jira_priority_options(self, table_metadata, priorities):
+    def sync_jira_priority_options(self, table_metadata, priorities):
         options = []
         for priority in priorities or []:
+            opt_id = priority.get('id')
             name = priority.get('name')
-            if not name:
+            if not opt_id or not name:
                 continue
             options.append({
+                'id': opt_id,
                 'name': name,
                 'color': '#FFFFFF',
-                'text_color': '#000000'
+                'text_color': '#000000',
             })
         return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.priority.name, options)
 
-    def add_or_update_jira_status_options(self, table_metadata, statuses):
+    def sync_jira_status_options(self, table_metadata, statuses):
         category_colors = {
             'new': '#42526E',
             'indeterminate': '#0052CC',
@@ -109,48 +133,36 @@ class JiraSeaDBAPI:
         }
         options = []
         for status in statuses or []:
+            opt_id = status.get('id')
             name = status.get('name')
-            if not name:
+            if not opt_id or not name:
                 continue
             category_key = (status.get('statusCategory') or {}).get('key')
             color = category_colors.get(category_key)
-            option = {'name': name}
+            option = {
+                'id': opt_id,
+                'name': name,
+            }
             if color:
                 option['color'] = color
                 option['text_color'] = '#FFFFFF'
             options.append(option)
         return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.status.name, options)
 
-    def add_or_update_jira_issue_type_options(self, table_metadata, issue_types):
+    def sync_jira_issue_type_options(self, table_metadata, issue_types):
         options = []
         for issue_type in issue_types or []:
+            opt_id = issue_type.get('id')
             name = issue_type.get('name')
-            if not name:
+            if not opt_id or not name:
                 continue
             options.append({
+                'id': opt_id,
                 'name': name,
                 'color': '#FFFFFF',
-                'text_color': '#000000'
+                'text_color': '#000000',
             })
         return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.issue_type.name, options)
-
-    def add_or_update_jira_assignee_options(self, table_metadata, issues):
-        names = set()
-        for issue in issues or []:
-            fields_data = issue.get('fields', {}) or {}
-            assignee_name = (fields_data.get('assignee') or {}).get('displayName')
-            if assignee_name:
-                names.add(assignee_name)
-
-        options = [
-            {
-                'name': name,
-                'color': '#FFFFFF',
-                'text_color': '#000000'
-            }
-            for name in sorted(names)
-        ]
-        return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.assignees.name, options)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
@@ -169,6 +181,9 @@ class JiraSeaDBAPI:
         if content and len(content) > MAX_CONTENT_LENGTH:
             content = content[:MAX_CONTENT_LENGTH]
 
+        assignee = (fields_data.get('assignee') or {}).get('displayName')
+        assignees_list = [assignee] if assignee else []
+
         insert_row = {
             SchemaTables.JIRA_ISSUES.column.issue_id.name: int(issue.get('id')),
             SchemaTables.JIRA_ISSUES.column.issue_key.name: issue.get('key'),
@@ -176,7 +191,7 @@ class JiraSeaDBAPI:
             SchemaTables.JIRA_ISSUES.column.content.name:content,
             SchemaTables.JIRA_ISSUES.column.status.name: (fields_data.get('status') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.priority.name: (fields_data.get('priority') or {}).get('name'),
-            SchemaTables.JIRA_ISSUES.column.assignees.name: (fields_data.get('assignee') or {}).get('displayName'),
+            SchemaTables.JIRA_ISSUES.column.assignees.name: assignees_list,
             SchemaTables.JIRA_ISSUES.column.issue_type.name: (fields_data.get('issuetype') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.due_date.name: fields_data.get('duedate'),
             SchemaTables.JIRA_ISSUES.column.created_time.name: time_to_utc_time(fields_data.get('created')).isoformat(),

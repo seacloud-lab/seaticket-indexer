@@ -1096,7 +1096,7 @@ tables:
       priority:
         column_type: single-select
       assignees:
-        column_type: single-select
+        column_type: list
       issue_type:
         column_type: single-select
       due_date:
