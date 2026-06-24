@@ -118,7 +118,8 @@ class JiraIssueHandler(ConnectionHandler):
 
         table_metadata = jira_seadb_api.get_table_metadata(connection_id)
         if table_metadata:
-            priorities, issue_types = jira_api.get_createmeta(space_key)
+            priorities = jira_api.get_priorities()
+            issue_types = jira_api.get_createmeta(space_key)
             for new_data in [
                 jira_seadb_api.sync_jira_priority_options(table_metadata, priorities),
                 jira_seadb_api.sync_jira_status_options(table_metadata, jira_api.get_statuses(space_key)),

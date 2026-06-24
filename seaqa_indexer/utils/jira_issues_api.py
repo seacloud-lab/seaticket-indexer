@@ -36,17 +36,11 @@ class JiraAPI:
             return [], []
         project = projects[0]
         issue_types = project.get('issuetypes', [])
-        priorities = []
-        seen_priority_ids = set()
-        for issue_type in issue_types:
-            fields = issue_type.get('fields', {})
-            priority_field = fields.get('priority', {})
-            for av in priority_field.get('allowedValues', []):
-                p_id = av.get('id')
-                if p_id and p_id not in seen_priority_ids:
-                    priorities.append(av)
-                    seen_priority_ids.add(p_id)
-        return priorities, issue_types
+        return issue_types
+
+    def get_priorities(self):
+        url = f'{self.base_url}/rest/api/2/priority'
+        return self._request(url) or []
 
     def get_statuses(self, space_key):
         url = f'{self.base_url}/rest/api/2/project/{space_key}/statuses/'

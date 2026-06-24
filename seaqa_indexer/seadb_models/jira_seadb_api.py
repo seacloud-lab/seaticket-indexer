@@ -41,8 +41,7 @@ class JiraSeaDBAPI:
         existing_options = (column.get('data') or {}).get('options') or []
         existing_map = {}
         for opt in existing_options:
-            opt_data = opt.get('data') or {}
-            opt_id = opt_data.get('id')
+            opt_id = opt.get('id')
             if opt_id:
                 existing_map[opt_id] = opt
 
@@ -73,9 +72,8 @@ class JiraSeaDBAPI:
                 continue
 
             existing_name = existing.get('name')
-            existing_data = existing.get('data') or {}
-            existing_color = existing_data.get('color')
-            existing_text_color = existing_data.get('text_color')
+            existing_color = existing.get('color')
+            existing_text_color = existing.get('text_color')
 
             update_option_data = {}
             if color and color != existing_color:
@@ -183,7 +181,6 @@ class JiraSeaDBAPI:
 
         assignee = (fields_data.get('assignee') or {}).get('displayName')
         assignees_list = [assignee] if assignee else []
-
         insert_row = {
             SchemaTables.JIRA_ISSUES.column.issue_id.name: int(issue.get('id')),
             SchemaTables.JIRA_ISSUES.column.issue_key.name: issue.get('key'),
