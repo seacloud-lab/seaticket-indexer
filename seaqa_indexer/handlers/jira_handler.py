@@ -2,8 +2,6 @@ import json
 import datetime
 import logging
 
-from collections import defaultdict
-
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
@@ -12,6 +10,7 @@ from seaqa_indexer.index.index_store.jira_issues_index import JiraIssuesIndex
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.jira_issues_api import JiraAPI
+from seaqa_indexer.utils.seadb_api import OptionValueInvalidException
 
 
 logger = logging.getLogger(__name__)
@@ -41,9 +40,9 @@ class JiraIssueHandler(ConnectionHandler):
 
     def format_vector_search_result(self, record, connection, result):
         connection_config = json.loads(connection.config)
-        base_url = connection_config.get('base_url', '').rstrip('/')
+        site_url = connection_config.get('site_url', '').rstrip('/')
         issue_key = record.get('issue_key')
-        url = f'{base_url}/browse/{issue_key}' if base_url and issue_key else ''
+        url = f'{site_url}/browse/{issue_key}' if site_url and issue_key else ''
 
         return {
             'title': record.get('title', ''),
@@ -78,61 +77,82 @@ class JiraIssueHandler(ConnectionHandler):
 
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
-        base_url = config.get('base_url', '').rstrip('/')
-        user_email = config.get('user_email')
-        api_token = config.get('api_token')
-        space_key = config.get('space_key')
+        site_id = config.get('site_id')
+        site_url = config.get('site_url', '')
+        project_key = config.get('project_key')
 
-        if not base_url or not user_email or not api_token or not space_key:
+        if not site_id or not project_key:
             sync_logger.log('Jira configuration is invalid')
             return None, None, None, None
 
-        jira_api = JiraAPI(base_url, user_email, api_token)
+        oauth = seaqa_db.get_project_jira_oauth(project_uuid)
+        if not oauth:
+            sync_logger.log('Jira OAuth not found')
+            return None, None, None, None
+
+        access_token = oauth.access_token
+        refresh_token = oauth.refresh_token
+        expires_at = oauth.expires_at
+
+        # Refresh proactively if the token has expired
+        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
+            jira_api = JiraAPI(access_token, refresh_token, site_id, site_url)
+            try:
+                new_tokens = jira_api.refresh_access_token()
+                access_token = new_tokens['access_token']
+                refresh_token = new_tokens['refresh_token']
+                expires_at = new_tokens['expires_at']
+                seaqa_db.update_project_jira_oauth(project_uuid, access_token, expires_at, refresh_token)
+            except Exception as e:
+                sync_logger.log(f'Failed to refresh Jira OAuth token: {e}')
+                return None, None, None, None
+
+        jira_api = JiraAPI(access_token, refresh_token, site_id, site_url)
         jira_seadb_api = JiraSeaDBAPI(project_uuid)
 
-        sync_count, total_count, all_deletes = self._sync_jira_issues(
+        is_first_sync = not old_last_sync_time
+
+        sync_count, total_count = self._sync_jira_issues(
             connection_id,
+            project_uuid,
             jira_api,
-            space_key,
+            project_key,
             old_last_sync_time,
             connection_status,
             seaqa_db,
-            jira_seadb_api
+            jira_seadb_api,
+            is_first_sync,
         )
 
-        for table_id, columns in all_deletes.items():
-            for c_key, option_names in columns.items():
-                if not option_names:
-                    continue
-                jira_seadb_api.seadb_api.delete_column_option(project_uuid, table_id, c_key, option_names=option_names)
         return sync_count, total_count, False, config
 
-    def _sync_jira_issues(self, connection_id, jira_api, space_key,
-                          old_last_sync_time, connection_status, seaqa_db, jira_seadb_api):
+    def _sync_jira_options(self, connection_id, jira_api, project_key, jira_seadb_api):
+        """Sync Jira select-column options (priorities, statuses, issue types)."""
+        table_metadata = jira_seadb_api.get_table_metadata(connection_id)
+        if not table_metadata:
+            return
+        priorities = jira_api.get_priorities()
+        issue_types = jira_api.get_createmeta(project_key)
+        jira_seadb_api.sync_jira_priority_options(table_metadata, priorities)
+        jira_seadb_api.sync_jira_status_options(table_metadata, jira_api.get_statuses(project_key))
+        jira_seadb_api.sync_jira_issue_type_options(table_metadata, issue_types)
+
+    def _sync_jira_issues(self, connection_id, project_uuid, jira_api, project_key,
+                          old_last_sync_time, connection_status, seaqa_db, jira_seadb_api,
+                          is_first_sync):
         page_size = 50
         start_at = 0
         sync_count = 0
+        added_count = 0
+        updated_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
-        all_deletes = defaultdict(lambda: defaultdict(list))
 
-        table_metadata = jira_seadb_api.get_table_metadata(connection_id)
-        if table_metadata:
-            priorities = jira_api.get_priorities()
-            issue_types = jira_api.get_createmeta(space_key)
-            for new_data in [
-                jira_seadb_api.sync_jira_priority_options(table_metadata, priorities),
-                jira_seadb_api.sync_jira_status_options(table_metadata, jira_api.get_statuses(space_key)),
-                jira_seadb_api.sync_jira_issue_type_options(table_metadata, issue_types),
-            ]:
-                if not new_data:
-                    continue
-                for t_id, columns in new_data.items():
-                    for c_key, names in columns[0].items():
-                        all_deletes[t_id][c_key].extend(names)
+        if is_first_sync:
+            self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
 
         while True:
-            data = jira_api.search_issues(space_key, old_last_sync_time, start_at, page_size)
+            data = jira_api.search_issues(project_key, old_last_sync_time, start_at, page_size)
             issues = data.get('issues', [])
             total = data.get('total', 0)
 
@@ -141,18 +161,29 @@ class JiraIssueHandler(ConnectionHandler):
             for issue in issues:
                 fields_data = issue.get('fields', {}) or {}
                 issue_id = issue.get('id')
+                issue_key = issue.get('key')
 
                 modified_time = fields_data.get('updated')
-                comments_data = (fields_data.get('comment') or {}).get('comments', [])
                 existed_issue = jira_seadb_api.get_issue_by_issue_id(issue_id, connection_id)
                 if existed_issue:
                     if time_to_utc_time(modified_time) <= time_to_utc_time(str(existed_issue.get('modified_time'))):
                         continue
 
                 sync_count += 1
-                jira_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+                if existed_issue:
+                    updated_count += 1
+                else:
+                    added_count += 1
 
-                jira_seadb_api.save_or_update_issue_comments(connection_id, issue_id, comments_data)
+                try:
+                    jira_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+                except OptionValueInvalidException as e:
+                    logger.warning('The option name may not exist; resynchronize it. exception info is: %s', e)
+                    self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
+                    jira_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
+
+                all_comments = jira_api.get_issue_comments(issue_key)
+                jira_seadb_api.save_or_update_issue_comments(connection_id, issue_id, issue_key, all_comments)
 
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count
@@ -167,9 +198,14 @@ class JiraIssueHandler(ConnectionHandler):
             if start_at >= total:
                 break
 
+        connection_status['last_sync_changes'] = {
+            'added': added_count,
+            'deleted': 0,
+            'updated': updated_count,
+        }
         total_count = jira_seadb_api.get_jira_issues_count(connection_id)
 
-        return sync_count, total_count, all_deletes
+        return sync_count, total_count
 
     def clean_connection_data(self, storage, seadb_api, project_uuid,
                               connection_id, tables):
@@ -230,7 +266,7 @@ class JiraIssueHandler(ConnectionHandler):
         while True:
             sql = f"""
                 SELECT _pk, issue_id FROM `{table_name}` 
-                WHERE deleted = true AND sync_time < '{cutoff_time}'
+                WHERE deleted = true AND record_modified_time < '{cutoff_time}'
                 LIMIT {page_size}
             """
             result = seadb_api.query_rows(project_uuid, sql)

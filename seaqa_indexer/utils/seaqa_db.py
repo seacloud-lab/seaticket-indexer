@@ -47,8 +47,32 @@ class SeaqaDB(object):
     def update_project_linear_oauth(self, project_uuid, access_token, expires_at, refresh_token):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
-            cmd = """UPDATE project_linear_oauth 
-                        SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at 
+            cmd = """UPDATE project_linear_oauth
+                        SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at
+                        WHERE project_uuid=:project_uuid"""
+            session.execute(text(cmd), {
+                'project_uuid': project_uuid,
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'expires_at': expires_at,
+            })
+            session.commit()
+
+    def get_project_jira_oauth(self, project_uuid):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = """SELECT access_token, refresh_token, expires_at
+                     FROM project_jira_oauth
+                     WHERE project_uuid=:project_uuid
+                     """
+            row = session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
+            return row
+
+    def update_project_jira_oauth(self, project_uuid, access_token, expires_at, refresh_token):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            cmd = """UPDATE project_jira_oauth
+                        SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at
                         WHERE project_uuid=:project_uuid"""
             session.execute(text(cmd), {
                 'project_uuid': project_uuid,

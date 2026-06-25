@@ -31,6 +31,7 @@ class JiraSeaDBAPI:
     def _upsert_select_column_options(self, table_metadata, column_name, options):
         """Sync select column options using id as the unique key (matching GitHub pattern).
 
+        Order: delete stale → update existing (with conflict resolution) → add new.
         options: list of dicts with keys: id, name, color, text_color
         """
         column = self._get_column(table_metadata, column_name)
@@ -40,12 +41,18 @@ class JiraSeaDBAPI:
         column_key = column.get('key')
         existing_options = (column.get('data') or {}).get('options') or []
         existing_map = {}
+        old_names = set()
         for opt in existing_options:
             opt_id = opt.get('id')
+            opt_name = opt.get('name')
             if opt_id:
                 existing_map[opt_id] = opt
+                if opt_name:
+                    old_names.add(opt_name)
 
         new_ids = set()
+        need_added_options = []
+        need_updated_options = []
 
         for option in options:
             opt_id = option.get('id')
@@ -68,7 +75,7 @@ class JiraSeaDBAPI:
                         'text_color': text_color,
                     },
                 }
-                self.seadb_api.add_column_option(self.base_id, option_payload)
+                need_added_options.append(option_payload)
                 continue
 
             existing_name = existing.get('name')
@@ -76,9 +83,9 @@ class JiraSeaDBAPI:
             existing_text_color = existing.get('text_color')
 
             update_option_data = {}
-            if color and color != existing_color:
+            if color is not None and color != existing_color:
                 update_option_data['color'] = color
-            if text_color and text_color != existing_text_color:
+            if text_color is not None and text_color != existing_text_color:
                 update_option_data['text_color'] = text_color
             if update_option_data:
                 update_option_data['id'] = opt_id
@@ -86,27 +93,67 @@ class JiraSeaDBAPI:
             new_name = name if name != existing_name else None
 
             if new_name or update_option_data:
-                self.seadb_api.update_column_option(
-                    self.base_id, table_id, column_key,
-                    option_id=existing.get('id'),
-                    new_option_name=new_name,
-                    update_option_data=update_option_data or None,
+                need_updated_options.append(
+                    (existing.get('id'), new_name, update_option_data or None, existing_name)
                 )
 
+        # 1. Delete stale options first (free up names for potential conflicts)
         need_deleted_ids = set(existing_map.keys()) - new_ids
         if need_deleted_ids:
-            need_deleted_names = [
+            need_deleted_option_ids = [
+                existing_map[opt_id].get('id')
+                for opt_id in need_deleted_ids
+                if existing_map[opt_id].get('id')
+            ]
+            need_deleted_option_names = {
                 existing_map[opt_id].get('name')
                 for opt_id in need_deleted_ids
                 if existing_map[opt_id].get('name')
-            ]
-            if need_deleted_names:
-                return {
-                    table_id: [{
-                        column_key: need_deleted_names
-                    }]
-                }
-        return {}
+            }
+            old_names = old_names - need_deleted_option_names
+            self.seadb_api.delete_column_option(
+                self.base_id, table_id, column_key, option_ids=need_deleted_option_ids,
+            )
+
+        # 2. Update existing options (with conflict resolution for name swaps, matching GitHub)
+        conflict_updated_options = []
+        for updated_option in need_updated_options:
+            option_id, new_name, update_option_data, old_name = updated_option
+            if new_name and new_name in old_names:
+                conflict_updated_options.append(updated_option)
+                continue
+            self.seadb_api.update_column_option(
+                self.base_id, table_id, column_key, option_id,
+                new_option_name=new_name,
+                update_option_data=update_option_data,
+            )
+
+        # 3. Resolve conflicts: use temp name to break circular name swaps
+        already_update_option_names = set()
+        temp_prefix = 'tmp'
+        for updated_option in conflict_updated_options:
+            option_id, new_name, update_option_data, old_name = updated_option
+            if new_name not in already_update_option_names \
+                    and old_name not in already_update_option_names:
+                temp_name = f'{temp_prefix}{option_id}'
+                self.seadb_api.update_column_option(
+                    self.base_id, table_id, column_key,
+                    option_name=new_name,
+                    new_option_name=temp_name,
+                    update_option_data=update_option_data,
+                )
+                already_update_option_names.add(new_name)
+
+            self.seadb_api.update_column_option(
+                self.base_id, table_id, column_key, option_id=option_id,
+                new_option_name=new_name,
+                update_option_data=update_option_data,
+            )
+            already_update_option_names.add(old_name)
+
+        # 4. Add new options (names are now free after deletions)
+        for added_option in need_added_options:
+            self.seadb_api.add_column_option(self.base_id, added_option)
 
     def sync_jira_priority_options(self, table_metadata, priorities):
         options = []
@@ -121,7 +168,7 @@ class JiraSeaDBAPI:
                 'color': '#FFFFFF',
                 'text_color': '#000000',
             })
-        return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.priority.name, options)
+        self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.priority.name, options)
 
     def sync_jira_status_options(self, table_metadata, statuses):
         category_colors = {
@@ -145,7 +192,7 @@ class JiraSeaDBAPI:
                 option['color'] = color
                 option['text_color'] = '#FFFFFF'
             options.append(option)
-        return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.status.name, options)
+        self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.status.name, options)
 
     def sync_jira_issue_type_options(self, table_metadata, issue_types):
         options = []
@@ -160,7 +207,7 @@ class JiraSeaDBAPI:
                 'color': '#FFFFFF',
                 'text_color': '#000000',
             })
-        return self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.issue_type.name, options)
+        self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.issue_type.name, options)
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
@@ -190,7 +237,7 @@ class JiraSeaDBAPI:
             SchemaTables.JIRA_ISSUES.column.priority.name: (fields_data.get('priority') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.assignees.name: assignees_list,
             SchemaTables.JIRA_ISSUES.column.issue_type.name: (fields_data.get('issuetype') or {}).get('name'),
-            SchemaTables.JIRA_ISSUES.column.due_date.name: fields_data.get('duedate'),
+            SchemaTables.JIRA_ISSUES.column.due_date.name: time_to_utc_time(fields_data.get('duedate')).isoformat() if fields_data.get('duedate') else None,
             SchemaTables.JIRA_ISSUES.column.created_time.name: time_to_utc_time(fields_data.get('created')).isoformat(),
             SchemaTables.JIRA_ISSUES.column.modified_time.name: time_to_utc_time(fields_data.get('updated')).isoformat(),
             SchemaTables.JIRA_ISSUES.column.sync_time.name: now_datetime,
@@ -209,7 +256,7 @@ class JiraSeaDBAPI:
         else:
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 
-    def save_or_update_issue_comments(self, connection_id, issue_id, comments):
+    def save_or_update_issue_comments(self, connection_id, issue_id, issue_key, comments):
         offset = 0
         page_size = 1000
         old_comment_ids = set()
@@ -227,12 +274,13 @@ class JiraSeaDBAPI:
         for comment in comments:
             comment_id = int(comment.get('id'))
             new_comment_ids.add(comment_id)
-            issue_id = int(issue_id)
+            issue_id_int = int(issue_id)
             content = comment.get('body', {}).get('content')
 
             insert_row = {
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.comment_id.name: int(comment_id),
-                SchemaTables.JIRA_ISSUE_COMMENTS.column.issue_id.name: issue_id,
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.issue_id.name: issue_id_int,
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.issue_key.name: issue_key,
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.author.name: (comment.get('author') or {}).get('displayName'),
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.content.name: normalize_jira_text(content),
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.created_time.name: time_to_utc_time(comment.get('created')).isoformat(),
@@ -269,7 +317,7 @@ class JiraSeaDBAPI:
         issues_table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
         sql = f"""
             SELECT * FROM `{issues_table_name}`
-            WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time)
+            WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time)
             AND (deleted IS NULL OR deleted = false)
             AND (outdated IS NULL OR outdated = false)
             LIMIT {page_size}
