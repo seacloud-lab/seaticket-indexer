@@ -10,6 +10,7 @@ from seaqa_indexer.tasks.linear_issues_cleaner import LinearIssuesCleaner
 from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.notion_page_cleaner import NotionPageCleaner
 from seaqa_indexer.tasks.seafile_file_cleaner import SeafileFileCleaner
+from seaqa_indexer.tasks.confluence_page_cleaner import ConfluencePageCleaner
 from seaqa_indexer.tasks.deleted_records_cleaner import DeletedRecordsCleaner
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
 from seaqa_indexer.index.knowledge_base_index_master import KnowledgeBaseIndexMaster
@@ -38,6 +39,7 @@ class SeaqaIndexerApp(object):
         self.seafile_file_cleaner = SeafileFileCleaner()
         self.deleted_records_cleaner = DeletedRecordsCleaner()
         self.linear_issues_cleaner = LinearIssuesCleaner()
+        self.confluence_page_cleaner = ConfluencePageCleaner()
 
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
 
@@ -63,6 +65,7 @@ class SeaqaIndexerApp(object):
         self.seafile_file_cleaner.start()
         self.deleted_records_cleaner.start()
         self.linear_issues_cleaner.start()
+        self.confluence_page_cleaner.start()
         self.http_server.start()
 
     def _start_worker_monitor(self):
