@@ -156,6 +156,7 @@ class ConfluenceAPI:
             'limit': limit,
             'body-format': 'storage',
             'status': 'current',
+            'sort': '-modified-date',
         }
         if cursor:
             params['cursor'] = cursor

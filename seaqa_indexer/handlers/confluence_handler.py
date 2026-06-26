@@ -136,13 +136,14 @@ class ConfluenceHandler(ConnectionHandler):
             confluence_seadb_api,
             workspace_id,
             space_ids,
+            last_sync_time=old_last_sync_time,
         )
 
         connection_status['last_sync_changes'] = sync_changes
         return sync_count, total_count, False, config
 
     def _sync_confluence(self, connection_id, project_uuid, connection_status, confluence_api, seaqa_db,
-                         confluence_seadb_api, workspace_id, space_ids=None):
+                         confluence_seadb_api, workspace_id, space_ids=None, last_sync_time=None):
         sync_count = 0
         added_count = 0
         updated_count = 0
@@ -152,6 +153,9 @@ class ConfluenceHandler(ConnectionHandler):
         status_last_update_time = datetime.datetime.now()
         status_last_update_count = 0
         user_cache = {}
+
+        if last_sync_time:
+            last_sync_time = time_to_utc_time(str(last_sync_time))
 
         def _resolve_user(account_id):
             if not account_id:
@@ -191,11 +195,19 @@ class ConfluenceHandler(ConnectionHandler):
                         page['last_modifier'] = _resolve_user(last_modifier_id)
 
                     remote_page_ids.add(page_id)
+
+                    # Early break: pages are sorted by -modified-date, so if this page
+                    # is older than last_sync_time, all remaining pages in this space are
+                    # also older — stop fetching further pages (same pattern as Notion).
+                    page_modified_time = time_to_utc_time(page.get('modified_time'))
+                    if last_sync_time and page_modified_time < last_sync_time:
+                        has_more = False
+                        break
+
                     existed_page = confluence_seadb_api.get_page_by_page_id(page_id, connection_id)
                     if existed_page and existed_page.get('modified_time'):
-                        remote_modified_time = time_to_utc_time(page.get('modified_time'))
                         local_modified_time = time_to_utc_time(str(existed_page.get('modified_time')))
-                        if remote_modified_time <= local_modified_time and not existed_page.get('deleted'):
+                        if page_modified_time <= local_modified_time:
                             continue
 
                     confluence_seadb_api.save_or_update_page_to_db(connection_id, page, existed_page)
