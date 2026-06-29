@@ -5,7 +5,7 @@ import datetime
 from threading import Thread, Event
 
 from seaqa_indexer.db import init_db_session_class
-from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.utils import decrypt_config, time_to_utc_time
 from seaqa_indexer.utils.confluence_api import ConfluenceAPI
 from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
@@ -117,9 +117,21 @@ class ConfluencePageCleanerTimer(Thread):
 
                 access_token = oauth.access_token
                 refresh_token = oauth.refresh_token
+                expires_at = oauth.expires_at
                 if not access_token:
                     logger.warning('Confluence access_token missing for project %s', project_uuid)
                     continue
+
+                # Proactively refresh if token is expired or within 60s of expiry
+                now = datetime.datetime.now(datetime.UTC)
+                if not expires_at or time_to_utc_time(str(expires_at)) <= now + datetime.timedelta(seconds=60):
+                    logger.info('Confluence access token near expiry, refreshing for connection %s', connection_id)
+                    confluence_api = ConfluenceAPI(access_token, refresh_token)
+                    new_tokens = confluence_api.refresh_access_token()
+                    access_token = new_tokens['access_token']
+                    refresh_token = new_tokens['refresh_token']
+                    expires_at = new_tokens['expires_at']
+                    self.seaqa_db.update_project_confluence_oauth(project_uuid, access_token, expires_at, refresh_token)
 
                 confluence_api = ConfluenceAPI(
                     access_token=access_token,

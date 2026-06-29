@@ -81,35 +81,20 @@ class ConfluenceAPI:
         cursor = query.get('cursor')
         return cursor[0] if cursor else None
 
-    def _normalize_page(self, page, base_url=''):
-        page_links = page.get('_links') or {}
+    def _normalize_page(self, page):
         version = page.get('version') or {}
         body = page.get('body') or {}
         storage_body = body.get('storage') or {}
-        webui_path = page_links.get('webui') or ''
-
-        # _links.base may or may not include /wiki (e.g. https://site.atlassian.net
-        # vs https://site.atlassian.net/wiki). _links.webui may be /spaces/... or
-        # /wiki/spaces/... . The correct Confluence page URL always needs exactly one
-        # /wiki segment. Normalize both parts and concatenate (not urljoin, which
-        # would replace the path).
-        if base_url:
-            base_url = base_url.rstrip('/')
-            if not base_url.endswith('/wiki'):
-                base_url = base_url + '/wiki'
-        if webui_path and webui_path.startswith('/wiki/'):
-            webui_path = webui_path[5:]  # strip leading /wiki, base_url already has it
 
         return {
             'page_id': str(page.get('id')),
             'title': page.get('title') or '',
             'content': storage_body.get('value') or '',
             'created_time': page.get('createdAt'),
-            'modified_time': version.get('createdAt') or page.get('updatedAt') or page.get('createdAt'),
+            'modified_time': version.get('createdAt'),
             'creator': page.get('authorId') or '',
-            'last_modifier': version.get('authorId') or page.get('lastOwnerId') or page.get('authorId') or '',
+            'last_modifier': page.get('lastOwnerId') or '',
             'parent_page_id': str(page.get('parentId')) if page.get('parentId') is not None else '',
-            'url': base_url + webui_path if (base_url and webui_path) else '',
         }
 
     def get_user_display_name(self, account_id, workspace_id):
@@ -166,10 +151,9 @@ class ConfluenceAPI:
         response = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
         response.raise_for_status()
         data = response.json()
-        base_url = (data.get('_links') or {}).get('base') or ''
         results = data.get('results') or []
         pages = [
-            self._normalize_page(page, base_url)
+            self._normalize_page(page)
             for page in results
             if page.get('id') is not None
         ]

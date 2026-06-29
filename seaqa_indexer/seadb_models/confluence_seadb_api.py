@@ -45,7 +45,6 @@ class ConfluenceSeaDBAPI:
         insert_row = {
             SchemaTables.CONFLUENCE.column.title.name: confluence_page.get('title'),
             SchemaTables.CONFLUENCE.column.content.name: content,
-            SchemaTables.CONFLUENCE.column.url.name: confluence_page.get('url'),
             SchemaTables.CONFLUENCE.column.created_time.name: self._to_isoformat(confluence_page.get('created_time')),
             SchemaTables.CONFLUENCE.column.modified_time.name: self._to_isoformat(confluence_page.get('modified_time')),
             SchemaTables.CONFLUENCE.column.sync_time.name: now_iso,
@@ -79,7 +78,7 @@ class ConfluenceSeaDBAPI:
 
     def get_confluence_pages_by_page(self, connection_id, last_indexed_at, page_size, offset):
         table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
-        sql = f"""SELECT `_pk`, `title`, `content`, `url`, `modified_time`, `page_id`, `deleted`, `outdated`
+        sql = f"""SELECT `_pk`, `title`, `content`, `modified_time`, `page_id`, `deleted`, `outdated`
                 FROM `{table_name}`
                 WHERE record_modified_time >= '{last_indexed_at}'
                 LIMIT {page_size} OFFSET {offset}"""
@@ -97,6 +96,19 @@ class ConfluenceSeaDBAPI:
         """
         response = self.seadb_api.query_rows(self.base_id, sql)
         return response.get('results', [])
+
+    def get_latest_modified_time(self, connection_id):
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
+        sql = f"""
+            SELECT `modified_time` FROM `{table_name}`
+            WHERE (deleted IS NULL OR deleted = false)
+            ORDER BY `modified_time` DESC
+            LIMIT 1
+        """
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        if response and 'results' in response and response['results']:
+            return response['results'][0].get('modified_time')
+        return None
 
     def get_page_id_rows_by_page(self, connection_id, page_size, offset):
         table_name = SchemaTables.CONFLUENCE.table_name(connection_id)

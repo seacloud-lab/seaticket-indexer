@@ -966,8 +966,6 @@ tables:
         column_type: text
         column_data:
           compressed: true
-      url:
-        column_type: text
       creator:
         column_type: text
       last_modifier:
