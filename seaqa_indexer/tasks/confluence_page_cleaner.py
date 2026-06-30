@@ -45,18 +45,18 @@ class ConfluencePageCleanerTimer(Thread):
         self.check_days = check_days
         self.page_size = 100
 
-    def fetch_remote_page_ids(self, confluence_api, workspace_id, space_ids=None):
+    def fetch_remote_page_ids(self, confluence_api, workspace_id, space_keys=None):
         page_ids = set()
-        space_contexts = space_ids if space_ids else [None]
+        space_contexts = [None] if space_keys is None else space_keys
 
-        for space_id in space_contexts:
+        for space_key in space_contexts:
             cursor = None
             while True:
                 pages, next_cursor, has_more = confluence_api.list_pages(
                     workspace_id,
                     cursor=cursor,
                     limit=self.page_size,
-                    space_ids=[space_id] if space_id else None,
+                    space_keys=[space_key] if space_key else None,
                 )
                 if not pages:
                     if not has_more:
@@ -108,7 +108,7 @@ class ConfluencePageCleanerTimer(Thread):
                     logger.warning('Confluence workspace_id missing for connection %s, skipping', connection_id)
                     continue
 
-                space_ids = connection_config.get('space_ids') or []
+                space_keys = connection_config.get('space_keys') or None
 
                 oauth = self.seaqa_db.get_project_confluence_oauth(project_uuid)
                 if not oauth:
@@ -141,7 +141,7 @@ class ConfluencePageCleanerTimer(Thread):
                 remote_page_ids = self.fetch_remote_page_ids(
                     confluence_api,
                     workspace_id,
-                    space_ids=space_ids,
+                    space_keys=space_keys,
                 )
 
                 confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)

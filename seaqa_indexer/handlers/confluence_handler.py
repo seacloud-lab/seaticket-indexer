@@ -1,6 +1,5 @@
 import datetime
 import json
-import logging
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.index.index_store.confluence_index import ConfluenceIndex
@@ -10,9 +9,6 @@ from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
 from seaqa_indexer.utils.confluence_api import ConfluenceAPI
-
-
-logger = logging.getLogger(__name__)
 
 
 class ConfluenceHandler(ConnectionHandler):
@@ -36,7 +32,7 @@ class ConfluenceHandler(ConnectionHandler):
         connection_config = json.loads(connection.config)
         workspace_url = connection_config.get('workspace_url', '')
         page_id = record.get('page_id') or ''
-        url = f'{workspace_url}/wiki/pages/{page_id}' if workspace_url and page_id else ''
+        url = f'{workspace_url}/wiki/pages/viewpage.action?pageId={page_id}'
         return {
             'title': record.get('title', ''),
             'modified_time': record.get('modified_time', ''),
@@ -132,7 +128,7 @@ class ConfluenceHandler(ConnectionHandler):
 
         confluence_api = ConfluenceAPI(access_token, refresh_token)
         confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
-        space_ids = config.get('space_ids') or []
+        space_keys = config.get('space_keys') or None
         sync_count, total_count = self._sync_confluence(
             connection_id,
             project_uuid,
@@ -141,24 +137,22 @@ class ConfluenceHandler(ConnectionHandler):
             seaqa_db,
             confluence_seadb_api,
             workspace_id,
-            space_ids,
+            space_keys,
         )
 
         return sync_count, total_count, False, config
 
     def _sync_confluence(self, connection_id, project_uuid, connection_status, confluence_api, seaqa_db,
-                         confluence_seadb_api, workspace_id, space_ids=None):
+                         confluence_seadb_api, workspace_id, space_keys=None):
         sync_count = 0
         page_size = 100
         status_last_update_time = datetime.datetime.now()
         status_last_update_count = 0
         user_cache = {}
 
-        # Use the latest local modified_time as the cutoff instead of last_sync_time.
-        # This ensures that if a previous sync failed partway through, the next run
-        # picks up from where the local data left off rather than re-skipping everything.
-        latest_modified_time = confluence_seadb_api.get_latest_modified_time(connection_id)
-        cutoff_time = time_to_utc_time(str(latest_modified_time)) if latest_modified_time else None
+        # CQL server-side filter: only fetch pages modified since the latest local record.
+        # The stored modified_time is already ISO format, suitable for CQL directly.
+        since = confluence_seadb_api.get_latest_modified_time(connection_id)
 
         def _resolve_user(account_id):
             if not account_id:
@@ -167,22 +161,19 @@ class ConfluenceHandler(ConnectionHandler):
                 user_cache[account_id] = confluence_api.get_user_display_name(account_id, workspace_id)
             return user_cache[account_id]
 
-        # Determine the list of space contexts to sync.
-        # If space_ids is empty, sync all pages in the workspace (no filter).
-        space_contexts = space_ids if space_ids else [None]
-
-        for space_id in space_contexts:
+        space_contexts = [None] if space_keys is None else space_keys
+        for space_key in space_contexts:
             cursor = None
             while True:
                 pages, next_cursor, has_more = confluence_api.list_pages(
                     workspace_id,
                     cursor=cursor,
                     limit=page_size,
-                    space_ids=[space_id] if space_id else None,
+                    space_keys=[space_key] if space_key else None,
+                    since=since,
                 )
                 if not pages and not has_more:
                     break
-
                 for page in pages:
                     page_id = page.get('page_id')
                     if not page_id:
@@ -197,14 +188,7 @@ class ConfluenceHandler(ConnectionHandler):
                     else:
                         page['last_modifier'] = _resolve_user(last_modifier_id)
 
-                    # Early break: pages are sorted by -modified-date. If this page is
-                    # older than the latest local modified_time, all remaining pages are
-                    # already synced — stop fetching (same pattern as Notion).
                     page_modified_time = time_to_utc_time(page.get('modified_time'))
-                    if cutoff_time and page_modified_time < cutoff_time:
-                        has_more = False
-                        break
-
                     existed_page = confluence_seadb_api.get_page_by_page_id(page_id, connection_id)
                     if existed_page and existed_page.get('modified_time'):
                         local_modified_time = time_to_utc_time(str(existed_page.get('modified_time')))

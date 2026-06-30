@@ -1,14 +1,11 @@
 import datetime
-import logging
 import re
 import requests
 
 from urllib.parse import parse_qs, urlparse
 
 from seaqa_indexer.config import CONFLUENCE_CLIENT_ID, CONFLUENCE_CLIENT_SECRET
-
-
-logger = logging.getLogger(__name__)
+from seaqa_indexer.utils import time_to_utc_time
 
 
 class ConfluenceAPI:
@@ -27,6 +24,9 @@ class ConfluenceAPI:
             'Authorization': f'Bearer {self.access_token}',
             'Accept': 'application/json',
         }
+
+    def _raise_for_status(self, response, action, context=None):
+        response.raise_for_status()
 
     def refresh_access_token(self):
         """Refresh the Confluence OAuth access token.
@@ -48,7 +48,7 @@ class ConfluenceAPI:
             json=payload,
             timeout=self.timeout,
         )
-        response.raise_for_status()
+        self._raise_for_status(response, 'refresh_access_token')
         data = response.json()
         self.access_token = data.get('access_token')
         new_refresh_token = data.get('refresh_token')
@@ -82,19 +82,21 @@ class ConfluenceAPI:
         return cursor[0] if cursor else None
 
     def _normalize_page(self, page):
-        version = page.get('version') or {}
         body = page.get('body') or {}
         storage_body = body.get('storage') or {}
+        version = page.get('version') or {}
+        history = page.get('history') or {}
+        created_by = history.get('createdBy') or {}
 
         return {
             'page_id': str(page.get('id')),
             'title': page.get('title') or '',
             'content': storage_body.get('value') or '',
-            'created_time': page.get('createdAt'),
-            'modified_time': version.get('createdAt'),
-            'creator': page.get('authorId') or '',
-            'last_modifier': page.get('lastOwnerId') or '',
-            'parent_page_id': str(page.get('parentId')) if page.get('parentId') is not None else '',
+            'created_time': history.get('createdDate'),
+            'modified_time': version.get('when'),
+            'creator': created_by.get('accountId') or '',
+            'last_modifier': (version.get('by') or {}).get('accountId') or '',
+            'parent_page_id': '',
         }
 
     def get_user_display_name(self, account_id, workspace_id):
@@ -106,7 +108,11 @@ class ConfluenceAPI:
         params = {'accountId': account_id}
         try:
             resp = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
-            resp.raise_for_status()
+            self._raise_for_status(
+                resp,
+                'get_user_display_name',
+                context={'workspace_id': workspace_id, 'account_id': account_id},
+            )
             return resp.json().get('displayName')
         except Exception:
             return ''
@@ -118,7 +124,11 @@ class ConfluenceAPI:
             params['cursor'] = cursor
 
         response = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
-        response.raise_for_status()
+        self._raise_for_status(
+            response,
+            'list_spaces',
+            context={'workspace_id': workspace_id, 'cursor': cursor, 'limit': limit},
+        )
         data = response.json()
         results = data.get('results') or []
         spaces = [
@@ -135,27 +145,42 @@ class ConfluenceAPI:
         next_cursor = self._extract_next_cursor(data, response)
         return spaces, next_cursor, bool(next_cursor)
 
-    def list_pages(self, workspace_id, cursor=None, limit=100, space_ids=None):
-        url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/api/v2/pages'
+    def list_pages(self, workspace_id, cursor=None, limit=100, space_keys=None, since=None):
+        # v1 REST API with CQL — supports server-side time filtering via `since`.
+        # `since` is an ISO-format string from SeaDB (e.g. "2025-06-30T10:00:00+00:00").
+        url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/rest/api/content/search'
+        cql_conditions = ['type=page']
+        formatted_since = None
+        if since:
+            formatted_since = time_to_utc_time(str(since)).strftime('%Y/%m/%d %H:%M')
+        if formatted_since:
+            cql_conditions.append(f'lastModified >= "{formatted_since}"')
+        if space_keys:
+            space_clauses = ' or '.join([f'space = "{space_key}"' for space_key in space_keys])
+            cql_conditions.append(f'({space_clauses})')
+        cql = ' and '.join(cql_conditions)
+        cql += ' order by lastModified asc'
         params = {
+            'cql': cql,
+            'expand': 'body.storage,version,history',
             'limit': limit,
-            'body-format': 'storage',
-            'status': 'current',
-            'sort': '-modified-date',
         }
         if cursor:
             params['cursor'] = cursor
-        if space_ids:
-            params['space-id'] = space_ids
-
         response = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
-        response.raise_for_status()
+        request_context = {
+            'workspace_id': workspace_id,
+            'cursor': cursor,
+            'limit': limit,
+            'space_keys': space_keys or [],
+            'since': since,
+            'formatted_since': formatted_since,
+            'cql': cql,
+        }
+
+        self._raise_for_status(response, 'list_pages', context=request_context)
         data = response.json()
         results = data.get('results') or []
-        pages = [
-            self._normalize_page(page)
-            for page in results
-            if page.get('id') is not None
-        ]
+        pages = [self._normalize_page(p) for p in results if p.get('id')]
         next_cursor = self._extract_next_cursor(data, response)
         return pages, next_cursor, bool(next_cursor)
