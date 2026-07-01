@@ -7,6 +7,7 @@ from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.handlers import get_handler
 from seaqa_indexer.syncer.utils import send_connection_sync_result_msg
+from seaqa_indexer.utils.seahub_api import ResponseFormatException
 
 logger = logging.getLogger(__name__)
 
@@ -52,18 +53,15 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     if not old_last_sync_time:
         is_first_sync = True
         send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.CRAWLING)
+    
+    is_sync_success = True
 
     try:
         conn_handler = get_handler(connection_type)
         if not conn_handler:
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             sync_logger.log(f'Unsupported connection type: {connection_type}')
-            connection_status['last_sync_status'] = CrawlStatus.FAILED
-            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-            sync_logger.stop_capture()
-            if is_first_sync:
-                send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.FAILED)
-            return
+            is_sync_success = False
 
         conn_handler.mq = mq
         sync_result = conn_handler.sync(
@@ -75,14 +73,12 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         last_sync_time = datetime.datetime.now(datetime.UTC)
 
         if sync_count is None:
-            connection_status['last_sync_status'] = CrawlStatus.FAILED
-            seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-            sync_logger.stop_capture()
-            if is_first_sync:
-                send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.FAILED)
-            return
-
+            is_sync_success = False
+    except ResponseFormatException:
+        is_sync_success = False
+        sync_logger.log('The connection configuration is incorrect')
     except Exception as e:
+        is_sync_success = False
         logger.exception('connection: %s, sync failed, error: %s', connection_id, e)
         try:
             if len(e.args) > 0:
@@ -114,6 +110,8 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
         except Exception as e:
             logger.error(e)
             sync_logger.log(f'Internal Server Error')
+
+    if not is_sync_success:
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         sync_logger.stop_capture()

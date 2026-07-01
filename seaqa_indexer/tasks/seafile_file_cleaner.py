@@ -7,7 +7,7 @@ from threading import Thread, Event
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils import decrypt_config
-from seaqa_indexer.utils.seahub_api import SeahubAPI
+from seaqa_indexer.utils.seahub_api import SeahubAPI, ResponseFormatException
 from seaqa_indexer.seadb_models.seafile_seadb_api import SeafileSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.constants import ConnectionType, SYNC_FILE_SUFFIXES
@@ -117,6 +117,8 @@ class SeafileFileCleanerTimer(Thread):
                 cleaned_at = datetime.datetime.now(datetime.UTC)
                 self.seaqa_db.update_connection_last_cleaned_at(connection_id, cleaned_at)
                 logger.info('Marked %d local files deleted for connection %s', len(need_deleted_file_ids), connection_id)
+            except ResponseFormatException:
+                logger.warning('Cleaning up Seafile files for connection %s failed because the connection configuration is incorrect.', connection_id)
             except Exception as e:
                 logger.exception('Failed to clean seafile files for connection %s: %s', connection_id, e)
 
