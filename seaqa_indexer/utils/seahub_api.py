@@ -11,6 +11,12 @@ class FileNotFoundException(Exception):
         super().__init__(self.message)
 
 
+class ResponseFormatException(Exception):
+    def __init__(self, message="The response format is not JSON."):
+        self.message = message
+        super().__init__(self.message)
+
+
 def parse_response(response):
     if response.status_code == 400:
         logger.warning('seahub error: %s', response.text)
@@ -21,7 +27,7 @@ def parse_response(response):
         try:
             return json.loads(response.text)
         except:
-            pass
+            raise ResponseFormatException()
 
 
 class SeahubAPI(object):
