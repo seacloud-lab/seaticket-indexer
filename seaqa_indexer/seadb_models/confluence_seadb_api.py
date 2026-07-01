@@ -54,6 +54,8 @@ class ConfluenceSeaDBAPI:
             SchemaTables.CONFLUENCE.column.page_id.name: confluence_page.get('page_id'),
             SchemaTables.CONFLUENCE.column.parent_page_id.name: confluence_page.get('parent_page_id'),
             SchemaTables.CONFLUENCE.column.deleted.name: bool(confluence_page.get('deleted', False)),
+            SchemaTables.CONFLUENCE.column.state.name: confluence_page.get('state') or '',
+            SchemaTables.CONFLUENCE.column.labels.name: confluence_page.get('labels') or [],
         }
 
         table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
@@ -70,7 +72,7 @@ class ConfluenceSeaDBAPI:
 
     def get_page_by_page_id(self, page_id, connection_id):
         table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
-        sql = f"SELECT `_pk`, `modified_time`, `deleted` FROM `{table_name}` WHERE page_id='{page_id}'"
+        sql = f"SELECT `_pk`, `modified_time`, `deleted`, `state` FROM `{table_name}` WHERE page_id='{page_id}'"
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
@@ -159,3 +161,42 @@ class ConfluenceSeaDBAPI:
 
         if updates:
             self.seadb_api.update_rows(self.base_id, table_name, updates)
+
+    def get_table_metadata(self, connection_id):
+        table_name = SchemaTables.CONFLUENCE.table_name(connection_id=connection_id)
+        metadata = self.seadb_api.get_base_metadata(self.base_id)
+        for table in metadata.get('tables', []):
+            if table['name'] == table_name:
+                return table
+        return None
+
+    def ensure_label_column_options(self, labels, table_info):
+        """Ensure all label names exist as column options.
+        Labels is a list of name strings (e.g. ['label-a', 'label-b'])."""
+        if not labels or not table_info:
+            return
+
+        table_id = table_info.get('id')
+        columns = table_info.get('columns', [])
+        label_column = {}
+        for column in columns:
+            if column.get('name') == SchemaTables.CONFLUENCE.column.labels.name:
+                label_column = column
+                break
+        if not label_column:
+            return
+
+        existing_names = set()
+        if label_column.get('data'):
+            for option in (label_column['data'].get('options') or []):
+                existing_names.add(option.get('name'))
+
+        column_key = label_column.get('key')
+        for label_name in labels:
+            if label_name not in existing_names:
+                self.seadb_api.add_column_option(self.base_id, {
+                    'table_id': table_id,
+                    'column_key': column_key,
+                    'option_name': label_name,
+                })
+                existing_names.add(label_name)

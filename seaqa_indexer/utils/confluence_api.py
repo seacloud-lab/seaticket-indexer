@@ -9,10 +9,10 @@ from seaqa_indexer.utils import time_to_utc_time
 
 
 class ConfluenceAPI:
-    def __init__(self, access_token, refresh_token=None, timeout=60):
+    def __init__(self, access_token, refresh_token=None, expires_at=None, timeout=60):
         self.access_token = access_token
         self.refresh_token = refresh_token
-        self.expires_at = None
+        self.expires_at = expires_at
         self.client_id = CONFLUENCE_CLIENT_ID
         self.client_secret = CONFLUENCE_CLIENT_SECRET
         self.timeout = timeout
@@ -87,6 +87,9 @@ class ConfluenceAPI:
         version = page.get('version') or {}
         history = page.get('history') or {}
         created_by = history.get('createdBy') or {}
+        metadata = page.get('metadata') or {}
+        labels_data = (metadata.get('labels') or {}).get('results') or []
+        labels = [lb.get('name') for lb in labels_data if lb.get('name')]
 
         return {
             'page_id': str(page.get('id')),
@@ -97,6 +100,8 @@ class ConfluenceAPI:
             'creator': created_by.get('accountId') or '',
             'last_modifier': (version.get('by') or {}).get('accountId') or '',
             'parent_page_id': '',
+            'state': page.get('status') or '',
+            'labels': labels,
         }
 
     def get_user_display_name(self, account_id, workspace_id):
@@ -162,7 +167,7 @@ class ConfluenceAPI:
         cql += ' order by lastModified asc'
         params = {
             'cql': cql,
-            'expand': 'body.storage,version,history',
+            'expand': 'body.storage,version,history,metadata.labels',
             'limit': limit,
         }
         if cursor:

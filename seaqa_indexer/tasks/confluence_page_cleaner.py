@@ -45,13 +45,25 @@ class ConfluencePageCleanerTimer(Thread):
         self.check_days = check_days
         self.page_size = 100
 
-    def fetch_remote_page_ids(self, confluence_api, workspace_id, space_keys=None):
+    def fetch_remote_page_ids(self, confluence_api, workspace_id, project_uuid, space_keys=None):
         page_ids = set()
         space_contexts = [None] if space_keys is None else space_keys
 
         for space_key in space_contexts:
             cursor = None
             while True:
+                # Check token freshness before each API request to avoid mid-sync expiry
+                now = datetime.datetime.now(datetime.UTC)
+                if not confluence_api.expires_at or time_to_utc_time(str(confluence_api.expires_at)) <= now + datetime.timedelta(seconds=60):
+                    logger.info('Confluence access token near expiry, refreshing during page fetch')
+                    new_tokens = confluence_api.refresh_access_token()
+                    self.seaqa_db.update_project_confluence_oauth(
+                        project_uuid,
+                        new_tokens['access_token'],
+                        new_tokens['expires_at'],
+                        new_tokens['refresh_token'],
+                    )
+
                 pages, next_cursor, has_more = confluence_api.list_pages(
                     workspace_id,
                     cursor=cursor,
@@ -122,25 +134,16 @@ class ConfluencePageCleanerTimer(Thread):
                     logger.warning('Confluence access_token missing for project %s', project_uuid)
                     continue
 
-                # Proactively refresh if token is expired or within 60s of expiry
-                now = datetime.datetime.now(datetime.UTC)
-                if not expires_at or time_to_utc_time(str(expires_at)) <= now + datetime.timedelta(seconds=60):
-                    logger.info('Confluence access token near expiry, refreshing for connection %s', connection_id)
-                    confluence_api = ConfluenceAPI(access_token, refresh_token)
-                    new_tokens = confluence_api.refresh_access_token()
-                    access_token = new_tokens['access_token']
-                    refresh_token = new_tokens['refresh_token']
-                    expires_at = new_tokens['expires_at']
-                    self.seaqa_db.update_project_confluence_oauth(project_uuid, access_token, expires_at, refresh_token)
-
                 confluence_api = ConfluenceAPI(
                     access_token=access_token,
                     refresh_token=refresh_token,
+                    expires_at=expires_at,
                 )
 
                 remote_page_ids = self.fetch_remote_page_ids(
                     confluence_api,
                     workspace_id,
+                    project_uuid,
                     space_keys=space_keys,
                 )
 

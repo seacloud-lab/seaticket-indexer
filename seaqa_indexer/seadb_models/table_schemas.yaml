@@ -970,6 +970,28 @@ tables:
         column_type: text
       last_modifier:
         column_type: text
+      state:
+        column_type: single-select
+        column_data:
+          options:
+          - id: current
+            name: current
+            color: '#1A7F37'
+            text_color: '#FFFFFF'
+          - id: archived
+            name: archived
+            color: '#8250DF'
+            text_color: '#FFFFFF'
+          - id: draft
+            name: draft
+            color: '#59636E'
+            text_color: '#FFFFFF'
+          - id: trashed
+            name: trashed
+            color: '#CF222E'
+            text_color: '#FFFFFF'
+      labels:
+        column_type: multiple-select
       created_time:
         column_type: datetime
       modified_time:
@@ -997,4 +1019,6 @@ tables:
     - - created_time
     - - record_modified_time
     - - deleted
+    - - sync_time
+    - - ai_processed_time
     table_name: confluence_{connection_id}

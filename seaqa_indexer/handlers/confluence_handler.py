@@ -149,6 +149,7 @@ class ConfluenceHandler(ConnectionHandler):
         status_last_update_time = datetime.datetime.now()
         status_last_update_count = 0
         user_cache = {}
+        table_info = None  # lazily loaded for label option sync
 
         # CQL server-side filter: only fetch pages modified since the latest local record.
         # The stored modified_time is already ISO format, suitable for CQL directly.
@@ -160,6 +161,14 @@ class ConfluenceHandler(ConnectionHandler):
             if account_id not in user_cache:
                 user_cache[account_id] = confluence_api.get_user_display_name(account_id, workspace_id)
             return user_cache[account_id]
+
+        def _ensure_labels(labels):
+            nonlocal table_info
+            if not labels:
+                return
+            if table_info is None:
+                table_info = confluence_seadb_api.get_table_metadata(connection_id)
+            confluence_seadb_api.ensure_label_column_options(labels, table_info)
 
         space_contexts = [None] if space_keys is None else space_keys
         for space_key in space_contexts:
@@ -195,6 +204,9 @@ class ConfluenceHandler(ConnectionHandler):
                         if page_modified_time <= local_modified_time:
                             continue
 
+                    # Ensure label options exist before saving (same pattern as GitHub option sync)
+                    _ensure_labels(page.get('labels') or [])
+
                     confluence_seadb_api.save_or_update_page_to_db(connection_id, page, existed_page)
                     sync_count += 1
                     state_event_type = DataEventType.CONFLUENCE_PAGE_UPDATED.value if existed_page else DataEventType.CONFLUENCE_PAGE_ADDED.value
@@ -206,6 +218,7 @@ class ConfluenceHandler(ConnectionHandler):
                         item_id=page_id,
                         old_row=existed_page or None,
                         state_event_type=state_event_type,
+                        state_event_ignored_fields=('modified_time', 'record_modified_time', 'sync_time'),
                         log_object_name='confluence page',
                     )
 
