@@ -95,7 +95,6 @@ MYSQL_UNIX_SOCKET = os.getenv('WEB_CRAWLER_MYSQL_UNIX_SOCKET', '')
 
 # SeaDB Configuration
 SEADB_SERVER_URL = configs.get('SEADB_SERVER_URL', 'http://seadb:8888')
-SEADB_SERVER_ACCESS_TOKEN = configs.get('SEADB_SERVER_ACCESS_TOKEN', '')
 
 # SeaQA AI
 SEAQA_AI_INNER_SERVER_URL = configs.get('SEAQA_AI_INNER_SERVER_URL', 'http://seaqa-ai:8887')
@@ -149,6 +148,9 @@ GITHUB_APP_ID = configs.get('GITHUB_APP_ID', '')
 GITHUB_PRIVATE_KEY_PATH = configs.get('GITHUB_PRIVATE_KEY_PATH', '')
 LINEAR_CLIENT_ID = configs.get('LINEAR_CLIENT_ID')
 LINEAR_CLIENT_SECRET = configs.get('LINEAR_CLIENT_SECRET')
+
+SEADB_USER = configs.get('SEADB_USER', '')
+SEADB_PASSWORD = configs.get('SEADB_PASSWORD', '')
 
 try:
     with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:
