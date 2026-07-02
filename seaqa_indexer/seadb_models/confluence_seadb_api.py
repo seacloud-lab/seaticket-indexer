@@ -89,7 +89,7 @@ class ConfluenceSeaDBAPI:
         table_name = SchemaTables.CONFLUENCE.table_name(connection_id)
         sql = f"""
             SELECT `_pk`, `title`, `content` FROM `{table_name}`
-            WHERE (ai_processed_time IS NULL OR ai_processed_time < sync_time)
+            WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time)
               AND (deleted IS NULL OR deleted = false)
             ORDER BY `_pk`
             LIMIT {page_size}
