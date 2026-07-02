@@ -87,9 +87,6 @@ class ConfluenceAPI:
         version = page.get('version') or {}
         history = page.get('history') or {}
         created_by = history.get('createdBy') or {}
-        metadata = page.get('metadata') or {}
-        labels_data = (metadata.get('labels') or {}).get('results') or []
-        labels = [lb.get('name') for lb in labels_data if lb.get('name')]
 
         return {
             'page_id': str(page.get('id')),
@@ -100,8 +97,6 @@ class ConfluenceAPI:
             'creator': created_by.get('accountId') or '',
             'last_modifier': (version.get('by') or {}).get('accountId') or '',
             'parent_page_id': '',
-            'state': page.get('status') or '',
-            'labels': labels,
         }
 
     def get_user_display_name(self, account_id, workspace_id):
@@ -167,7 +162,7 @@ class ConfluenceAPI:
         cql += ' order by lastModified asc'
         params = {
             'cql': cql,
-            'expand': 'body.storage,version,history,metadata.labels',
+            'expand': 'body.storage,version,history',
             'limit': limit,
         }
         if cursor:
