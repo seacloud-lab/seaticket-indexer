@@ -8,7 +8,7 @@ from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
-from seaqa_indexer.utils.confluence_api import ConfluenceAPI
+from seaqa_indexer.utils.confluence_api import ConfluenceAPI, ConfluenceUserNotFoundException
 
 
 class ConfluenceHandler(ConnectionHandler):
@@ -157,7 +157,10 @@ class ConfluenceHandler(ConnectionHandler):
             if not account_id:
                 return ''
             if account_id not in user_cache:
-                user_cache[account_id] = confluence_api.get_user_display_name(account_id, workspace_id)
+                try:
+                    user_cache[account_id] = confluence_api.get_user_display_name(account_id, workspace_id)
+                except ConfluenceUserNotFoundException:
+                    user_cache[account_id] = ''
             return user_cache[account_id]
 
         space_contexts = [None] if space_keys is None else space_keys

@@ -8,6 +8,10 @@ from seaqa_indexer.config import CONFLUENCE_CLIENT_ID, CONFLUENCE_CLIENT_SECRET
 from seaqa_indexer.utils import time_to_utc_time
 
 
+class ConfluenceUserNotFoundException(Exception):
+    pass
+
+
 class ConfluenceAPI:
     def __init__(self, access_token, refresh_token=None, expires_at=None, timeout=60):
         self.access_token = access_token
@@ -24,9 +28,6 @@ class ConfluenceAPI:
             'Authorization': f'Bearer {self.access_token}',
             'Accept': 'application/json',
         }
-
-    def _raise_for_status(self, response, action, context=None):
-        response.raise_for_status()
 
     def refresh_access_token(self):
         """Refresh the Confluence OAuth access token.
@@ -48,7 +49,7 @@ class ConfluenceAPI:
             json=payload,
             timeout=self.timeout,
         )
-        self._raise_for_status(response, 'refresh_access_token')
+        response.raise_for_status()
         data = response.json()
         self.access_token = data.get('access_token')
         new_refresh_token = data.get('refresh_token')
@@ -106,16 +107,11 @@ class ConfluenceAPI:
             return ''
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/rest/api/user'
         params = {'accountId': account_id}
-        try:
-            resp = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
-            self._raise_for_status(
-                resp,
-                'get_user_display_name',
-                context={'workspace_id': workspace_id, 'account_id': account_id},
-            )
-            return resp.json().get('displayName')
-        except Exception:
-            return ''
+        resp = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
+        if resp.status_code == 404:
+            raise ConfluenceUserNotFoundException()
+        resp.raise_for_status()
+        return resp.json().get('displayName') or ''
 
     def list_spaces(self, workspace_id, cursor=None, limit=100):
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/api/v2/spaces'
@@ -124,11 +120,7 @@ class ConfluenceAPI:
             params['cursor'] = cursor
 
         response = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
-        self._raise_for_status(
-            response,
-            'list_spaces',
-            context={'workspace_id': workspace_id, 'cursor': cursor, 'limit': limit},
-        )
+        response.raise_for_status()
         data = response.json()
         results = data.get('results') or []
         spaces = [
@@ -168,17 +160,7 @@ class ConfluenceAPI:
         if cursor:
             params['cursor'] = cursor
         response = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
-        request_context = {
-            'workspace_id': workspace_id,
-            'cursor': cursor,
-            'limit': limit,
-            'space_keys': space_keys or [],
-            'since': since,
-            'formatted_since': formatted_since,
-            'cql': cql,
-        }
-
-        self._raise_for_status(response, 'list_pages', context=request_context)
+        response.raise_for_status()
         data = response.json()
         results = data.get('results') or []
         pages = [self._normalize_page(p) for p in results if p.get('id')]
