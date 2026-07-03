@@ -31,6 +31,7 @@ class ConnectionType(Enum):
     SEAFILE = 'seafile'
     NOTION = 'notion'
     LINEAR = 'linear'
+    CONFLUENCE = 'confluence'
 
     @classmethod
     def is_valid(cls, value):
@@ -73,6 +74,8 @@ class DataEventType(Enum):
     EMAIL_MESSAGE_ADDED = 'email_message_added'
     GENERAL_TASK_ADDED = 'general_task_added'
     GENERAL_TASK_UPDATED = 'general_task_updated'
+    CONFLUENCE_PAGE_ADDED = 'confluence_page_added'
+    CONFLUENCE_PAGE_UPDATED = 'confluence_page_updated'
 
     @classmethod
     def is_valid(cls, value):

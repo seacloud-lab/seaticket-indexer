@@ -181,7 +181,7 @@ class EmailSeaDBAPI:
         thread_table_name = SchemaTables.THREAD.table_name(connection_id=connection_id)
         sql = f"""
             SELECT `_pk`, `title` FROM `{thread_table_name}`
-            WHERE (ai_processed_time IS NULL OR ai_processed_time < modified_time) 
+            WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time) 
             AND (deleted IS NULL OR deleted = false)
             LIMIT {page_size}
         """

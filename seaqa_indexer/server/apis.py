@@ -56,7 +56,7 @@ def add_connection_sync_task():
         application.app.web_crawl_manager.add_crawl_site_task(connection_id)
     elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
                        ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value, ConnectionType.NOTION.value,
-                       ConnectionType.GENERAL_TASK.value, ConnectionType.LINEAR.value):
+                       ConnectionType.GENERAL_TASK.value, ConnectionType.LINEAR.value, ConnectionType.CONFLUENCE.value):
         application.app.sync_manager.check_and_sync(connection_id)
     else:
         return jsonify({'success': False, 'error_msg': f'Unsupported type: {connection_type}'}), 400
@@ -133,7 +133,7 @@ def manual_sync_connection():
             application.app.web_crawl_manager.add_crawl_site_task(connection_id)
         elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
                                  ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value, ConnectionType.NOTION.value,
-                                 ConnectionType.GENERAL_TASK.value, ConnectionType.LINEAR.value):
+                                 ConnectionType.GENERAL_TASK.value, ConnectionType.LINEAR.value, ConnectionType.CONFLUENCE.value):
             application.app.sync_manager.check_and_sync(connection_id)
         else:
             return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
@@ -182,6 +182,29 @@ def github_webhook():
         return jsonify({'error_msg': 'Internal Server Error'}), 500
 
     return jsonify({'success': True}), 200
+
+
+@application.route('/webhook/confluence/', methods=['POST'])
+@auth_required
+def confluence_webhook():
+    try:
+        data = request.get_json(force=True)
+    except Exception as e:
+        logger.exception(e)
+        return {'error_msg': 'Bad request.'}, 400
+
+    workspace_id = data.get('workspace_id')
+    if not workspace_id:
+        return jsonify({'error_msg': 'Missing workspace_id parameter'}), 400
+
+    try:
+        application.app.sync_manager.handle_confluence_webhook(workspace_id)
+    except Exception as e:
+        logger.error('Confluence webhook error: %s', e)
+        return jsonify({'error_msg': 'Internal Server Error'}), 500
+
+    return jsonify({'success': True}), 200
+
 
 @application.route('/search/keyword', methods=['POST'])
 @auth_required
