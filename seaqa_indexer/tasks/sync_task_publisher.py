@@ -23,6 +23,7 @@ SYNC_CONNECTION_TYPES = [
     ConnectionType.NOTION.value,
     ConnectionType.CONFLUENCE.value,
     ConnectionType.GENERAL_TASK.value,
+    ConnectionType.DISCORD.value,
 ]
 
 

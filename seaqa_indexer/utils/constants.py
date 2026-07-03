@@ -32,6 +32,7 @@ class ConnectionType(Enum):
     NOTION = 'notion'
     LINEAR = 'linear'
     CONFLUENCE = 'confluence'
+    DISCORD = 'discord'
 
     @classmethod
     def is_valid(cls, value):
@@ -76,6 +77,8 @@ class DataEventType(Enum):
     GENERAL_TASK_UPDATED = 'general_task_updated'
     CONFLUENCE_PAGE_ADDED = 'confluence_page_added'
     CONFLUENCE_PAGE_UPDATED = 'confluence_page_updated'
+    DISCORD_MESSAGE_ADDED = 'discord_message_added'
+    DISCORD_MESSAGE_UPDATED = 'discord_message_updated'
 
     @classmethod
     def is_valid(cls, value):
