@@ -1039,6 +1039,9 @@ tables:
     indexes:
     - - message_id
     - - channel_id
+    - - created_time
+    - - modified_time
+    - - sync_time
     - - deleted
     - - linked_ticket
     - - ai_processed_time

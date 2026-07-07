@@ -12,7 +12,6 @@ from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.discord_index import DiscordIndex
 from seaqa_indexer.utils.constants import DataEventType
-from seaqa_indexer.config import DISCORD_BOT_TOKEN
 
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -120,7 +119,7 @@ class DiscordHandler(ConnectionHandler):
         # SYNC_SELECT fields store the full option object; extract the raw value
         if isinstance(channel_id, dict):
             channel_id = channel_id.get('value', '')
-        bot_token = DISCORD_BOT_TOKEN
+        bot_token = config.get('bot_token', '')
 
         if not bot_token:
             logger.error(f'Discord bot_token is not configured in settings for connection {connection_id}')
@@ -205,6 +204,12 @@ class DiscordHandler(ConnectionHandler):
                 break
 
             for msg_data in messages:
+                # Skip non-DEFAULT messages (system messages like type 18 THREAD_CREATED
+                # that Discord inserts when a thread is created — these have no user content
+                # but may reference the same thread, causing duplicate records).
+                if msg_data.get('type', 0) != 0:
+                    continue
+
                 message_timestamp = msg_data.get('edited_timestamp') or msg_data.get('timestamp')
                 if message_timestamp:
                     message_time = time_to_utc_time(message_timestamp)
@@ -226,8 +231,11 @@ class DiscordHandler(ConnectionHandler):
                         logger.debug(f'Message {message_id} is up to date, skipping sync.')
                         continue
 
-                # Enrich msg_data with channel_id for storage
+                # Enrich msg_data with channel_id and thread title for storage
                 msg_data['channel_id'] = channel_id
+                thread = msg_data.get('thread')
+                if thread and thread.get('name'):
+                    msg_data['title'] = thread['name']
 
                 message_state_event_type = (
                     DataEventType.DISCORD_MESSAGE_UPDATED.value
@@ -243,14 +251,14 @@ class DiscordHandler(ConnectionHandler):
                     added_count += 1
 
                 # If the message has a thread, sync thread replies
-                thread = msg_data.get('thread')
                 if thread:
                     thread_id = thread.get('id')
                     if thread_id:
                         thread_messages = discord_api.fetch_thread_messages(channel_id, thread_id)
-                        added_replies = discord_seadb_api.update_message_replies(
-                            connection_id, message_id, thread_messages
-                        )
+                        if thread_messages:
+                            added_replies = discord_seadb_api.update_message_replies(
+                                connection_id, message_id, thread_messages
+                            )
 
                 sync_count += 1
                 should, new_time, new_count = need_update_connection_last_sync_count(

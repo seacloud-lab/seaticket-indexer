@@ -204,8 +204,11 @@ class DiscordSeaDBAPI:
                 break
             offset += page_size
 
-        # Insert or update each incoming reply
+        # Insert or update each incoming reply (skip non-DEFAULT messages,
+        # e.g. type 21 THREAD_STARTER_MESSAGE which Discord's UI hides)
         for reply in replies:
+            if reply.get('type', 0) != 0:
+                continue
             rid = reply.get('id')
             new_reply_ids.add(rid)
 
