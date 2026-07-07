@@ -11,6 +11,7 @@ from seaqa_indexer.tasks.sync_task_publisher import SyncTaskPublisher
 from seaqa_indexer.tasks.notion_page_cleaner import NotionPageCleaner
 from seaqa_indexer.tasks.seafile_file_cleaner import SeafileFileCleaner
 from seaqa_indexer.tasks.confluence_page_cleaner import ConfluencePageCleaner
+from seaqa_indexer.tasks.discord_message_cleaner import DiscordMessageCleaner
 from seaqa_indexer.tasks.deleted_records_cleaner import DeletedRecordsCleaner
 from seaqa_indexer.tasks.github_options_syncer import GithubOptionsSyncer
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
@@ -42,6 +43,7 @@ class SeaqaIndexerApp(object):
         self.linear_issues_cleaner = LinearIssuesCleaner()
         self.confluence_page_cleaner = ConfluencePageCleaner()
         self.github_options_syncer = GithubOptionsSyncer()
+        self.discord_message_cleaner = DiscordMessageCleaner()
 
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
 
@@ -69,6 +71,7 @@ class SeaqaIndexerApp(object):
         self.linear_issues_cleaner.start()
         self.confluence_page_cleaner.start()
         self.github_options_syncer.start()
+        self.discord_message_cleaner.start()
         self.http_server.start()
 
     def _start_worker_monitor(self):

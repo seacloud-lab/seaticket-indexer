@@ -130,6 +130,24 @@ class DiscordSeaDBAPI:
             count = result['results'][0].get('count', 0)
         return count
 
+    def get_message_ids_by_page(self, connection_id, page_size, offset):
+        """Get message IDs for pagination (used by cleanup to compare local vs remote)."""
+        table_name = SchemaTables.DISCORD_MESSAGES.table_name(connection_id=connection_id)
+        sql = f"""SELECT `message_id` FROM `{table_name}`
+                WHERE deleted = false OR deleted IS NULL
+                LIMIT {page_size} OFFSET {offset}"""
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        return response.get('results', [])
+
+    def mark_message_deleted(self, connection_id, message_id):
+        """Soft-delete a message by message_id without needing _pk lookup."""
+        table_name = SchemaTables.DISCORD_MESSAGES.table_name(connection_id=connection_id)
+        sql = f"""UPDATE `{table_name}` SET deleted = true,
+                sync_time = '{datetime.datetime.now(datetime.UTC).isoformat()}',
+                record_modified_time = '{datetime.datetime.now(datetime.UTC).isoformat()}'
+                WHERE message_id = {int(message_id)} AND (deleted = false OR deleted IS NULL)"""
+        return self.seadb_api.query_rows(self.base_id, sql)
+
     # ---- Replies (thread messages) ----
 
     def insert_reply(self, connection_id, message_id, reply_data):
