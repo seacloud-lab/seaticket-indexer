@@ -272,9 +272,11 @@ class DiscordHandler(ConnectionHandler):
                         synced_thread_ids.add(thread_id)
                         thread_messages = discord_api.fetch_thread_messages(channel_id, thread_id)
                         if thread_messages:
-                            added_replies = discord_seadb_api.update_message_replies(
+                            reply_result = discord_seadb_api.update_message_replies(
                                 connection_id, message_id, thread_messages
                             )
+                            if reply_result['added'] + reply_result['updated'] + reply_result['deleted'] > 0:
+                                message_changed = True
 
                 if message_changed:
                     sync_count += 1
@@ -329,9 +331,11 @@ class DiscordHandler(ConnectionHandler):
                         continue
                 thread_messages = discord_api.fetch_thread_messages(channel_id, thread_id)
                 if thread_messages:
-                    discord_seadb_api.update_message_replies(
+                    reply_result = discord_seadb_api.update_message_replies(
                         connection_id, thread_id, thread_messages
                     )
+                    if reply_result['added'] + reply_result['updated'] + reply_result['deleted'] > 0:
+                        sync_count += 1
         except Exception as e:
             logger.warning('Failed to sync active threads for channel %s: %s', channel_id, e)
 
@@ -452,9 +456,11 @@ class DiscordHandler(ConnectionHandler):
                 # — they can change even when the opening post hasn't been edited
                 reply_messages = thread_messages[:-1] if len(thread_messages) > 1 else []
                 if reply_messages:
-                    discord_seadb_api.update_message_replies(
+                    reply_result = discord_seadb_api.update_message_replies(
                         connection_id, thread_id, reply_messages
                     )
+                    if reply_result['added'] + reply_result['updated'] + reply_result['deleted'] > 0 and not record_changed:
+                        sync_count += 1
 
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count

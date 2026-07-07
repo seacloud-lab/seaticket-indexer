@@ -224,6 +224,7 @@ class DiscordSeaDBAPI:
 
         # Insert or update each incoming reply (skip non-DEFAULT messages,
         # e.g. type 21 THREAD_STARTER_MESSAGE which Discord's UI hides)
+        reply_updated_count = 0
         for reply in replies:
             if reply.get('type', 0) != 0:
                 continue
@@ -233,6 +234,7 @@ class DiscordSeaDBAPI:
             pk = reply_id_to_pk.get(rid)
             if pk:
                 self.update_reply(connection_id, pk, message_id, reply)
+                reply_updated_count += 1
             else:
                 self.insert_reply(connection_id, message_id, reply)
                 added_replies.append({
@@ -249,7 +251,12 @@ class DiscordSeaDBAPI:
         for rid in need_deleted_reply_ids:
             self.delete_reply_from_db(connection_id, message_id, rid)
 
-        return added_replies
+        return {
+            'added': len(added_replies),
+            'updated': reply_updated_count,
+            'deleted': len(need_deleted_reply_ids),
+            'added_replies': added_replies,
+        }
 
     def get_message_replies_by_page(self, connection_id, message_id, page_size, offset):
         table_name = SchemaTables.DISCORD_MESSAGE_REPLIES.table_name(connection_id=connection_id)
