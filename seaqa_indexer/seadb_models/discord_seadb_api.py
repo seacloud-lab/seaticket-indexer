@@ -52,8 +52,8 @@ class DiscordSeaDBAPI:
             content = content[:MAX_CONTENT_LENGTH]
 
         rows = [{
-            SchemaTables.DISCORD_MESSAGES.column.message_id.name: int(message_id),
-            SchemaTables.DISCORD_MESSAGES.column.channel_id.name: int(channel_id),
+            SchemaTables.DISCORD_MESSAGES.column.message_id.name: str(message_id),
+            SchemaTables.DISCORD_MESSAGES.column.channel_id.name: str(channel_id),
             SchemaTables.DISCORD_MESSAGES.column.title.name: title,
             SchemaTables.DISCORD_MESSAGES.column.author.name: author,
             SchemaTables.DISCORD_MESSAGES.column.content.name: content,
@@ -97,7 +97,7 @@ class DiscordSeaDBAPI:
         sql = f"""SELECT `_pk`, `message_id`, `channel_id`, `author`, `content`,
                 `created_time`, `modified_time`, `deleted`, `outdated`,
                 `record_modified_time`, `sync_time`, `ai_processed_time`
-                FROM `{table_name}` WHERE `message_id` = {int(message_id)}"""
+                FROM `{table_name}` WHERE `message_id` = '{message_id}'"""
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
@@ -145,7 +145,7 @@ class DiscordSeaDBAPI:
         sql = f"""UPDATE `{table_name}` SET deleted = true,
                 sync_time = '{datetime.datetime.now(datetime.UTC).isoformat()}',
                 record_modified_time = '{datetime.datetime.now(datetime.UTC).isoformat()}'
-                WHERE message_id = {int(message_id)} AND (deleted = false OR deleted IS NULL)"""
+                WHERE message_id = '{message_id}' AND (deleted = false OR deleted IS NULL)"""
         return self.seadb_api.query_rows(self.base_id, sql)
 
     # ---- Replies (thread messages) ----
@@ -164,8 +164,8 @@ class DiscordSeaDBAPI:
             content = content[:MAX_CONTENT_LENGTH]
 
         rows = [{
-            SchemaTables.DISCORD_MESSAGE_REPLIES.column.message_id.name: int(message_id),
-            SchemaTables.DISCORD_MESSAGE_REPLIES.column.reply_id.name: int(reply_id),
+            SchemaTables.DISCORD_MESSAGE_REPLIES.column.message_id.name: str(message_id),
+            SchemaTables.DISCORD_MESSAGE_REPLIES.column.reply_id.name: str(reply_id),
             SchemaTables.DISCORD_MESSAGE_REPLIES.column.author.name: author,
             SchemaTables.DISCORD_MESSAGE_REPLIES.column.content.name: content,
             SchemaTables.DISCORD_MESSAGE_REPLIES.column.created_time.name: time_to_utc_time(created_time).isoformat(),
@@ -191,8 +191,8 @@ class DiscordSeaDBAPI:
             "row": {
                 SchemaTables.DISCORD_MESSAGE_REPLIES.column.author.name: author,
                 SchemaTables.DISCORD_MESSAGE_REPLIES.column.content.name: content,
-                SchemaTables.DISCORD_MESSAGE_REPLIES.column.message_id.name: int(message_id),
-                SchemaTables.DISCORD_MESSAGE_REPLIES.column.reply_id.name: int(reply_id),
+                SchemaTables.DISCORD_MESSAGE_REPLIES.column.message_id.name: str(message_id),
+                SchemaTables.DISCORD_MESSAGE_REPLIES.column.reply_id.name: str(reply_id),
                 SchemaTables.DISCORD_MESSAGE_REPLIES.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
             }
         }]
@@ -254,13 +254,13 @@ class DiscordSeaDBAPI:
     def get_message_replies_by_page(self, connection_id, message_id, page_size, offset):
         table_name = SchemaTables.DISCORD_MESSAGE_REPLIES.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `reply_id`, `content` FROM `{table_name}`
-                WHERE message_id = {int(message_id)} LIMIT {page_size} OFFSET {offset}"""
+                WHERE message_id = '{message_id}' LIMIT {page_size} OFFSET {offset}"""
         replies = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return replies
 
     def delete_reply_from_db(self, connection_id, message_id, reply_id):
         table_name = SchemaTables.DISCORD_MESSAGE_REPLIES.table_name(connection_id=connection_id)
-        sql = f"DELETE FROM `{table_name}` WHERE message_id = {int(message_id)} AND reply_id = {int(reply_id)}"
+        sql = f"DELETE FROM `{table_name}` WHERE message_id = '{message_id}' AND reply_id = '{reply_id}'"
         return self.seadb_api.query_rows(self.base_id, sql)
 
     def get_messages_by_page(self, connection_id, since, page_size, offset):
@@ -280,7 +280,7 @@ class DiscordSeaDBAPI:
         all_content = ''
         while True:
             sql = f"""SELECT `content` FROM `{table_name}`
-                    WHERE message_id = {int(message_id)} LIMIT {page_size} OFFSET {offset}"""
+                    WHERE message_id = '{message_id}' LIMIT {page_size} OFFSET {offset}"""
             results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
             if not results:
                 break

@@ -1003,9 +1003,9 @@ tables:
   DiscordMessagesTable:
     columns:
       message_id:
-        column_type: int64
+        column_type: text
       channel_id:
-        column_type: int64
+        column_type: text
       title:
         column_type: text
       author:
@@ -1035,7 +1035,7 @@ tables:
         column_data:
           list_type: float32
       linked_ticket:
-        column_type: int64
+        column_type: text
     indexes:
     - - message_id
     - - channel_id
@@ -1050,9 +1050,9 @@ tables:
   DiscordMessageRepliesTable:
     columns:
       message_id:
-        column_type: int64
+        column_type: text
       reply_id:
-        column_type: int64
+        column_type: text
       author:
         column_type: text
       content:
