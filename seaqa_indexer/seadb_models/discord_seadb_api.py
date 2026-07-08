@@ -40,7 +40,7 @@ class DiscordSeaDBAPI:
         table_name = SchemaTables.DISCORD_MESSAGES.table_name(connection_id=connection_id)
 
         message_id = message_data.get('id')
-        channel_id = message_data.get('channel_id')
+        thread_id = message_data.get('thread_id')
         author = self._extract_author(message_data)
         content = message_data.get('content', '') or ''
         created_time = message_data.get('timestamp')
@@ -53,7 +53,7 @@ class DiscordSeaDBAPI:
 
         rows = [{
             SchemaTables.DISCORD_MESSAGES.column.message_id.name: str(message_id),
-            SchemaTables.DISCORD_MESSAGES.column.channel_id.name: str(channel_id),
+            SchemaTables.DISCORD_MESSAGES.column.thread_id.name: str(thread_id) if thread_id else '',
             SchemaTables.DISCORD_MESSAGES.column.title.name: title,
             SchemaTables.DISCORD_MESSAGES.column.author.name: author,
             SchemaTables.DISCORD_MESSAGES.column.content.name: content,
@@ -94,10 +94,22 @@ class DiscordSeaDBAPI:
 
     def get_message_by_message_id(self, connection_id, message_id):
         table_name = SchemaTables.DISCORD_MESSAGES.table_name(connection_id=connection_id)
-        sql = f"""SELECT `_pk`, `message_id`, `channel_id`, `author`, `content`,
+        sql = f"""SELECT `_pk`, `message_id`, `thread_id`, `author`, `content`,
                 `created_time`, `modified_time`, `deleted`, `outdated`,
                 `record_modified_time`, `sync_time`, `ai_processed_time`
                 FROM `{table_name}` WHERE `message_id` = '{message_id}'"""
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        if response and 'results' in response and response['results']:
+            return response['results'][0]
+        return {}
+
+    def get_message_by_thread_id(self, connection_id, thread_id):
+        """Find a parent message by its thread_id."""
+        table_name = SchemaTables.DISCORD_MESSAGES.table_name(connection_id=connection_id)
+        sql = f"""SELECT `_pk`, `message_id`, `thread_id`, `author`, `content`,
+                `created_time`, `modified_time`, `deleted`, `outdated`,
+                `record_modified_time`, `sync_time`
+                FROM `{table_name}` WHERE `thread_id` = '{thread_id}'"""
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
@@ -272,7 +284,7 @@ class DiscordSeaDBAPI:
 
     def get_messages_by_page(self, connection_id, since, page_size, offset):
         table_name = SchemaTables.DISCORD_MESSAGES.table_name(connection_id=connection_id)
-        sql = f"""SELECT `_pk`, `message_id`, `channel_id`, `deleted`, `outdated`, `author`, `content`, `modified_time`
+        sql = f"""SELECT `_pk`, `message_id`, `deleted`, `outdated`, `title`, `content`, `modified_time`
                 FROM `{table_name}`
                 WHERE record_modified_time >= '{since}'
                 LIMIT {page_size} OFFSET {offset}"""

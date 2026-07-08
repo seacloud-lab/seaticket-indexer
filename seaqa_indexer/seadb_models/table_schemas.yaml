@@ -1004,7 +1004,7 @@ tables:
     columns:
       message_id:
         column_type: text
-      channel_id:
+      thread_id:
         column_type: text
       title:
         column_type: text
@@ -1038,7 +1038,7 @@ tables:
         column_type: text
     indexes:
     - - message_id
-    - - channel_id
+    - - thread_id
     - - created_time
     - - modified_time
     - - sync_time
