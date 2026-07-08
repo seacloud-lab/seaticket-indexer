@@ -451,6 +451,8 @@ tables:
         column_type: datetime
       deleted:
         column_type: bool
+      unread:
+        column_type: bool
       thread_id:
         column_type: int64
       email_id:
@@ -462,6 +464,7 @@ tables:
     - - email_from
     - - sync_time
     - - is_sender
+    - - thread_id
     table_name: email_{connection_id}
   ThreadTable:
     columns:
