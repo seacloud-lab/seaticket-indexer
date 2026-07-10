@@ -12,6 +12,13 @@ class EmailSeaDBAPI:
         self.base_id = base_id
         self.seadb_api = SeaDBAPI()
 
+    @staticmethod
+    def _normalize_subject(subject):
+        if subject is None:
+            return "(No Subject)"
+        normalized_subject = subject.strip() if isinstance(subject, str) else str(subject).strip()
+        return normalized_subject or "(No Subject)"
+
     def save_or_update_email_to_db(self, connection_id, email, existed_email):
         if not email['content']:
             h = html2text.HTML2Text()
@@ -88,7 +95,7 @@ class EmailSeaDBAPI:
 
     def save_thread_to_db(self, connection_id, thread):
         insert_row = {
-            SchemaTables.THREAD.column.title.name: thread['subject'],
+            SchemaTables.THREAD.column.title.name: self._normalize_subject(thread.get('subject')),
             SchemaTables.THREAD.column.modified_time.name: time_to_utc_time(thread['last_updated_at']).isoformat(),
             SchemaTables.THREAD.column.unread.name: thread.get('unread'),
             SchemaTables.THREAD.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
