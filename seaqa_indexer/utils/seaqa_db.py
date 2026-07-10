@@ -460,6 +460,33 @@ class SeaqaDB(object):
             session.execute(text(sql), {'cleaned_at': cleaned_at, 'connection_id': connection_id})
             session.commit()
 
+    def get_connections_need_privacy_report(self, recent_days, connection_type):
+        with self.db_session_class() as session:
+            sql = """
+                SELECT pc.id, pc.config, pc.project_uuid, pc.last_privacy_reported_at
+                FROM project_connection pc
+                INNER JOIN projects p ON p.uuid = pc.project_uuid
+                WHERE p.deleted = false
+                AND pc.deleted = false
+                AND pc.is_active = true
+                AND pc.type = :connection_type
+                AND (
+                    pc.last_privacy_reported_at IS NULL
+                    OR pc.last_privacy_reported_at <= DATE_SUB(NOW(), INTERVAL :recent_days DAY)
+                )
+            """
+            return session.execute(text(sql), {'recent_days': recent_days, 'connection_type': connection_type}).fetchall()
+
+    def update_connection_last_privacy_reported_at(self, connection_id, reported_at):
+        with self.db_session_class() as session:
+            sql = """
+                UPDATE project_connection
+                SET last_privacy_reported_at = :reported_at
+                WHERE id = :connection_id
+            """
+            session.execute(text(sql), {'reported_at': reported_at, 'connection_id': connection_id})
+            session.commit()
+
     def uninstall_github_app(self, project_uuid, installation_id):
         project_uuid = uuid_str_to_36_chars(project_uuid)
         with self.db_session_class() as session:

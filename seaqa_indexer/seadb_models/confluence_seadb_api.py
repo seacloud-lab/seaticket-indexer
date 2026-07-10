@@ -49,8 +49,8 @@ class ConfluenceSeaDBAPI:
             SchemaTables.CONFLUENCE.column.modified_time.name: self._to_isoformat(confluence_page.get('modified_time')),
             SchemaTables.CONFLUENCE.column.sync_time.name: now_iso,
             SchemaTables.CONFLUENCE.column.record_modified_time.name: now_iso,
-            SchemaTables.CONFLUENCE.column.creator.name: confluence_page.get('creator'),
-            SchemaTables.CONFLUENCE.column.last_modifier.name: confluence_page.get('last_modifier'),
+            SchemaTables.CONFLUENCE.column.creator_id.name: confluence_page.get('creator_id'),
+            SchemaTables.CONFLUENCE.column.last_modifier_id.name: confluence_page.get('last_modifier_id'),
             SchemaTables.CONFLUENCE.column.page_id.name: confluence_page.get('page_id'),
             SchemaTables.CONFLUENCE.column.parent_page_id.name: confluence_page.get('parent_page_id'),
             SchemaTables.CONFLUENCE.column.deleted.name: bool(confluence_page.get('deleted', False)),
@@ -159,4 +159,65 @@ class ConfluenceSeaDBAPI:
 
         if updates:
             self.seadb_api.update_rows(self.base_id, table_name, updates)
+
+    # ── User table methods ──────────────────────────────────────────────
+
+    def upsert_user(self, connection_id, account_id, display_name):
+        """Insert or update a user record. Only stores non-empty, non-'Unknown user' names."""
+        if not account_id or not display_name:
+            return
+        table_name = SchemaTables.CONFLUENCE_USER.table_name(connection_id)
+        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+
+        sql = f"SELECT `_pk` FROM `{table_name}` WHERE account_id='{account_id}'"
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        existing = response.get('results', [])
+
+        if existing:
+            pk = existing[0]['_pk']
+            update_row = {
+                'pk': pk,
+                'row': {
+                    SchemaTables.CONFLUENCE_USER.column.display_name.name: display_name,
+                    SchemaTables.CONFLUENCE_USER.column.updated_time.name: now_iso,
+                }
+            }
+            self.seadb_api.update_rows(self.base_id, table_name, [update_row])
+        else:
+            insert_row = {
+                SchemaTables.CONFLUENCE_USER.column.account_id.name: account_id,
+                SchemaTables.CONFLUENCE_USER.column.display_name.name: display_name,
+                SchemaTables.CONFLUENCE_USER.column.updated_time.name: now_iso,
+            }
+            self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
+
+    def get_user_display_names(self, connection_id, account_ids):
+        """Batch-query display names for a list of account IDs."""
+        if not account_ids:
+            return {}
+        table_name = SchemaTables.CONFLUENCE_USER.table_name(connection_id)
+        ids_str = "', '".join(account_ids)
+        sql = f"SELECT account_id, display_name FROM `{table_name}` WHERE account_id IN ('{ids_str}')"
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        records = response.get('results', [])
+        return {r['account_id']: r['display_name'] for r in records}
+
+    def delete_user_by_account_id(self, connection_id, account_id):
+        """Delete a user record (for closed accounts from privacy reporting)."""
+        if not account_id:
+            return
+        table_name = SchemaTables.CONFLUENCE_USER.table_name(connection_id)
+        sql = f"SELECT `_pk` FROM `{table_name}` WHERE account_id='{account_id}'"
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        results = response.get('results', [])
+        if results:
+            pks = [r['_pk'] for r in results]
+            self.seadb_api.delete_rows(self.base_id, table_name, pks)
+
+    def get_all_user_accounts(self, connection_id):
+        """Get all (account_id, updated_time) pairs for privacy reporting."""
+        table_name = SchemaTables.CONFLUENCE_USER.table_name(connection_id)
+        sql = f"SELECT `account_id`, `updated_time` FROM `{table_name}`"
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        return response.get('results', [])
 

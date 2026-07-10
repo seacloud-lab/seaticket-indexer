@@ -95,8 +95,8 @@ class ConfluenceAPI:
             'content': storage_body.get('value') or '',
             'created_time': history.get('createdDate'),
             'modified_time': version.get('when'),
-            'creator': created_by.get('accountId') or '',
-            'last_modifier': (version.get('by') or {}).get('accountId') or '',
+            'creator_id': created_by.get('accountId') or '',
+            'last_modifier_id': (version.get('by') or {}).get('accountId') or '',
             'parent_page_id': '',
         }
 
@@ -111,7 +111,43 @@ class ConfluenceAPI:
         if resp.status_code == 404:
             raise ConfluenceUserNotFoundException()
         resp.raise_for_status()
-        return resp.json().get('displayName') or ''
+        display_name = resp.json().get('displayName') or ''
+        # Don't return "Unknown user" for closed/deleted accounts (privacy requirement)
+        if display_name.lower() == 'unknown user':
+            return ''
+        return display_name
+
+    def get_client_credentials_token(self):
+        """Get a machine-to-machine token for the Atlassian privacy reporting API.
+        This is separate from the user OAuth token — uses client_credentials grant."""
+        payload = {
+            'grant_type': 'client_credentials',
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'audience': 'api.atlassian.com',
+        }
+        response = requests.post(self.token_url, json=payload, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        return data.get('access_token')
+
+    @staticmethod
+    def report_accounts(access_token, accounts):
+        """Report account IDs to Atlassian privacy API.
+        Returns accounts that need action: [{'accountId': '...', 'status': 'closed|updated'}]."""
+        if not accounts:
+            return []
+        url = 'https://api.atlassian.com/app/report-accounts/'
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+        }
+        response = requests.post(url, json={'accounts': accounts}, headers=headers, timeout=60)
+        if response.status_code == 204:
+            return []
+        response.raise_for_status()
+        data = response.json()
+        return data.get('accounts') or []
 
     def list_spaces(self, workspace_id, cursor=None, limit=100):
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/api/v2/spaces'

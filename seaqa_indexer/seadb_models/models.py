@@ -27,6 +27,7 @@ class SchemaTables:
     CONFLUENCE = SCHEMA.ConfluenceTable
     DISCORD_THREADS = SCHEMA.DiscordThreadsTable
     DISCORD_THREAD_MESSAGES = SCHEMA.DiscordThreadMessagesTable
+    CONFLUENCE_USER = SCHEMA.ConfluenceUserTable
 
 
 class PropertyTypes:
