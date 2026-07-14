@@ -45,15 +45,6 @@ class DiscordAPI(object):
         }
 
     @retry_with_exponential_backoff()
-    def get_channel(self, channel_id):
-        """Get a channel by ID. Returns the channel object with type field."""
-        url = f'{DISCORD_API_BASE_URL}/channels/{channel_id}'
-        logger.info(f"Getting channel info for {channel_id}")
-        response = requests.get(url, headers=self.headers, timeout=self.timeout)
-        response.raise_for_status()
-        return response.json()
-
-    @retry_with_exponential_backoff()
     def fetch_channel_messages(self, channel_id, before=None, limit=100):
         """Fetch messages from a channel, newest first.
 

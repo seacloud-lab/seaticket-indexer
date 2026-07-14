@@ -134,24 +134,10 @@ class DiscordHandler(ConnectionHandler):
         discord_api = DiscordAPI(bot_token)
         discord_seadb_api = DiscordSeaDBAPI(project_uuid)
 
-        # Detect forum channels (type 15) — they require thread iteration
-        try:
-            channel_info = discord_api.get_channel(channel_id)
-            channel_type = channel_info.get('type', 0)
-        except Exception as e:
-            logger.error(f'Failed to get channel info for {channel_id}: {e}')
-            return None, None, None, None
-
-        if channel_type == 15:
-            sync_count, total_count = self._sync_discord_forum(
-                connection_id, channel_id, guild_id, old_last_sync_time,
-                connection_status, discord_api, discord_seadb_api, seaqa_db
-            )
-        else:
-            sync_count, total_count = self._sync_discord(
-                connection_id, channel_id, guild_id, old_last_sync_time,
-                connection_status, discord_api, discord_seadb_api, seaqa_db
-            )
+        sync_count, total_count = self._sync_discord(
+            connection_id, channel_id, guild_id, old_last_sync_time,
+            connection_status, discord_api, discord_seadb_api, seaqa_db
+        )
         return sync_count, total_count, False, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
@@ -186,212 +172,6 @@ class DiscordHandler(ConnectionHandler):
                 break
 
         return total_deleted
-
-    def _sync_discord(self, connection_id, channel_id, guild_id, last_sync_time,
-                      connection_status, discord_api, discord_seadb_api, seaqa_db):
-        should_stop = False
-        sync_count = 0
-        added_count = 0
-        updated_count = 0
-        synced_thread_ids = set()  # Track threads already synced via message loop
-        _status_last_update_time = datetime.datetime.now()
-        _status_last_update_count = 0
-        before = None  # Cursor for pagination (Discord uses message IDs as cursors)
-
-        if last_sync_time:
-            last_sync_time = time_to_utc_time(str(last_sync_time))
-
-        while True:
-            messages = discord_api.fetch_channel_messages(channel_id, before=before)
-
-            if not messages:
-                break
-
-            for msg_data in messages:
-                # Skip system messages that have no user content.
-                # type 0 = DEFAULT (normal message), type 19 = REPLY (inline reply to
-                # another message — has real content, must be synced).
-                # type 18 = THREAD_CREATED, type 21 = THREAD_STARTER_MESSAGE, etc.
-                msg_type = msg_data.get('type', 0)
-                if msg_type not in (0, 19):
-                    continue
-
-                message_timestamp = msg_data.get('edited_timestamp') or msg_data.get('timestamp')
-                if message_timestamp:
-                    message_time = time_to_utc_time(message_timestamp)
-                else:
-                    continue
-
-                # For messages with a thread, use the thread's last_message_id
-                # (snowflake-encoded timestamp) to determine real last activity time.
-                # Thread replies can be added long after the parent message was created.
-                thread = msg_data.get('thread')
-                if thread:
-                    last_message_id = thread.get('last_message_id')
-                    if last_message_id:
-                        last_activity_ms = (int(last_message_id) >> 22) + 1420070400000
-                        last_activity_time = datetime.datetime.fromtimestamp(
-                            last_activity_ms / 1000, tz=datetime.timezone.utc
-                        )
-                        message_time = max(message_time, last_activity_time)
-
-                # Stop if we've reached messages older than last sync time
-                if last_sync_time and message_time <= last_sync_time:
-                    should_stop = True
-                    break
-
-                message_id = msg_data.get('id')
-
-                # Check if message already exists in DB
-                existing_message = discord_seadb_api.get_message_by_message_id(connection_id, message_id)
-                message_changed = True
-                if existing_message:
-                    existing_modified_time = time_to_utc_time(str(existing_message.get('modified_time')))
-                    if message_time <= existing_modified_time:
-                        message_changed = False
-
-                # Enrich msg_data with thread_id and thread title for storage
-                if thread:
-                    msg_data['thread_id'] = thread.get('id')
-                    if thread.get('name'):
-                        msg_data['title'] = thread['name']
-                else:
-                    msg_data['thread_id'] = None
-
-                if message_changed:
-                    message_state_event_type = (
-                        DataEventType.DISCORD_MESSAGE_UPDATED.value
-                        if existing_message
-                        else DataEventType.DISCORD_MESSAGE_ADDED.value
-                    )
-                    primary_key = existing_message.get('_pk')
-                    if primary_key:
-                        discord_seadb_api.update_message(connection_id, primary_key, msg_data)
-                        updated_count += 1
-                    else:
-                        discord_seadb_api.insert_message(connection_id, msg_data)
-                        added_count += 1
-
-                # Always sync thread replies — they can change even when
-                # the parent message content hasn't been edited
-                if thread:
-                    thread_id = thread.get('id')
-                    if thread_id:
-                        synced_thread_ids.add(thread_id)
-                        thread_messages = self._fetch_all_messages(
-                            discord_api, thread_id, last_sync_time=last_sync_time
-                        )
-                        if thread_messages:
-                            reply_result = discord_seadb_api.update_message_replies(
-                                connection_id, message_id, thread_messages
-                            )
-                            if reply_result['added'] + reply_result['updated'] + reply_result['deleted'] > 0:
-                                message_changed = True
-
-                # For type 19 REPLY messages (inline replies), store the parent-child
-                # relationship so they appear as replies to the referenced message.
-                if msg_type == 19:
-                    message_reference = msg_data.get('message_reference', {})
-                    parent_message_id = message_reference.get('message_id')
-                    if parent_message_id:
-                        discord_seadb_api.upsert_inline_reply(connection_id, parent_message_id, msg_data)
-
-                if message_changed:
-                    sync_count += 1
-
-                    self.publish_synced_record_events(
-                        get_latest_row=lambda: discord_seadb_api.get_message_by_message_id(connection_id, message_id),
-                        project_uuid=discord_seadb_api.base_id,
-                        connection_id=connection_id,
-                        item_id=message_id,
-                        old_row=existing_message,
-                        state_event_type=message_state_event_type,
-                        state_event_ignored_fields=('modified_time', 'record_modified_time', 'sync_time'),
-                        log_object_name='message',
-                    )
-
-                should, new_time, new_count = need_update_connection_last_sync_count(
-                    sync_count, _status_last_update_time, _status_last_update_count
-                )
-                if should:
-                    connection_status['last_sync_count'] = sync_count
-                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
-                    _status_last_update_time = new_time
-                    _status_last_update_count = new_count
-                time.sleep(1)
-
-            # Update cursor: Discord returns messages newest first, so use
-            # the ID of the last (oldest) message in this page as the 'before' cursor
-            if messages:
-                before = messages[-1].get('id')
-
-            if should_stop:
-                break
-
-        # Sync active threads separately — thread replies can be added to old
-        # messages that the channel message pagination may never reach during
-        # incremental sync. This matches Onyx's approach: enumerate threads
-        # directly, then use time-filtered history for each thread.
-        try:
-            active_threads = discord_api.fetch_forum_threads(guild_id, channel_id)
-            for thr in active_threads:
-                thread_id = thr.get('id')
-                if not thread_id or thread_id in synced_thread_ids:
-                    continue
-                # Only sync threads with activity after last_sync_time
-                last_msg_id = thr.get('last_message_id')
-                if last_sync_time and last_msg_id:
-                    last_activity_ms = (int(last_msg_id) >> 22) + 1420070400000
-                    last_activity_time = datetime.datetime.fromtimestamp(
-                        last_activity_ms / 1000, tz=datetime.timezone.utc
-                    )
-                    if last_activity_time <= last_sync_time:
-                        continue
-                # Try to find parent message by thread_id first
-                parent = discord_seadb_api.get_message_by_thread_id(connection_id, thread_id)
-
-                if parent:
-                    # Parent exists — only fetch new replies since last sync
-                    thread_messages = self._fetch_all_messages(
-                        discord_api, thread_id, last_sync_time=last_sync_time
-                    )
-                    if thread_messages:
-                        reply_result = discord_seadb_api.update_message_replies(
-                            connection_id, parent.get('message_id'), thread_messages
-                        )
-                        if reply_result['added'] + reply_result['updated'] + reply_result['deleted'] > 0:
-                            sync_count += 1
-                else:
-                    # Parent was never synced — fetch all messages to create it
-                    thread_messages = self._fetch_all_messages(discord_api, thread_id)
-                    if not thread_messages:
-                        continue
-                    first_msg = thread_messages[-1]
-                    parent_message_id = first_msg.get('id')
-                    msg_data = dict(first_msg)
-                    msg_data['thread_id'] = thread_id
-                    if thr.get('name'):
-                        msg_data['title'] = thr['name']
-                    discord_seadb_api.insert_message(connection_id, msg_data)
-                    sync_count += 1
-
-                    reply_messages = [m for m in thread_messages if m.get('id') != parent_message_id]
-                    if reply_messages:
-                        reply_result = discord_seadb_api.update_message_replies(
-                            connection_id, parent_message_id, reply_messages
-                        )
-                        if reply_result['added'] + reply_result['updated'] + reply_result['deleted'] > 0:
-                            sync_count += 1
-        except Exception as e:
-            logger.warning('Failed to sync active threads for channel %s: %s', channel_id, e)
-
-        connection_status['last_sync_changes'] = {
-            'added': added_count,
-            'deleted': 0,
-            'updated': updated_count,
-        }
-        total_count = discord_seadb_api.get_message_count(connection_id)
-        return sync_count, total_count
 
     @staticmethod
     def _fetch_all_messages(discord_api, channel_id, last_sync_time=None):
@@ -433,7 +213,7 @@ class DiscordHandler(ConnectionHandler):
 
         return all_messages
 
-    def _sync_discord_forum(self, connection_id, channel_id, guild_id, last_sync_time,
+    def _sync_discord(self, connection_id, channel_id, guild_id, last_sync_time,
                             connection_status, discord_api, discord_seadb_api, seaqa_db):
         """Sync a forum channel: each thread is a record, thread replies are reply rows."""
         sync_count = 0
