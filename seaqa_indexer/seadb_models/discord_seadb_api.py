@@ -337,7 +337,7 @@ class DiscordSeaDBAPI:
 
     def get_need_ai_messages(self, connection_id, page_size):
         table_name = SchemaTables.DISCORD_MESSAGES.table_name(connection_id=connection_id)
-        sql = f"""SELECT _pk, message_id, author, content FROM `{table_name}`
+        sql = f"""SELECT _pk, message_id, title, content FROM `{table_name}`
         WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time) AND (deleted IS NULL OR deleted = false)
         LIMIT {page_size}"""
         result = self.seadb_api.query_rows(self.base_id, sql)

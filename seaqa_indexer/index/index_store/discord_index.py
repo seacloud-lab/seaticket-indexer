@@ -35,7 +35,7 @@ class DiscordIndex(BaseConnectionIndex):
                     doc = {
                         'connection_id': str(connection_id),
                         'title': msg.get('title', ''),
-                        'content': (msg.get('content') or '') + ' ' + body_content,
+                        'content': ((msg.get('content') or '') + ' ' + body_content)[:INDEX_CONTENT_LIMIT],
                         'modified_time': msg.get('modified_time'),
                     }
 

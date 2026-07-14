@@ -70,9 +70,12 @@ class DiscordHandler(ConnectionHandler):
 
             for row in rows:
                 pk = row.get('_pk')
-                author = row.get('author', '')
-                content = row.get('content', '')
-                full_content = f"Author: {author}\n\nMessage: {content}\n"
+                message_id = row.get('message_id', '')
+                title = row.get('title', '')
+                content = row.get('content', '') or ''
+                reply_content = discord_seadb_api.get_message_replies_for_index(connection_id, message_id)
+                body = content + (' ' + reply_content if reply_content else '')
+                full_content = f"Title: {title}\n\nBody: {body}\n"
                 summary = self.seaqa_ai_api.generate_summary(full_content, ConnectionType.DISCORD.value, project_uuid)
                 vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
@@ -122,11 +125,11 @@ class DiscordHandler(ConnectionHandler):
 
         if not bot_token:
             logger.error(f'Discord bot_token is not configured in settings for connection {connection_id}')
-            return 0, 0, False, config
+            return None, None, None, None
 
         if not channel_id:
             logger.error(f'Discord channel_id is missing for connection {connection_id}')
-            return 0, 0, False, config
+            return None, None, None, None
 
         discord_api = DiscordAPI(bot_token)
         discord_seadb_api = DiscordSeaDBAPI(project_uuid)
@@ -135,8 +138,9 @@ class DiscordHandler(ConnectionHandler):
         try:
             channel_info = discord_api.get_channel(channel_id)
             channel_type = channel_info.get('type', 0)
-        except Exception:
-            channel_type = 0
+        except Exception as e:
+            logger.error(f'Failed to get channel info for {channel_id}: {e}')
+            return None, None, None, None
 
         if channel_type == 15:
             sync_count, total_count = self._sync_discord_forum(
