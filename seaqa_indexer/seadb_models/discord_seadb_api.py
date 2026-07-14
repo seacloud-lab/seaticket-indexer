@@ -238,7 +238,8 @@ class DiscordSeaDBAPI:
         # e.g. type 21 THREAD_STARTER_MESSAGE which Discord's UI hides)
         reply_updated_count = 0
         for reply in replies:
-            if reply.get('type', 0) != 0:
+            reply_type = reply.get('type', 0)
+            if reply_type not in (0, 19):
                 continue
             rid = reply.get('id')
             new_reply_ids.add(rid)
@@ -281,6 +282,30 @@ class DiscordSeaDBAPI:
         table_name = SchemaTables.DISCORD_MESSAGE_REPLIES.table_name(connection_id=connection_id)
         sql = f"DELETE FROM `{table_name}` WHERE message_id = '{message_id}' AND reply_id = '{reply_id}'"
         return self.seadb_api.query_rows(self.base_id, sql)
+
+    def get_reply_by_reply_id(self, connection_id, message_id, reply_id):
+        """Get a single reply by its reply_id under a parent message."""
+        table_name = SchemaTables.DISCORD_MESSAGE_REPLIES.table_name(connection_id=connection_id)
+        sql = f"""SELECT `_pk`, `reply_id` FROM `{table_name}`
+                WHERE message_id = '{message_id}' AND reply_id = '{reply_id}'"""
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        if response and 'results' in response and response['results']:
+            return response['results'][0]
+        return {}
+
+    def upsert_inline_reply(self, connection_id, message_id, reply_data):
+        """Insert or update a single inline reply (type 19) by reply_id.
+
+        Unlike update_message_replies which does a full diff-replace for
+        thread messages, this handles one reply at a time without deleting
+        other replies for the same parent.
+        """
+        reply_id = reply_data.get('id')
+        existing = self.get_reply_by_reply_id(connection_id, message_id, reply_id)
+        if existing and existing.get('_pk'):
+            return self.update_reply(connection_id, existing['_pk'], message_id, reply_data)
+        else:
+            return self.insert_reply(connection_id, message_id, reply_data)
 
     def get_messages_by_page(self, connection_id, since, page_size, offset):
         table_name = SchemaTables.DISCORD_MESSAGES.table_name(connection_id=connection_id)

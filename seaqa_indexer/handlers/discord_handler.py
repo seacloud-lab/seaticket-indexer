@@ -204,10 +204,12 @@ class DiscordHandler(ConnectionHandler):
                 break
 
             for msg_data in messages:
-                # Skip non-DEFAULT messages (system messages like type 18 THREAD_CREATED
-                # that Discord inserts when a thread is created — these have no user content
-                # but may reference the same thread, causing duplicate records).
-                if msg_data.get('type', 0) != 0:
+                # Skip system messages that have no user content.
+                # type 0 = DEFAULT (normal message), type 19 = REPLY (inline reply to
+                # another message — has real content, must be synced).
+                # type 18 = THREAD_CREATED, type 21 = THREAD_STARTER_MESSAGE, etc.
+                msg_type = msg_data.get('type', 0)
+                if msg_type not in (0, 19):
                     continue
 
                 message_timestamp = msg_data.get('edited_timestamp') or msg_data.get('timestamp')
@@ -281,6 +283,14 @@ class DiscordHandler(ConnectionHandler):
                             )
                             if reply_result['added'] + reply_result['updated'] + reply_result['deleted'] > 0:
                                 message_changed = True
+
+                # For type 19 REPLY messages (inline replies), store the parent-child
+                # relationship so they appear as replies to the referenced message.
+                if msg_type == 19:
+                    message_reference = msg_data.get('message_reference', {})
+                    parent_message_id = message_reference.get('message_id')
+                    if parent_message_id:
+                        discord_seadb_api.upsert_inline_reply(connection_id, parent_message_id, msg_data)
 
                 if message_changed:
                     sync_count += 1
