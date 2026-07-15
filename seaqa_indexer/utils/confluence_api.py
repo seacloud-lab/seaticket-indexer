@@ -117,20 +117,6 @@ class ConfluenceAPI:
             return ''
         return display_name
 
-    def get_client_credentials_token(self):
-        """Get a machine-to-machine token for the Atlassian privacy reporting API.
-        This is separate from the user OAuth token — uses client_credentials grant."""
-        payload = {
-            'grant_type': 'client_credentials',
-            'client_id': self.client_id,
-            'client_secret': self.client_secret,
-            'audience': 'api.atlassian.com',
-        }
-        response = requests.post(self.token_url, json=payload, timeout=self.timeout)
-        response.raise_for_status()
-        data = response.json()
-        return data.get('access_token')
-
     @staticmethod
     def report_accounts(access_token, accounts):
         """Report account IDs to Atlassian privacy API.

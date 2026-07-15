@@ -79,13 +79,7 @@ class ConfluencePrivacyReporterTimer(Thread):
                 if not accounts:
                     continue
 
-                # Get client credentials token for the privacy reporting API
                 confluence_api = ConfluenceAPI(oauth.access_token, oauth.refresh_token, oauth.expires_at)
-                try:
-                    cc_token = confluence_api.get_client_credentials_token()
-                except Exception:
-                    logger.exception('Failed to get client credentials token for project %s', project_uuid)
-                    continue
 
                 any_batch_succeeded = False
                 # Report accounts in batches of 90
@@ -95,8 +89,25 @@ class ConfluencePrivacyReporterTimer(Thread):
                         {'accountId': a['account_id'], 'updatedAt': a['updated_time']}
                         for a in batch
                     ]
+
+                    # Refresh user token if near expiry before each API call
+                    now = datetime.datetime.now(datetime.UTC)
+                    if not confluence_api.expires_at or time_to_utc_time(str(confluence_api.expires_at)) <= now + datetime.timedelta(seconds=60):
+                        logger.info('Confluence access token near expiry, refreshing before privacy report batch')
+                        try:
+                            new_tokens = confluence_api.refresh_access_token()
+                            self.seaqa_db.update_project_confluence_oauth(
+                                project_uuid,
+                                new_tokens['access_token'],
+                                new_tokens['expires_at'],
+                                new_tokens['refresh_token'],
+                            )
+                        except Exception:
+                            logger.exception('Failed to refresh access token for project %s', project_uuid)
+                            continue
+
                     try:
-                        results = ConfluenceAPI.report_accounts(cc_token, payload)
+                        results = ConfluenceAPI.report_accounts(confluence_api.access_token, payload)
                     except Exception:
                         logger.exception('Privacy report API failed for connection %s batch %d',
                                          connection_id, i // self.batch_size)
@@ -119,17 +130,6 @@ class ConfluencePrivacyReporterTimer(Thread):
                             logger.info('Refreshing display name for updated account %s in connection %s',
                                         account_id, connection_id)
                             try:
-                                # Refresh user token if near expiry (same pattern as handler & page cleaner)
-                                now = datetime.datetime.now(datetime.UTC)
-                                if not confluence_api.expires_at or time_to_utc_time(str(confluence_api.expires_at)) <= now + datetime.timedelta(seconds=60):
-                                    logger.info('Confluence access token near expiry, refreshing for privacy reporter')
-                                    new_tokens = confluence_api.refresh_access_token()
-                                    self.seaqa_db.update_project_confluence_oauth(
-                                        project_uuid,
-                                        new_tokens['access_token'],
-                                        new_tokens['expires_at'],
-                                        new_tokens['refresh_token'],
-                                    )
                                 name = confluence_api.get_user_display_name(account_id, workspace_id)
                                 if name:
                                     confluence_seadb_api.upsert_user(connection_id, account_id, name)
