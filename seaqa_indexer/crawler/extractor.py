@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 MIN_EXTRACTED_SIZE = '200'
 
 
+def normalize_postbody(postbody):
+    for item in postbody.xpath('.//item'):
+        if len(item) == 0 and item.text:
+            item.text = ' '.join(item.text.split())
+
+    return postbody
+
+
 def extract_html(url, file_content, favor_precision=False, favor_recall=False, formatting=True,
                  include_links=True, include_images=False, include_tables=True, fast=False):
 
@@ -36,5 +44,6 @@ def extract_html(url, file_content, favor_precision=False, favor_recall=False, f
 
     cleaned_tree_backup = copy(cleaned_tree)
     postbody, temp_text, len_text = trafilatura_sequence(cleaned_tree, cleaned_tree_backup, tree, options)
+    postbody = normalize_postbody(postbody)
 
     return xmltotxt(postbody, options.formatting)
