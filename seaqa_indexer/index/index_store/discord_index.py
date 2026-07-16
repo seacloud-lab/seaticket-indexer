@@ -15,28 +15,28 @@ class DiscordIndex(BaseConnectionIndex):
         index_count = 0
         page_size = 1000
         offset = 0
-        need_cleared_message_index_id_set = set()
+        need_cleared_thread_index_id_set = set()
         bulk_params = []
         while True:
-            messages = discord_seadb_api.get_messages_by_page(connection_id, since, page_size, offset)
+            threads = discord_seadb_api.get_threads_by_page(connection_id, since, page_size, offset)
             offset += page_size
-            if not messages:
+            if not threads:
                 break
-            for msg in messages:
-                message_id = msg.get('message_id')
-                pk = msg.get('_pk')
+            for thread in threads:
+                thread_id = thread.get('thread_id')
+                pk = thread.get('_pk')
                 key = str(pk)
-                if msg.get('deleted') or msg.get('outdated'):
-                    need_cleared_message_index_id_set.add(key)
+                if thread.get('deleted') or thread.get('outdated'):
+                    need_cleared_thread_index_id_set.add(key)
                 else:
                     # Gather reply content for full-text search
-                    body_content = discord_seadb_api.get_message_replies_for_index(connection_id, message_id)
+                    body_content = discord_seadb_api.get_thread_messages_for_index(connection_id, thread_id)
 
                     doc = {
                         'connection_id': str(connection_id),
-                        'title': msg.get('title', ''),
-                        'content': ((msg.get('content') or '') + ' ' + body_content)[:INDEX_CONTENT_LIMIT],
-                        'modified_time': msg.get('modified_time'),
+                        'title': thread.get('title', ''),
+                        'content': body_content[:INDEX_CONTENT_LIMIT],
+                        'modified_time': thread.get('modified_time'),
                     }
 
                     index_info = {'index': {'_index': index_name, '_id': key}}
@@ -53,6 +53,6 @@ class DiscordIndex(BaseConnectionIndex):
                         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         if bulk_params:
             self.seasearch_api.bulk(index_name, bulk_params)
-        if need_cleared_message_index_id_set:
-            self.delete_indexes_by_ids(index_name, need_cleared_message_index_id_set)
+        if need_cleared_thread_index_id_set:
+            self.delete_indexes_by_ids(index_name, need_cleared_thread_index_id_set)
         return index_count

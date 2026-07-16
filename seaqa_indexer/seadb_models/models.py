@@ -25,8 +25,8 @@ class SchemaTables:
     LINEAR_ISSUES = SCHEMA.LinearIssuesTable
     LINEAR_ISSUE_COMMENTS = SCHEMA.LinearIssueCommentsTable
     CONFLUENCE = SCHEMA.ConfluenceTable
-    DISCORD_MESSAGES = SCHEMA.DiscordMessagesTable
-    DISCORD_MESSAGE_REPLIES = SCHEMA.DiscordMessageRepliesTable
+    DISCORD_THREADS = SCHEMA.DiscordThreadsTable
+    DISCORD_THREAD_MESSAGES = SCHEMA.DiscordThreadMessagesTable
 
 
 class PropertyTypes:

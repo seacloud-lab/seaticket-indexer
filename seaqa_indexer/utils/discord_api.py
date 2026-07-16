@@ -45,12 +45,13 @@ class DiscordAPI(object):
         }
 
     @retry_with_exponential_backoff()
-    def fetch_channel_messages(self, channel_id, before=None, limit=100):
+    def fetch_channel_messages(self, channel_id, before=None, after=None, limit=100):
         """Fetch messages from a channel, newest first.
 
         Args:
             channel_id: Discord channel ID (snowflake).
             before: Get messages before this message ID (for pagination).
+            after: Get messages after this message ID (for incremental sync).
             limit: Max messages per page (1-100).
 
         Returns:
@@ -60,12 +61,12 @@ class DiscordAPI(object):
         params = {'limit': limit}
         if before:
             params['before'] = before
+        if after:
+            params['after'] = after
 
-        logger.info(f"Fetching messages from channel {channel_id} with params: {params}")
         response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
         response.raise_for_status()
         messages = response.json()
-        logger.info(f"Fetched {len(messages)} messages from channel {channel_id}")
         return messages
 
     @retry_with_exponential_backoff()
@@ -94,7 +95,7 @@ class DiscordAPI(object):
         return messages
 
     @retry_with_exponential_backoff()
-    def fetch_forum_threads(self, guild_id, channel_id, limit=100):
+    def fetch_forum_threads(self, guild_id, channel_id):
         """Fetch active threads from a forum channel.
 
         Uses the guild-level threads endpoint and filters by parent_id
@@ -104,10 +105,8 @@ class DiscordAPI(object):
             list[dict]: Thread objects with 'id', 'name', 'parent_id', etc.
         """
         url = f'{DISCORD_API_BASE_URL}/guilds/{guild_id}/threads/active'
-        params = {'limit': limit}
 
-        logger.info(f"Fetching active threads for guild {guild_id}, forum channel {channel_id}")
-        response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+        response = requests.get(url, headers=self.headers, timeout=self.timeout)
         response.raise_for_status()
         data = response.json()
         all_threads = data.get('threads', [])
@@ -115,3 +114,27 @@ class DiscordAPI(object):
         forum_threads = [t for t in all_threads if t.get('parent_id') == channel_id]
         logger.info(f"Found {len(forum_threads)} threads in forum channel {channel_id}")
         return forum_threads
+
+    @retry_with_exponential_backoff()
+    def fetch_archived_forum_threads(self, channel_id, before=None, limit=100):
+        """Fetch archived public threads from a forum channel.
+
+        Uses the channel-level archived threads endpoint and supports
+        pagination via the ``before`` parameter.
+
+        Returns:
+            tuple[list[dict], bool]: Thread objects and Discord's has_more flag.
+        """
+        url = f'{DISCORD_API_BASE_URL}/channels/{channel_id}/threads/archived/public'
+        params = {'limit': limit}
+        if before:
+            params['before'] = before
+
+        logger.info(f"Fetching archived threads for forum channel {channel_id}")
+        response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        threads = data.get('threads', [])
+        has_more = data.get('has_more', False)
+        logger.info(f"Found {len(threads)} archived threads in forum channel {channel_id}")
+        return threads, has_more

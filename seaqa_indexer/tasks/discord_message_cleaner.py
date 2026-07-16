@@ -45,68 +45,66 @@ class DiscordMessageCleanerTimer(Thread):
         self.check_days = check_days
         self.page_size = 100
 
-    def fetch_remote_message_ids(self, discord_api, channel_id, channel_type, guild_id):
-        """Fetch all message IDs from Discord for a channel.
+    def fetch_remote_thread_message_ids(self, discord_api, guild_id, channel_id):
+        """Fetch all threads (active + archived) and their message IDs from a forum channel.
 
-        For text channels (type 0): paginate through all messages.
-        For forum channels (type 15): fetch all threads, then messages in each thread.
+        Returns:
+            dict[str, set]: ``{thread_id: set(message_ids_in_thread)}``.
         """
-        remote_ids = set()
+        result = {}
+        active_threads = discord_api.fetch_forum_threads(guild_id, channel_id)
+        archived_threads = []
 
-        if channel_type == 15:
-            # Forum channel: iterate threads, then messages within each thread
-            threads = discord_api.fetch_forum_threads(guild_id, channel_id)
-            for thread in threads:
-                thread_id = thread.get('id')
-                if not thread_id:
-                    continue
-                # The thread's first message is the thread object itself
-                # Fetch all messages in the thread
-                before = None
-                while True:
-                    messages = discord_api.fetch_thread_messages(channel_id, thread_id, before=before)
-                    if not messages:
-                        break
-                    for msg in messages:
-                        msg_id = msg.get('id')
-                        if msg_id:
-                            remote_ids.add(msg_id)
-                    if len(messages) < self.page_size:
-                        break
-                    before = messages[-1].get('id')
-                    time.sleep(0.5)
-                time.sleep(0.5)
-        else:
-            # Text channel: paginate through all messages
+        # Archived threads are paginated, fetch them all
+        before = None
+        while True:
+            archived, has_more = discord_api.fetch_archived_forum_threads(channel_id, before=before)
+            if not archived:
+                break
+            archived_threads.extend(archived)
+            if not has_more:
+                break
+            before = archived[-1].get('thread_metadata', {}).get('archive_timestamp')
+            if not before:
+                break
+
+        for thread in active_threads + archived_threads:
+            thread_id = thread.get('id')
+            if not thread_id:
+                continue
+            msg_ids = set()
             before = None
             while True:
-                messages = discord_api.fetch_channel_messages(channel_id, before=before, limit=self.page_size)
+                messages = discord_api.fetch_thread_messages(
+                    channel_id, thread_id, before=before, limit=self.page_size
+                )
                 if not messages:
                     break
                 for msg in messages:
                     msg_id = msg.get('id')
                     if msg_id:
-                        remote_ids.add(msg_id)
+                        msg_ids.add(msg_id)
                 if len(messages) < self.page_size:
                     break
                 before = messages[-1].get('id')
                 time.sleep(0.5)
+            result[thread_id] = msg_ids
+            time.sleep(0.5)
+        return result
 
-        return remote_ids
-
-    def get_local_message_ids(self, discord_seadb_api, connection_id):
-        """Fetch all local message IDs from SeaDB for a connection."""
+    def get_local_thread_ids(self, discord_seadb_api, connection_id):
+        """Fetch all local thread IDs from SeaDB for a connection."""
         offset = 0
         local_ids = set()
 
         while True:
-            rows = discord_seadb_api.get_message_ids_by_page(connection_id, self.page_size, offset)
+            rows = discord_seadb_api.get_thread_ids_by_page(connection_id, self.page_size, offset)
             if not rows:
                 break
             for row in rows:
-                msg_id = row.get('message_id')
-                if msg_id:
-                    local_ids.add(msg_id)
+                tid = row.get('thread_id')
+                if tid:
+                    local_ids.add(tid)
             if len(rows) < self.page_size:
                 break
             offset += self.page_size
@@ -135,31 +133,71 @@ class DiscordMessageCleanerTimer(Thread):
                     logger.warning('Discord bot_token missing for connection %s', connection_id)
                     continue
 
-                # Detect channel type (forum vs text)
                 discord_api = DiscordAPI(bot_token)
-                try:
-                    channel_info = discord_api.get_channel(channel_id)
-                    channel_type = channel_info.get('type', 0)
-                except Exception:
-                    logger.warning('Failed to get channel info for connection %s, assuming text channel', connection_id)
-                    channel_type = 0
 
-                remote_ids = self.fetch_remote_message_ids(
-                    discord_api, channel_id, channel_type, guild_id
+                # Fetch all threads + their message IDs from the forum channel.
+                # thread_message_ids maps thread_id → set of all message IDs in that thread
+                # (including the thread ID itself as the message record).
+                thread_message_ids = self.fetch_remote_thread_message_ids(
+                    discord_api, guild_id, channel_id
                 )
 
                 discord_seadb_api = DiscordSeaDBAPI(project_uuid)
-                local_ids = self.get_local_message_ids(discord_seadb_api, connection_id)
 
-                need_deleted_ids = local_ids - remote_ids
+                # ---- 1. Thread-level cleanup ----
+                # Mark message records as deleted if the thread no longer exists remotely.
+                all_remote_ids = set(thread_message_ids.keys())
+                local_ids = self.get_local_thread_ids(discord_seadb_api, connection_id)
+
+                need_deleted_ids = local_ids - all_remote_ids
                 for msg_id in need_deleted_ids:
-                    discord_seadb_api.mark_message_deleted(connection_id, msg_id)
+                    discord_seadb_api.mark_thread_deleted(connection_id, msg_id)
+
+                logger.info(
+                    'Cleaned discord connection %s threads: marked %d messages deleted',
+                    connection_id, len(need_deleted_ids)
+                )
+
+                # ---- 2. Message-level cleanup ----
+                # For threads that still exist, compare local messages against
+                # remote message IDs and delete stale ones.
+                total_stale_messages = 0
+                for thread_id, remote_msg_ids in thread_message_ids.items():
+                    # Collect local message IDs for this thread
+                    local_message_ids = set()
+                    msg_offset = 0
+                    msg_page_size = 1000
+                    while True:
+                        existing = discord_seadb_api.get_thread_messages_by_page(
+                            connection_id, thread_id, msg_page_size, msg_offset
+                        )
+                        for msg in existing:
+                            mid = msg.get('message_id')
+                            if mid:
+                                local_message_ids.add(mid)
+                        if not existing or len(existing) < msg_page_size:
+                            break
+                        msg_offset += msg_page_size
+
+                    stale_message_ids = local_message_ids - remote_msg_ids
+                    for mid in stale_message_ids:
+                        discord_seadb_api.delete_message_from_db(
+                            connection_id, thread_id, mid
+                        )
+                        total_stale_messages += 1
+                    if stale_message_ids:
+                        discord_seadb_api.touch_thread(
+                            connection_id, thread_id,
+                            last_message_id=thread.get('last_message_id')
+                        )
 
                 cleaned_at = datetime.datetime.now(datetime.UTC)
                 self.seaqa_db.update_connection_last_cleaned_at(connection_id, cleaned_at)
                 logger.info(
-                    'Cleaned discord connection %s: marked %d messages deleted, %d local, %d remote',
-                    connection_id, len(need_deleted_ids), len(local_ids), len(remote_ids)
+                    'Cleaned discord connection %s: %d threads deleted, %d messages deleted, '
+                    '%d local threads, %d remote threads',
+                    connection_id, len(need_deleted_ids), total_stale_messages,
+                    len(local_ids), len(all_remote_ids)
                 )
             except Exception as e:
                 logger.exception('Failed to clean discord messages for connection %s: %s', connection_id, e)
