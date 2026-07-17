@@ -116,12 +116,12 @@ def send_connection_sync_result_msg(mq, project_uuid, connection_id, status):
                 'project_uuid': uuid_str_to_36_chars(project_uuid), 
                 'connection_id': connection_id, 
                 'status': status,
-                'type': 'connection-sync'
+                'type': 'project_notification'
             }
         )
-        if mq.publish('connection_sync', msg_content) > 0:
-            logger.debug('Publish connection_sync event: %s' % msg_content)
+        if mq.publish('web_notifications', msg_content) > 0:
+            logger.debug('Publish web_notifications event: %s' % msg_content)
         else:
-            logger.info('No one subscribed to connection_sync channel, event (%s) has not been send' % msg_content)
+            logger.info('No one subscribed to web_notifications channel, event (%s) has not been send' % msg_content)
     except Exception as e:
         logger.error('send sync connection finish msg failed, error: %s', e)
