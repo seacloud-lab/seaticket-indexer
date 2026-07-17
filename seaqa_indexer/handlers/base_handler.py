@@ -109,12 +109,13 @@ class ConnectionHandler(ABC):
 
         return total_deleted
 
-    def build_event(self, event_type, old_row=None, new_row=None, ignored_fields=None):
+    def build_event(self, event_type, old_row=None, new_row=None, ignored_fields=None, datetime_fields=None):
         old_row = old_row or {}
         new_row = new_row or {}
         old_value = {}
         new_value = {}
         ignored_fields = set(ignored_fields or [])
+        datetime_fields = set(datetime_fields or [])
 
         for field_name, field_value in new_row.items():
             if field_name in ignored_fields:
@@ -122,6 +123,15 @@ class ConnectionHandler(ABC):
             old_field_value = old_row.get(field_name)
             if old_field_value == field_value:
                 continue
+            if field_name in datetime_fields and old_field_value and field_value:
+                try:
+                    if time_to_utc_time(str(old_field_value)) == time_to_utc_time(str(field_value)):
+                        continue
+                except (TypeError, ValueError):
+                    logger.warning(
+                        'Failed to compare event datetime field %s: %r != %r',
+                        field_name, old_field_value, field_value,
+                    )
             old_value[field_name] = old_field_value
             new_value[field_name] = field_value
 
@@ -148,6 +158,7 @@ class ConnectionHandler(ABC):
         additional_items=None,
         additional_event_type=None,
         state_event_ignored_fields=None,
+        state_event_datetime_fields=None,
         log_object_name='record',
     ):
         if not self.mq:
@@ -186,6 +197,7 @@ class ConnectionHandler(ABC):
                 old_row=old_row,
                 new_row=latest_row,
                 ignored_fields=state_event_ignored_fields,
+                datetime_fields=state_event_datetime_fields,
             )
             if self.should_publish_state_event(state_event):
                 self.mq.publish('data_events', json.dumps({
