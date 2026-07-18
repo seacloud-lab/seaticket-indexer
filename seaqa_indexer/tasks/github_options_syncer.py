@@ -1,6 +1,5 @@
 import json
 import logging
-import datetime
 from threading import Thread, Event
 from urllib.parse import urlparse
 
@@ -44,7 +43,6 @@ class GithubOptionsSyncerTimer(Thread):
 
     def _sync_stale_github_options(self):
         connections = self.seaqa_db.get_github_connections_need_options_sync(self.options_sync_interval_days)
-        now = datetime.datetime.now(datetime.UTC)
 
         for connection in connections:
             connection_id = connection.id
@@ -74,9 +72,7 @@ class GithubOptionsSyncerTimer(Thread):
 
                 github_seadb_api = GitHubSeaDBAPI(project_uuid)
                 handler = GithubIssueHandler()
-                handler.sync_github_options(connection_id, github_seadb_api, github_api, repo_owner, repo_name)
-
-                self.seaqa_db.update_connection_last_options_synced_at(connection_id, now)
+                handler.sync_github_options(connection_id, github_seadb_api, github_api, repo_owner, repo_name, self.seaqa_db)
 
             except Exception as e:
                 logger.exception('Failed to sync GitHub options for connection %s: %s', connection_id, e)

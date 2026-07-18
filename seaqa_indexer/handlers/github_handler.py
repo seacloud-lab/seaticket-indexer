@@ -200,7 +200,7 @@ class GithubIssueHandler(ConnectionHandler):
             return DataEventType.GITHUB_ISSUE_REOPENED.value
         return DataEventType.GITHUB_ISSUE_UPDATED.value
 
-    def sync_github_options(self, connection_id, github_seadb_api, github_api, repo_owner, repo_name):
+    def sync_github_options(self, connection_id, github_seadb_api, github_api, repo_owner, repo_name, seaqa_db):
         table_metadata = github_seadb_api.get_table_metadata(connection_id)
         # sync issue label
         issue_labels = github_api.get_all_issue_labels(repo_owner, repo_name)
@@ -209,6 +209,8 @@ class GithubIssueHandler(ConnectionHandler):
         # sync issue type
         issue_types = github_api.get_all_issue_types(repo_owner, repo_name)
         github_seadb_api.add_or_update_issue_type_column_options(issue_types, table_metadata)
+
+        seaqa_db.update_connection_last_options_synced_at(connection_id, datetime.datetime.now(datetime.UTC))
 
     def _sync_github_issue(self, connection_id, since, connection_status, github_api, seaqa_db, github_seadb_api, repo_owner, repo_name, is_first_sync):
         page = 1
@@ -220,7 +222,7 @@ class GithubIssueHandler(ConnectionHandler):
         _status_last_update_count = 0
 
         if is_first_sync:
-            self.sync_github_options(connection_id, github_seadb_api, github_api, repo_owner, repo_name)
+            self.sync_github_options(connection_id, github_seadb_api, github_api, repo_owner, repo_name, seaqa_db)
 
         while True:
             issues = github_api.list_issues(repo_owner, repo_name, since=since, state='all', per_page=per_page, page=page)
@@ -250,7 +252,7 @@ class GithubIssueHandler(ConnectionHandler):
                     github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
                 except OptionValueInvalidException as e:
                     logger.warning('The option name may not exist; resynchronize it. exception info is: %s', e)
-                    self.sync_github_options(connection_id, github_seadb_api, github_api, repo_owner, repo_name)
+                    self.sync_github_options(connection_id, github_seadb_api, github_api, repo_owner, repo_name, seaqa_db)
                     github_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
 
                 should, new_time, new_count = need_update_connection_last_sync_count(

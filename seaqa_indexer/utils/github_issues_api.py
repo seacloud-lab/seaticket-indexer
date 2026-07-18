@@ -97,11 +97,25 @@ class GitHubAPI:
         response.raise_for_status()
         return response.json()
 
-    def get_all_issue_labels(self, repo_owner, repo_name, per_page=100, page=1):
+    def get_all_issue_labels(self, repo_owner, repo_name, per_page=100):
+        all_labels = []
+        page = 1
         url = f'{self.base_url}/repos/{repo_owner}/{repo_name}/labels'
-        response = requests.get(url, headers=self.headers, timeout=self.timeout)
-        response.raise_for_status()
-        return response.json()
+        while True:
+            params = {
+                'per_page': per_page,
+                'page': page,
+            }
+            response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            labels = response.json()
+            if not labels:
+                break
+            all_labels.extend(labels)
+            if len(labels) < per_page:
+                break
+            page += 1
+        return all_labels
 
     def get_all_issue_types(self, repo_owner, repo_name):
         access_token = self.get_installation_access_token(self.installation_id)
@@ -112,38 +126,56 @@ class GitHubAPI:
         }
 
         query = """
-        query($owner: String!, $repo: String!) {
+        query($owner: String!, $repo: String!, $after: String) {
           repository(owner: $owner, name: $repo) {
-            issueTypes(first: 100) {
+            issueTypes(first: 100, after: $after) {
               nodes {
                 id
                 name
                 color
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
               }
             }
           }
         }
         """
 
-        variables = {
-            "owner": repo_owner,
-            "repo": repo_name
-        }
+        all_issue_types = []
+        cursor = None
 
-        response = requests.post(
-            url,
-            json={"query": query, "variables": variables},
-            headers=headers
-        )
+        while True:
+            variables = {
+                "owner": repo_owner,
+                "repo": repo_name,
+                "after": cursor,
+            }
 
-        response.raise_for_status()
-        result = response.json()
+            response = requests.post(
+                url,
+                json={"query": query, "variables": variables},
+                headers=headers
+            )
 
-        if not result["data"]["repository"]["issueTypes"]:
-            # personal repository issueTypes is None
-            return []
+            response.raise_for_status()
+            result = response.json()
 
-        issue_types = result["data"]["repository"]["issueTypes"]["nodes"]
+            issue_types_data = result["data"]["repository"]["issueTypes"]
+            if not issue_types_data:
+                # personal repository issueTypes is None
+                return []
 
-        return issue_types
+            nodes = issue_types_data.get("nodes") or []
+            all_issue_types.extend(nodes)
+
+            page_info = issue_types_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+            cursor = page_info.get("endCursor")
+            if not cursor:
+                break
+
+        return all_issue_types
 
