@@ -1,6 +1,7 @@
 import logging
 from sqlalchemy import text
 from seaqa_indexer.utils import uuid_str_to_32_chars, uuid_str_to_36_chars
+from seaqa_indexer.utils.constants import ConnectionType
 
 logger = logging.getLogger('__name__')
 
@@ -349,6 +350,36 @@ class SeaqaDB(object):
                 )
             """
             return session.execute(text(sql), {'recent_days': recent_days, 'connection_type': connection_type}).fetchall()
+
+    def get_github_connections_need_options_sync(self, recent_days):
+        with self.db_session_class() as session:
+            sql = """
+                SELECT pc.id, pc.config, pc.project_uuid, pc.last_options_synced_at
+                FROM project_connection pc
+                INNER JOIN projects p ON p.uuid = pc.project_uuid
+                WHERE p.deleted = false
+                AND pc.deleted = false
+                AND pc.is_active = true
+                AND pc.type = :connection_type
+                AND (
+                    pc.last_options_synced_at IS NULL
+                    OR pc.last_options_synced_at <= DATE_SUB(NOW(), INTERVAL :recent_days DAY)
+                )
+            """
+            return session.execute(
+                text(sql),
+                {'recent_days': recent_days, 'connection_type': ConnectionType.GITHUB_ISSUE.value}
+            ).fetchall()
+
+    def update_connection_last_options_synced_at(self, connection_id, synced_at):
+        with self.db_session_class() as session:
+            sql = """
+                UPDATE project_connection
+                SET last_options_synced_at = :synced_at
+                WHERE id = :connection_id
+            """
+            session.execute(text(sql), {'synced_at': synced_at, 'connection_id': connection_id})
+            session.commit()
 
     def update_connection_last_cleaned_at(self, connection_id, cleaned_at):
         with self.db_session_class() as session:
