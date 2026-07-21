@@ -251,6 +251,8 @@ def vector_search():
     connection_ids = data.get('connection_ids')
     extra_sources = data.get('extra_sources', [])
     score_threshold = data.get('score_threshold')
+    time_from = data.get('time_from')
+    time_to = data.get('time_to')
 
     if not query_vector:
         return {'error_msg': 'query_vector invalid.'}, 400
@@ -270,7 +272,11 @@ def vector_search():
         count = int(data.get('count'))
     except:
         count = 10
-    results = application.app.index_manager.vector_search(project_uuid, connection_ids, extra_sources, query_vector, top_k=count, score_threshold=score_threshold)
+    results = application.app.index_manager.vector_search(
+        project_uuid, connection_ids, extra_sources, query_vector,
+        time_from=time_from, time_to=time_to,
+        top_k=count, score_threshold=score_threshold,
+    )
 
     return {'results': results}, 200
 
