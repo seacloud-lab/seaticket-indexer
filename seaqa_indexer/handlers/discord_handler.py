@@ -186,7 +186,12 @@ class DiscordHandler(ConnectionHandler):
         return str((timestamp_ms - DISCORD_EPOCH_MS) << 22)
 
     @staticmethod
-    def _fetch_all_archived_threads(discord_api, channel_id):
+    def _fetch_all_archived_threads(discord_api, channel_id, last_sync_time=None):
+        """Fetch archived threads, stopping when the oldest thread in a page
+        passes the last_sync_time cutoff.
+
+        Threads are returned in reverse chronological order by archive_timestamp,
+        so threads[-1] is the oldest in the page."""
         all_threads = []
         before = None
         while True:
@@ -195,7 +200,16 @@ class DiscordHandler(ConnectionHandler):
             )
             if not threads:
                 break
+
             all_threads.extend(threads)
+
+            if last_sync_time:
+                oldest_archive_time = time_to_utc_time(
+                    threads[-1].get('thread_metadata', {}).get('archive_timestamp')
+                )
+                if oldest_archive_time <= last_sync_time:
+                    break
+
             if not has_more:
                 break
             before = threads[-1].get('thread_metadata', {}).get('archive_timestamp')
@@ -242,7 +256,7 @@ class DiscordHandler(ConnectionHandler):
 
         active_threads = discord_api.fetch_forum_threads(guild_id, channel_id)
 
-        archived_threads = self._fetch_all_archived_threads(discord_api, channel_id)
+        archived_threads = self._fetch_all_archived_threads(discord_api, channel_id, last_sync_time)
 
         all_threads = active_threads + archived_threads
         all_threads.sort(
@@ -253,10 +267,11 @@ class DiscordHandler(ConnectionHandler):
             thread_id = thread.get('id')
             last_message_id = thread.get('last_message_id')
 
-            # Thread-level skip — no new activity since last sync
+            # Thread-level skip — threads are sorted by last_message_id DESC,
+            # so once we pass the cutoff, no remaining threads need processing.
             if not is_first_sync and last_message_id:
                 if int(last_message_id) <= int(after_snowflake):
-                    continue
+                    break
 
             thread_messages = self._fetch_all_messages(
                 discord_api, thread_id, after=after_snowflake
@@ -270,52 +285,42 @@ class DiscordHandler(ConnectionHandler):
             )
             is_new_record = not existing_thread
 
-            record_changed = discord_seadb_api.save_or_update_thread_to_db(
+            discord_seadb_api.save_or_update_thread_to_db(
                 connection_id, thread, existing_thread
             )
-            if record_changed:
-                if is_new_record:
-                    added_count += 1
-                else:
-                    updated_count += 1
-
-            if record_changed:
-                event_type = (
-                    DataEventType.DISCORD_MESSAGE_UPDATED.value
-                    if not is_new_record
-                    else DataEventType.DISCORD_MESSAGE_ADDED.value
-                )
-                sync_count += 1
-
-                self.publish_synced_record_events(
-                    get_latest_row=lambda mid=thread_id: discord_seadb_api.get_thread_by_thread_id(
-                        connection_id, mid
-                    ),
-                    project_uuid=discord_seadb_api.base_id,
-                    connection_id=connection_id,
-                    item_id=thread_id,
-                    old_row=existing_thread,
-                    state_event_type=event_type,
-                    state_event_ignored_fields=(
-                        'modified_time', 'record_modified_time', 'sync_time'
-                    ),
-                    log_object_name='forum thread',
-                )
+            if is_new_record:
+                added_count += 1
+            else:
+                updated_count += 1
 
             # All messages (including the opening post) go to the messages table.
             message_result = discord_seadb_api.add_or_update_messages(
                 connection_id, thread_id, thread_messages
             )
 
-            if (
-                message_result['added'] + message_result['updated'] + message_result['deleted'] > 0
-                and not record_changed
-            ):
-                discord_seadb_api.touch_thread(
-                    connection_id, thread_id, last_message_id=thread.get('last_message_id')
-                )
-                sync_count += 1
-                updated_count += 1
+            event_type = (
+                DataEventType.DISCORD_THREAD_UPDATED.value
+                if not is_new_record
+                else DataEventType.DISCORD_THREAD_ADDED.value
+            )
+            sync_count += 1
+
+            self.publish_synced_record_events(
+                get_latest_row=lambda mid=thread_id: discord_seadb_api.get_thread_by_thread_id(
+                    connection_id, mid
+                ),
+                project_uuid=discord_seadb_api.base_id,
+                connection_id=connection_id,
+                item_id=thread_id,
+                old_row=existing_thread,
+                state_event_type=event_type,
+                additional_items=message_result.get('added_messages', []),
+                additional_event_type=DataEventType.DISCORD_THREAD_MESSAGE_ADDED.value,
+                state_event_ignored_fields=(
+                    'modified_time', 'record_modified_time', 'sync_time'
+                ),
+                log_object_name='forum thread',
+            )
 
             should, new_time, new_count = need_update_connection_last_sync_count(
                 sync_count, _status_last_update_time, _status_last_update_count

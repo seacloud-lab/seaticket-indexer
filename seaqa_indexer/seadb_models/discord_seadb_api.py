@@ -41,7 +41,9 @@ class DiscordSeaDBAPI:
         if existing_thread:
             created_time = existing_thread.get('created_time')
         else:
-            created_time = self._snowflake_to_datetime(thread_id)
+            created_time = time_to_utc_time(
+                thread.get('thread_metadata', {}).get('create_timestamp')
+            )
 
         row = {
             SchemaTables.DISCORD_THREADS.column.thread_id.name: str(thread_id),
@@ -194,7 +196,7 @@ class DiscordSeaDBAPI:
         message_updated_count = 0
         for message in messages:
             message_type = message.get('type', 0)
-            if message_type != 0 and message_type != 21:
+            if message_type not in (0, 19, 21):
                 continue
             mid = message.get('id')
 
