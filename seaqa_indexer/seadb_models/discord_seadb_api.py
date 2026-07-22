@@ -37,20 +37,14 @@ class DiscordSeaDBAPI:
         thread_name = thread.get('name', '')
         title = thread_name
         modified_time = self._snowflake_to_datetime(thread.get('last_message_id'))
-
-        if existing_thread:
-            created_time = existing_thread.get('created_time')
-        else:
-            created_time = time_to_utc_time(
-                thread.get('thread_metadata', {}).get('create_timestamp')
-            )
+        now_datetime = datetime.datetime.now(datetime.UTC).isoformat()
 
         row = {
             SchemaTables.DISCORD_THREADS.column.thread_id.name: str(thread_id),
             SchemaTables.DISCORD_THREADS.column.title.name: title,
             SchemaTables.DISCORD_THREADS.column.modified_time.name: modified_time.isoformat(),
-            SchemaTables.DISCORD_THREADS.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
-            SchemaTables.DISCORD_THREADS.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
+            SchemaTables.DISCORD_THREADS.column.sync_time.name: now_datetime,
+            SchemaTables.DISCORD_THREADS.column.record_modified_time.name: now_datetime,
             SchemaTables.DISCORD_THREADS.column.deleted.name: False,
         }
 
@@ -62,6 +56,9 @@ class DiscordSeaDBAPI:
                 "row": row,
             }])
         else:
+            created_time = time_to_utc_time(
+                thread.get('thread_metadata', {}).get('create_timestamp')
+            )
             row[SchemaTables.DISCORD_THREADS.column.created_time.name] = created_time.isoformat()
             self.seadb_api.insert_rows(self.base_id, table_name, [row])
         return True
@@ -214,7 +211,6 @@ class DiscordSeaDBAPI:
                 SchemaTables.DISCORD_THREAD_MESSAGES.column.message_id.name: str(mid),
                 SchemaTables.DISCORD_THREAD_MESSAGES.column.author.name: author,
                 SchemaTables.DISCORD_THREAD_MESSAGES.column.content.name: content,
-                SchemaTables.DISCORD_THREAD_MESSAGES.column.created_time.name: time_to_utc_time(created_time).isoformat(),
                 SchemaTables.DISCORD_THREAD_MESSAGES.column.modified_time.name: time_to_utc_time(modified_time).isoformat(),
             }
 
@@ -227,6 +223,7 @@ class DiscordSeaDBAPI:
                         "row": insert_row,
                     }])
             else:
+                insert_row[SchemaTables.DISCORD_THREAD_MESSAGES.column.created_time.name] = time_to_utc_time(created_time).isoformat()
                 self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
                 added_messages.append({
                     'message_id': mid,

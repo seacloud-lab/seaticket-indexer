@@ -259,19 +259,15 @@ class DiscordHandler(ConnectionHandler):
         archived_threads = self._fetch_all_archived_threads(discord_api, channel_id, last_sync_time)
 
         all_threads = active_threads + archived_threads
-        all_threads.sort(
-            key=lambda t: int(t.get('last_message_id') or '0'), reverse=True
-        )
 
         for thread in all_threads:
             thread_id = thread.get('id')
             last_message_id = thread.get('last_message_id')
 
-            # Thread-level skip — threads are sorted by last_message_id DESC,
-            # so once we pass the cutoff, no remaining threads need processing.
+            # Thread-level skip — no new activity since last sync
             if not is_first_sync and last_message_id:
                 if int(last_message_id) <= int(after_snowflake):
-                    break
+                    continue
 
             thread_messages = self._fetch_all_messages(
                 discord_api, thread_id, after=after_snowflake
