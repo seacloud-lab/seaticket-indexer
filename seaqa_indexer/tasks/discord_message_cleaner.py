@@ -186,9 +186,8 @@ class DiscordMessageCleanerTimer(Thread):
                         )
                         total_stale_messages += 1
                     if stale_message_ids:
-                        discord_seadb_api.touch_thread(
-                            connection_id, thread_id,
-                            last_message_id=thread.get('last_message_id')
+                        discord_seadb_api.update_thread_record_modified_time(
+                            connection_id, thread_id
                         )
 
                 cleaned_at = datetime.datetime.now(datetime.UTC)

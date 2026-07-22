@@ -1027,7 +1027,7 @@ tables:
         column_data:
           list_type: float32
       linked_ticket:
-        column_type: text
+        column_type: int64
     indexes:
     - - thread_id
     - - created_time

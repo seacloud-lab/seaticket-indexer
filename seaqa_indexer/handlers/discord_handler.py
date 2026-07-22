@@ -47,7 +47,7 @@ class DiscordHandler(ConnectionHandler):
         channel_id = connection_config.get('channel_id')
         thread_id = record.get('thread_id')
         guild_id = connection_config.get('guild_id')
-        message_url = f'https://discord.com/channels/{guild_id}/{channel_id}/{thread_id}'
+        message_url = f'https://discord.com/channels/{guild_id}/{thread_id}'
 
         return {
             'title': record.get('title', ''),

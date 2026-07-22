@@ -153,7 +153,6 @@ CONFLUENCE_CLIENT_SECRET = configs.get('CONFLUENCE_CLIENT_SECRET', '')
 
 SEADB_USER = configs.get('SEADB_USER', '')
 SEADB_PASSWORD = configs.get('SEADB_PASSWORD', '')
-DISCORD_BOT_TOKEN = configs.get('DISCORD_BOT_TOKEN', '')
 
 try:
     with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:

@@ -63,21 +63,16 @@ class DiscordSeaDBAPI:
             self.seadb_api.insert_rows(self.base_id, table_name, [row])
         return True
 
-    def touch_thread(self, connection_id, thread_id, last_message_id=None):
-        """Mark a thread row as changed so index/AI processors can refresh derived data."""
+    def update_thread_record_modified_time(self, connection_id, thread_id):
         table_name = SchemaTables.DISCORD_THREADS.table_name(connection_id=connection_id)
         now = datetime.datetime.now(datetime.UTC).isoformat()
         row = {
-            SchemaTables.DISCORD_THREADS.column.sync_time.name: now,
             SchemaTables.DISCORD_THREADS.column.record_modified_time.name: now,
         }
-        modified_time = self._snowflake_to_datetime(last_message_id)
-        if modified_time:
-            row[SchemaTables.DISCORD_THREADS.column.modified_time.name] = modified_time.isoformat()
 
         thread = self.get_thread_by_thread_id(connection_id, thread_id)
         if not thread:
-            logger.debug(f"Thread {thread_id} not found in connection {connection_id}, skipping touch")
+            logger.debug(f"Thread {thread_id} not found in connection {connection_id}, skipping update")
             return None
 
         return self.seadb_api.update_rows(self.base_id, table_name, [{
