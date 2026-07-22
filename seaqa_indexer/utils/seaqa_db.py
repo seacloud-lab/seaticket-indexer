@@ -118,13 +118,20 @@ class SeaqaDB(object):
             try:
                 status_dict = json.loads(status)
                 last_sync_status = status_dict.get('last_sync_status', '')
-                if 'last_sync_status' in status_dict and last_sync_status in (CrawlStatus.PENDING, CrawlStatus.CRAWLING):
-                    status_dict['last_index_status'] = IndexStatus.PENDING
+                if 'last_sync_status' in status_dict and last_sync_status in (CrawlStatus.PENDING, CrawlStatus.CRAWLING, CrawlStatus.FAILED):
+                    if last_sync_status == CrawlStatus.FAILED:
+                        index_status = IndexStatus.FAILED
+                        ai_processing_status = AIStatus.FAILED
+                    else:
+                        index_status = IndexStatus.PENDING
+                        ai_processing_status = AIStatus.PENDING
+
+                    status_dict['last_index_status'] = index_status
                     params['status'] = json.dumps(status_dict)
                     ai_status = {
-                        'last_ai_processing_status': AIStatus.PENDING,
+                        'last_ai_processing_status': ai_processing_status,
                         'last_ai_processing_count': 0,
-                        'last_ai_index_status': IndexStatus.PENDING,
+                        'last_ai_index_status': index_status,
                         'last_ai_indexed_count': 0,
                     }
                     cmd += ", ai_status=:ai_status"
@@ -132,7 +139,7 @@ class SeaqaDB(object):
 
                     if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
                         content_vector_status = {
-                            'last_content_vector_index_status': IndexStatus.PENDING,
+                            'last_content_vector_index_status': index_status,
                             'last_content_vector_indexed_count': 0,
                         }
                         cmd += ", content_vector_status=:content_vector_status"

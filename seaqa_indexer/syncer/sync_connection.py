@@ -2,7 +2,7 @@ import logging
 import json
 import datetime
 
-from seaqa_indexer.utils.constants import CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES
+from seaqa_indexer.utils.constants import CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES, IndexStatus
 from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.handlers import get_handler
@@ -45,6 +45,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     old_last_sync_time = project_connection.last_sync_time
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), connection_type)
+    connection_status['last_index_status'] = IndexStatus.PENDING
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
