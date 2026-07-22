@@ -46,6 +46,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), connection_type)
     connection_status['last_index_status'] = IndexStatus.PENDING
+    connection_status['last_indexed_count'] = 0
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)

@@ -127,6 +127,7 @@ class SeaqaDB(object):
                         ai_processing_status = AIStatus.PENDING
 
                     status_dict['last_index_status'] = index_status
+                    status_dict['last_indexed_count'] = 0
                     params['status'] = json.dumps(status_dict)
                     ai_status = {
                         'last_ai_processing_status': ai_processing_status,

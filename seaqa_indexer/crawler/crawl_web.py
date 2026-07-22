@@ -61,6 +61,7 @@ def craw_web(connection_id, db_session_class, mq):
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
     seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), ConnectionType.SITE.value)
     connection_status['last_index_status'] = IndexStatus.PENDING
+    connection_status['last_indexed_count'] = 0
     connection_config = json.loads(project_connection.config)
     site_url = connection_config.get('url')
     sitemap_url = connection_config.get('sitemap_url')
