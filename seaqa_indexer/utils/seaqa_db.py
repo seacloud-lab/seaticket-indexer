@@ -1,7 +1,9 @@
 import logging
+import json
 from sqlalchemy import text
 from seaqa_indexer.utils import uuid_str_to_32_chars, uuid_str_to_36_chars
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, SUPPORT_VECTOR_RETRIEVAL_TYPES, \
+    CrawlStatus, IndexStatus, AIStatus
 
 logger = logging.getLogger('__name__')
 
@@ -103,10 +105,43 @@ class SeaqaDB(object):
             connection = session.execute(text(sql), {'project_uuid': project_uuid}).fetchall()
             return connection
 
-    def update_connection_status(self, connection_id, status):
+    def update_connection_status(self, connection_id, status, connection_type=None):
         with self.db_session_class() as session:
-            cmd = "UPDATE project_connection SET status=:status WHERE id=:connection_id"
-            session.execute(text(cmd), {'connection_id': connection_id, 'status': status})
+            if connection_type is None:
+                connection_sql = "SELECT type FROM project_connection WHERE id=:connection_id"
+                connection = session.execute(text(connection_sql), {'connection_id': connection_id}).fetchone()
+                connection_type = connection.type if connection else None
+
+            cmd = "UPDATE project_connection SET status=:status"
+            params = {'connection_id': connection_id, 'status': status}
+
+            try:
+                status_dict = json.loads(status)
+                last_sync_status = status_dict.get('last_sync_status', '')
+                if 'last_sync_status' in status_dict and last_sync_status in (CrawlStatus.PENDING, CrawlStatus.CRAWLING):
+                    status_dict['last_index_status'] = IndexStatus.PENDING
+                    params['status'] = json.dumps(status_dict)
+                    ai_status = {
+                        'last_ai_processing_status': AIStatus.PENDING,
+                        'last_ai_processing_count': 0,
+                        'last_ai_index_status': IndexStatus.PENDING,
+                        'last_ai_indexed_count': 0,
+                    }
+                    cmd += ", ai_status=:ai_status"
+                    params['ai_status'] = json.dumps(ai_status)
+
+                    if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
+                        content_vector_status = {
+                            'last_content_vector_index_status': IndexStatus.PENDING,
+                            'last_content_vector_indexed_count': 0,
+                        }
+                        cmd += ", content_vector_status=:content_vector_status"
+                        params['content_vector_status'] = json.dumps(content_vector_status)
+            except Exception:
+                pass
+
+            cmd += " WHERE id=:connection_id"
+            session.execute(text(cmd), params)
             session.commit()
 
     def update_status_and_time(self, connection_id, status, last_sync_time, config=None):

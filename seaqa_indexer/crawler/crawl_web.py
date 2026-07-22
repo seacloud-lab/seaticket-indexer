@@ -1,6 +1,6 @@
 import logging
 import json
-from seaqa_indexer.utils.constants import CrawlStatus
+from seaqa_indexer.utils.constants import CrawlStatus, ConnectionType
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.crawler.web_crawl import WebCrawl
 from seaqa_indexer.utils.sync_logger import SyncLogger
@@ -13,7 +13,7 @@ def craw_web(connection_id, db_session_class, mq):
     def failed_crawl_site(error_msg, params):
         site_id, site_url, connection_status, is_first_sync = params
         connection_status['last_sync_status'] = CrawlStatus.FAILED
-        seaqa_db.update_connection_status(site_id, json.dumps(connection_status))
+        seaqa_db.update_connection_status(site_id, json.dumps(connection_status), ConnectionType.SITE.value)
         logger.exception('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
         sync_logger.log(f'failed to crawl site: {error_msg}')
         sync_logger.stop_capture()
@@ -60,7 +60,7 @@ def craw_web(connection_id, db_session_class, mq):
 
     connection_status = json.loads(project_connection.status)
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
-    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), ConnectionType.SITE.value)
     connection_config = json.loads(project_connection.config)
     site_url = connection_config.get('url')
     sitemap_url = connection_config.get('sitemap_url')
@@ -86,5 +86,5 @@ def craw_web(connection_id, db_session_class, mq):
         logger.exception('failed to crawl site: %s, error: %s', connection_id, e)
         sync_logger.log(f'Internal Server Error')
         connection_status['last_sync_status'] = CrawlStatus.FAILED
-        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), ConnectionType.SITE.value)
         sync_logger.stop_capture()

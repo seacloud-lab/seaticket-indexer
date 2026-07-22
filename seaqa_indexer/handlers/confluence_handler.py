@@ -82,7 +82,7 @@ class ConfluenceHandler(ConnectionHandler):
         confluence_index = ConfluenceIndex(seasearch_api)
 
         connection_status['last_index_status'] = IndexStatus.INDEXING
-        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), self.connection_type)
 
         index_name = gen_index_name_by_type(connection_id, project_connection.type)
         confluence_index.create_index_if_missing(index_name)
@@ -216,7 +216,7 @@ class ConfluenceHandler(ConnectionHandler):
                     )
                     if should:
                         connection_status['last_sync_count'] = sync_count
-                        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), self.connection_type)
                         status_last_update_time = new_time
                         status_last_update_count = new_count
 

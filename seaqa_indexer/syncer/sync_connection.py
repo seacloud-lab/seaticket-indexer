@@ -44,7 +44,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     connection_type = project_connection.type
     old_last_sync_time = project_connection.last_sync_time
     connection_status['last_sync_status'] = CrawlStatus.CRAWLING
-    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), connection_type)
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
@@ -113,7 +113,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
 
     if not is_sync_success:
         connection_status['last_sync_status'] = CrawlStatus.FAILED
-        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), connection_type)
         sync_logger.stop_capture()
         if is_first_sync:
             send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.FAILED)

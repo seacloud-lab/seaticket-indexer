@@ -13,7 +13,7 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.discourse_index import DiscourseIndex
-from seaqa_indexer.utils.constants import DataEventType
+from seaqa_indexer.utils.constants import DataEventType, ConnectionType
 
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -125,7 +125,7 @@ class DiscourseHandler(ConnectionHandler):
         discourse_forum_index = DiscourseIndex(seasearch_api)
 
         connection_status['last_index_status'] = IndexStatus.INDEXING
-        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), self.connection_type)
         discourse_index_name = gen_index_name_by_type(connection_id, connection_type)
         discourse_forum_index.create_index_if_missing(discourse_index_name)
 
@@ -253,7 +253,7 @@ class DiscourseHandler(ConnectionHandler):
                 )
                 if should:
                     connection_status['last_sync_count'] = sync_count
-                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), self.connection_type)
                     _status_last_update_time = new_time
                     _status_last_update_count = new_count
                 time.sleep(1)

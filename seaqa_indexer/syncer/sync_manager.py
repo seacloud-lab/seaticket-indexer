@@ -93,7 +93,7 @@ class SyncManager(Thread):
                 connection_status = json.loads(connection.status)
                 # reset sync status
                 connection_status['last_sync_status'] = CrawlStatus.PENDING
-                self.seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                self.seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), connection_type)
 
                 if connection_type == ConnectionType.SITE.value:
                     msg_content = {
