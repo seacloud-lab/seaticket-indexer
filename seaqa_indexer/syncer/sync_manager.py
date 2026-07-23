@@ -33,6 +33,7 @@ NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.NOTION.value,
     ConnectionType.LINEAR.value,
     ConnectionType.CONFLUENCE.value,
+    ConnectionType.DISCORD.value,
 ]
 
 LINEAR_TOKEN_REFRESH_THRESHOLD = 2 # hour
