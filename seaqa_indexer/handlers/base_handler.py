@@ -109,29 +109,29 @@ class ConnectionHandler(ABC):
 
         return total_deleted
 
-    def build_event(self, event_type, old_row=None, new_row=None, ignored_fields=None, datetime_fields=None):
+    def build_event(self, event_type, old_row=None, new_row=None, ignored_fields=None, date_fields=None):
         old_row = old_row or {}
         new_row = new_row or {}
         old_value = {}
         new_value = {}
         ignored_fields = set(ignored_fields or [])
-        datetime_fields = set(datetime_fields or [])
+        date_fields = set(date_fields or [])
 
         for field_name, field_value in new_row.items():
             if field_name in ignored_fields:
                 continue
             old_field_value = old_row.get(field_name)
-            if old_field_value == field_value:
-                continue
-            if field_name in datetime_fields and old_field_value and field_value:
+            if field_name in date_fields:
                 try:
-                    if time_to_utc_time(str(old_field_value)) == time_to_utc_time(str(field_value)):
-                        continue
+                    old_field_value = self._normalize_event_date(old_field_value)
+                    field_value = self._normalize_event_date(field_value)
                 except (TypeError, ValueError):
                     logger.warning(
-                        'Failed to compare event datetime field %s: %r != %r',
+                        'Failed to normalize event date field %s: %r != %r',
                         field_name, old_field_value, field_value,
                     )
+            if old_field_value == field_value:
+                continue
             old_value[field_name] = old_field_value
             new_value[field_name] = field_value
 
@@ -140,6 +140,25 @@ class ConnectionHandler(ABC):
             'old_value': old_value or None,
             'new_value': new_value or None,
         }
+
+    @staticmethod
+    def _normalize_event_date(value):
+        if value in (None, ''):
+            return value
+        if isinstance(value, datetime.datetime):
+            return value.date().isoformat()
+        if isinstance(value, datetime.date):
+            return value.isoformat()
+
+        value_str = str(value)
+        try:
+            date_value = datetime.date.fromisoformat(value_str)
+        except ValueError:
+            datetime_value = f'{value_str[:-1]}+00:00' if value_str.endswith('Z') else value_str
+            return datetime.datetime.fromisoformat(datetime_value).date().isoformat()
+        if date_value.isoformat() != value_str:
+            raise ValueError('Event date must use YYYY-MM-DD.')
+        return value_str
 
     def should_publish_state_event(self, state_event) -> bool:
         if state_event.get('old_value') is not None or state_event.get('new_value') is not None:
@@ -158,7 +177,7 @@ class ConnectionHandler(ABC):
         additional_items=None,
         additional_event_type=None,
         state_event_ignored_fields=None,
-        state_event_datetime_fields=None,
+        state_event_date_fields=None,
         log_object_name='record',
     ):
         if not self.mq:
@@ -197,7 +216,7 @@ class ConnectionHandler(ABC):
                 old_row=old_row,
                 new_row=latest_row,
                 ignored_fields=state_event_ignored_fields,
-                datetime_fields=state_event_datetime_fields,
+                date_fields=state_event_date_fields,
             )
             if self.should_publish_state_event(state_event):
                 self.mq.publish('data_events', json.dumps({
