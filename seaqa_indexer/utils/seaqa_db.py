@@ -168,6 +168,7 @@ class SeaqaDB(object):
             cmd += " WHERE id=:connection_id"
             session.execute(text(cmd), params)
             session.commit()
+        return json.loads(connection_status)
 
     def update_connection_status(self, connection_id, status):
         with self.db_session_class() as session:
