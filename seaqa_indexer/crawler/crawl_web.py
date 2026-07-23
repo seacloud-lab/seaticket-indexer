@@ -59,7 +59,7 @@ def craw_web(connection_id, db_session_class, mq):
         return
 
     connection_status = json.loads(project_connection.status)
-    seaqa_db.set_connection_crawling_status(connection_id, connection_status, project_connection.type)
+    connection_status = seaqa_db.set_connection_crawling_status(connection_id, connection_status, project_connection.type)
     connection_config = json.loads(project_connection.config)
     site_url = connection_config.get('url')
     sitemap_url = connection_config.get('sitemap_url')
