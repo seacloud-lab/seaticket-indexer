@@ -28,8 +28,8 @@ COLUMN_TYPE_TO_DATA_MAPPING = {
     }
 }
 
-TABLE_CONTAINING_SUB_TABLE_NAMES = ['email', 'github_issue', 'discourse_forum']
-SUB_TABLE_NAMES = ['email_thread', 'github_issue_comments', 'discourse_forum_replies']
+TABLE_CONTAINING_SUB_TABLE_NAMES = ['email', 'github_issue', 'discourse_forum', 'general_task', 'linear_issue']
+SUB_TABLE_NAMES = ['email_thread', 'github_issue_comments', 'discourse_forum_replies','general_task_user', 'linear_issue_comments']
 
 class ColumnManager:
 
@@ -145,6 +145,58 @@ class ColumnManager:
             if len(projects) < limit:
                 break
 
+    def update_seadb_column_format(self, table_name, table_type, column_name, column_format):
+        limit = 1000
+        start = 0
+        while True:
+            projects = self.get_projects_by_page(limit, start)
+
+            for project in projects:
+                project_uuid = project.uuid
+                logger.info(
+                    'start update column %s format for project %s table_name %s',
+                    column_name, project_uuid, table_name
+                )
+                try:
+                    base_info = self.seadb_api.get_base_metadata(project_uuid)
+                    for table in base_info['tables']:
+                        seadb_table_name = table['name']
+                        if not self.is_this_table(seadb_table_name, table_name, table_type):
+                            continue
+
+                        column = next(
+                            (column for column in table.get('columns') or [] if column['name'] == column_name),
+                            None
+                        )
+                        if not column:
+                            logger.warning(
+                                'project %s table_name %s does not have column %s',
+                                project_uuid, seadb_table_name, column_name
+                            )
+                            continue
+                        if (column.get('data') or {}).get('format') == column_format:
+                            continue
+
+                        self.seadb_api.update_column(
+                            project_uuid,
+                            table['id'],
+                            column['key'],
+                            update_column_data={'format': column_format},
+                        )
+                        logger.info(
+                            'Successfully updated column %s format for project %s table %s',
+                            column_name, project_uuid, seadb_table_name
+                        )
+                except Exception as e:
+                    logger.error(
+                        'project_uuid:%s fail to update column %s format for table %s, error: %s',
+                        project_uuid, column_name, table_name, str(e)
+                    )
+
+            start += limit
+            if len(projects) < limit:
+                break
+
 
 def start_add_column(args):
     table_name = args.table_name
@@ -180,9 +232,23 @@ def start_delete_column(args):
         raise
 
 
+def start_update_column_format(args):
+    try:
+        manager = ColumnManager()
+        manager.update_seadb_column_format(
+            args.table_name, args.table_type, args.column_name, args.column_format
+        )
+        logger.info('Successfully updated column format')
+    except Exception as e:
+        logger.error(f'Error during update column format: {str(e)}')
+        raise
+
+
 def validate_arguments(args):
     if not args.table_name or not args.table_type or not args.column_name:
-        raise ValueError("Either --tabe-name and --table-type and --column-name must be provided")
+        raise ValueError('--table-name, --table-type, and --column-name must be provided')
+    if args.command == 'update-column-format' and not args.column_format:
+        raise ValueError('--format must be provided')
 
 def str_to_bool(v):
     if isinstance(v, bool):
@@ -253,6 +319,12 @@ def create_parser():
         help='Need add index'
     )
 
+    parent_parser.add_argument(
+        '--format',
+        dest='column_format',
+        help='column date format'
+    )
+
     parser = argparse.ArgumentParser(description='SeaQA Index Management Tool')
     subparsers = parser.add_subparsers(title='subcommands', dest='command', required=True)
 
@@ -269,6 +341,13 @@ def create_parser():
         help='delete seadb column'
     )
     parser_delete.set_defaults(func=start_delete_column)
+
+    parser_update_format = subparsers.add_parser(
+        'update-column-format',
+        parents=[parent_parser],
+        help='update seadb column format'
+    )
+    parser_update_format.set_defaults(func=start_update_column_format)
 
     return parser
 
