@@ -1058,4 +1058,3 @@ tables:
     - - thread_id
     - - message_id
     table_name: discord_thread_messages_{connection_id}
-
