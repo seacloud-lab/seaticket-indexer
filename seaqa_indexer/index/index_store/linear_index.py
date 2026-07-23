@@ -2,7 +2,7 @@ import json
 import logging
 
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT, SEASEARCH_BULK_OPERATE_LIMIT
+from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT, SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType
 from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class LinearIssuesIndex(BaseConnectionIndex):
                     index_count += 1
                     if need_update_connection_status(index_count):
                         connection_status['last_indexed_count'] = index_count
-                        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), ConnectionType.LINEAR.value)
             offset += page_size
 
         if bulk_params:

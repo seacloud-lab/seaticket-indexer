@@ -47,7 +47,7 @@ def update_connection_index(connection_id, db_session_class, is_rebuild=False):
     connection_status = json.loads(connection.status)
 
     connection_status['last_index_status'] = IndexStatus.INDEXING
-    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), connection_type)
 
     old_indexed_at = connection.indexed_at
     since = get_since_time(old_indexed_at, is_rebuild)
@@ -62,7 +62,7 @@ def update_connection_index(connection_id, db_session_class, is_rebuild=False):
     except Exception as e:
         logger.exception('Connection %s update index failed, error: %s', connection_id, e)
         connection_status['last_index_status'] = IndexStatus.FAILED
-        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), connection_type)
 
     logger.info('Finish index project connection %s, connection_type is %s', connection_id, connection_type)
 

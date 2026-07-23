@@ -96,7 +96,7 @@ class EmailHandler(ConnectionHandler):
         email_index = EmailIndex(seasearch_api)
 
         connection_status['last_index_status'] = IndexStatus.INDEXING
-        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), self.connection_type)
         index_name = gen_index_name_by_type(connection_id, connection_type)
         email_index.create_index_if_missing(index_name)
 
@@ -233,7 +233,7 @@ class EmailHandler(ConnectionHandler):
 
                 if should:
                     connection_status['last_sync_count'] = sync_count
-                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), self.connection_type)
                     _status_last_update_time = new_time
                     _status_last_update_count = new_count
                 sync_count += 1

@@ -2,9 +2,8 @@ import logging
 import json
 
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT
+from seaqa_indexer.utils.constants import INDEX_CONTENT_LIMIT, SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType
 from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
-from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ class DiscourseIndex(BaseConnectionIndex):
 
                     if need_update_connection_status(index_count):
                         connection_status['last_indexed_count'] = index_count
-                        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                        seaqa_db.update_connection_status(connection_id, json.dumps(connection_status), ConnectionType.DISCOURSE_FORUM.value)
         if bulk_params:
             self.seasearch_api.bulk(index_name, bulk_params)
         if need_cleared_topic_index_id_set:
