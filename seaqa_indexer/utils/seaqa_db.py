@@ -1,7 +1,9 @@
 import logging
+import json
 from sqlalchemy import text
 from seaqa_indexer.utils import uuid_str_to_32_chars, uuid_str_to_36_chars
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES, IndexStatus, AIStatus
+
 
 logger = logging.getLogger('__name__')
 
@@ -102,6 +104,70 @@ class SeaqaDB(object):
             sql = """SELECT id, type FROM project_connection WHERE project_uuid=:project_uuid"""
             connection = session.execute(text(sql), {'project_uuid': project_uuid}).fetchall()
             return connection
+    
+    def set_connection_pending_status(self, connection_id, status, connection_type):
+        connection_status = json.dumps({
+            "last_indexed_count": 0, 
+            "last_index_status": IndexStatus.PENDING, 
+            "total_records": json.loads(status).get('total_records'), 
+            "last_sync_count": 0, 
+            "last_sync_status": CrawlStatus.PENDING
+        })
+
+        ai_status = json.dumps({
+            "last_ai_processing_count": 0, 
+            "last_ai_processing_status": AIStatus.PENDING, 
+            "last_ai_index_status": IndexStatus.PENDING, 
+            "last_ai_indexed_count": 0
+        })
+
+        with self.db_session_class() as session:
+            cmd = "UPDATE project_connection SET status=:status, ai_status=:ai_status"
+            params = {'connection_id': connection_id, 'status': connection_status, 'ai_status': ai_status}
+
+            if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
+                content_vector_status = json.dumps({
+                    "last_content_vector_index_status": IndexStatus.PENDING, 
+                    "last_content_vector_indexed_count": 0
+                })
+                cmd += ", content_vector_status=:content_vector_status"
+                params['content_vector_status'] = content_vector_status
+            
+            cmd += " WHERE id=:connection_id"
+            session.execute(text(cmd), params)
+            session.commit()
+    
+    def set_connection_crawling_status(self, connection_id, status, connection_type):
+        connection_status = json.dumps({
+            "last_indexed_count": 0, 
+            "last_index_status": IndexStatus.PENDING, 
+            "total_records": status.get('total_records'), 
+            "last_sync_count": 0, 
+            "last_sync_status": CrawlStatus.CRAWLING
+        })
+
+        ai_status = json.dumps({
+            "last_ai_processing_count": 0, 
+            "last_ai_processing_status": AIStatus.PENDING, 
+            "last_ai_index_status": IndexStatus.PENDING, 
+            "last_ai_indexed_count": 0
+        })
+
+        with self.db_session_class() as session:
+            cmd = "UPDATE project_connection SET status=:status, ai_status=:ai_status"
+            params = {'connection_id': connection_id, 'status': connection_status, 'ai_status': ai_status}
+
+            if connection_type in SUPPORT_VECTOR_RETRIEVAL_TYPES:
+                content_vector_status = json.dumps({
+                    "last_content_vector_index_status": IndexStatus.PENDING, 
+                    "last_content_vector_indexed_count": 0
+                })
+                cmd += ", content_vector_status=:content_vector_status"
+                params['content_vector_status'] = content_vector_status
+            
+            cmd += " WHERE id=:connection_id"
+            session.execute(text(cmd), params)
+            session.commit()
 
     def update_connection_status(self, connection_id, status):
         with self.db_session_class() as session:
@@ -174,16 +240,18 @@ class SeaqaDB(object):
     def get_connections_to_recover(self, need_recover_sync_types):
         with self.db_session_class() as session:
             need_sync_types_combine_str = ','.join([f"'{t}'" for t in need_recover_sync_types])
-            sql = f"""SELECT id, type, status FROM `project_connection` 
-                     WHERE (JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_sync_status')) in ('crawling', 'pending')
-                      OR JSON_UNQUOTE(JSON_EXTRACT(`status`, '$.last_index_status')) = 'indexing'
-                      OR JSON_UNQUOTE(JSON_EXTRACT(`ai_status`, '$.last_ai_index_status')) = 'indexing'
-                      OR JSON_UNQUOTE(JSON_EXTRACT(`ai_status`, '$.last_ai_processing_status')) = 'processing'
-                      OR JSON_UNQUOTE(JSON_EXTRACT(`content_vector_status`, '$.last_content_vector_index_status')) = 'indexing'
+            sql = f"""SELECT pc.id, pc.type, pc.status FROM `project_connection` pc INNER JOIN projects p
+            ON p.uuid=pc.project_uuid
+                     WHERE (JSON_UNQUOTE(JSON_EXTRACT(pc.`status`, '$.last_sync_status')) in ('crawling', 'pending')
+                      OR JSON_UNQUOTE(JSON_EXTRACT(pc.`status`, '$.last_index_status')) = 'indexing'
+                      OR JSON_UNQUOTE(JSON_EXTRACT(pc.`ai_status`, '$.last_ai_index_status')) = 'indexing'
+                      OR JSON_UNQUOTE(JSON_EXTRACT(pc.`ai_status`, '$.last_ai_processing_status')) = 'processing'
+                      OR JSON_UNQUOTE(JSON_EXTRACT(pc.`content_vector_status`, '$.last_content_vector_index_status')) = 'indexing'
                       )
-                     AND deleted=false 
-                     AND is_active=true 
-                     AND type IN ({need_sync_types_combine_str})"""
+                     AND pc.deleted=false 
+                     AND p.deleted=false 
+                     AND pc.is_active=true 
+                     AND pc.type IN ({need_sync_types_combine_str})"""
 
             return session.execute(text(sql)).fetchall()
 
