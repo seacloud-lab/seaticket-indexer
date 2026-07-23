@@ -273,8 +273,6 @@ class DiscordHandler(ConnectionHandler):
                 discord_api, thread_id, after=after_snowflake
             )
 
-            if not thread_messages:
-                continue
 
             existing_thread = discord_seadb_api.get_thread_by_thread_id(
                 connection_id, thread_id
@@ -288,6 +286,9 @@ class DiscordHandler(ConnectionHandler):
                 added_count += 1
             else:
                 updated_count += 1
+            
+            if not thread_messages:
+                continue
 
             # All messages (including the opening post) go to the messages table.
             message_result = discord_seadb_api.add_or_update_messages(
