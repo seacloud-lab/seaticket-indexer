@@ -11,7 +11,7 @@ from seaqa_indexer.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 from seaqa_indexer.seadb_models.discourse_seadb_api import DiscourseSeaDBAPI
 from seaqa_indexer.seadb_models.github_seadb_api import GitHubSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus
+from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.linear_api import LinearAPI
 
 logger = logging.getLogger(__name__)
@@ -91,10 +91,7 @@ class SyncManager(Thread):
 
                 logger.info(f"Add recovering sync task for connection {connection_id}")
 
-                connection_status = json.loads(connection.status)
-                # reset sync status
-                connection_status['last_sync_status'] = CrawlStatus.PENDING
-                self.seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+                self.seaqa_db.set_connection_pending_status(connection_id, connection.status, connection_type)
 
                 if connection_type == ConnectionType.SITE.value:
                     msg_content = {

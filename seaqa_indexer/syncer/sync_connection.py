@@ -43,8 +43,7 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
     project_uuid = project_connection.project_uuid
     connection_type = project_connection.type
     old_last_sync_time = project_connection.last_sync_time
-    connection_status['last_sync_status'] = CrawlStatus.CRAWLING
-    seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
+    seaqa_db.set_connection_crawling_status(connection_id, connection_status, connection_type)
 
     config = json.loads(project_connection.config)
     config = decrypt_config(config)
