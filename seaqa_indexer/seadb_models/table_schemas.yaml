@@ -363,6 +363,8 @@ tables:
         column_type: bool
       due_date:
         column_type: datetime
+        column_data:
+          format: YYYY-MM-DD
       last_agent_processed_at:
         column_type: datetime
     indexes:
@@ -825,6 +827,8 @@ tables:
           compressed: true
       due_date:
         column_type: datetime
+        column_data:
+          format: YYYY-MM-DD
       modified_time:
         column_type: datetime
       created_time:
@@ -894,6 +898,8 @@ tables:
         column_type: text
       due_date:
         column_type: datetime
+        column_data:
+          format: YYYY-MM-DD
       sync_time:
         column_type: datetime
       created_time:

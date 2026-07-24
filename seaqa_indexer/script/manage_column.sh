@@ -14,6 +14,8 @@ Usage: $0 <command> [options] [arguments]
 Commands:
   add-column        Add column
   delete-column     Delete column
+  update-column-format
+                    Update column date format
 
 
 Options:
@@ -22,16 +24,20 @@ Options:
   --log-level LEVEL         Log level (default: info)
 
 
-BUSINESS_ARGS (for both 'add-column' and 'delete-column'):
+BUSINESS_ARGS (for all commands):
   --table-name NAME                Name of the SeaDB table.
   --table-type TYPE                Type of the table (project or connection).
-  --column-name column_name        Name of the column to add/delete.
+  --column-name column_name        Name of the target column.
 
 
 BUSINESS_ARGS (only for 'add-column'):
   --column-type           TYPE             column's type
   --column-data-name      NAME             Optional configuration for the column (e.g., text_compressed).
   --need-add-index        VALUE            Whether to create an index. Value can be true/false, 1/0, etc.
+
+
+BUSINESS_ARGS (only for 'update-column-format'):
+  --format                FORMAT           Date format stored in column data.
 
 
 Examples:
@@ -47,6 +53,10 @@ Examples:
   $0 delete-column --table-name tickets --table-type project --column-name test1 --log-file /tmp/alter_column.log
 
 
+  # Mark a datetime column as a calendar date
+  $0 update-column-format --table-name tickets --table-type project --column-name due_date --format YYYY-MM-DD
+
+
 EOF
 }
 
@@ -60,8 +70,8 @@ fi
 COMMAND="$1"
 
 
-if [[ "$COMMAND" != "add-column" && "$COMMAND" != "delete-column" ]]; then
-    echo "Error: The first argument must be the command 'add-column' or 'delete-column'." >&2
+if [[ "$COMMAND" != "add-column" && "$COMMAND" != "delete-column" && "$COMMAND" != "update-column-format" ]]; then
+    echo "Error: The first argument must be 'add-column', 'delete-column', or 'update-column-format'." >&2
     echo "Use -h to view help." >&2
     exit 1
 fi

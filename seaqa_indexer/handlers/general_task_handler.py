@@ -19,7 +19,7 @@ from seaqa_indexer.seadb_models.models import SchemaTables
 logger = logging.getLogger(__name__)
 
 GENERAL_TASK_EVENT_IGNORED_FIELDS = ('modified_time', 'sync_time', 'record_modified_time')
-GENERAL_TASK_EVENT_DATETIME_FIELDS = ('due_date',)
+GENERAL_TASK_EVENT_DATE_FIELDS = ('due_date',)
 
 
 class GeneralTaskHandler(ConnectionHandler):
@@ -222,7 +222,7 @@ class GeneralTaskHandler(ConnectionHandler):
                         old_row=None,
                         state_event_type=DataEventType.GENERAL_TASK_ADDED.value,
                         state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
-                        state_event_datetime_fields=GENERAL_TASK_EVENT_DATETIME_FIELDS,
+                        state_event_date_fields=GENERAL_TASK_EVENT_DATE_FIELDS,
                         log_object_name='general task',
                     )
             if update_rows:
@@ -245,7 +245,7 @@ class GeneralTaskHandler(ConnectionHandler):
                         old_row=old_row,
                         state_event_type=DataEventType.GENERAL_TASK_UPDATED.value,
                         state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
-                        state_event_datetime_fields=GENERAL_TASK_EVENT_DATETIME_FIELDS,
+                        state_event_date_fields=GENERAL_TASK_EVENT_DATE_FIELDS,
                         log_object_name='general task',
                     )
 

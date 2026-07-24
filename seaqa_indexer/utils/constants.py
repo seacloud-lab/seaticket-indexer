@@ -171,7 +171,7 @@ GENERAL_TASK_CONNECTION_SPEC = {
     },
     "due_date": {
         "type": "string",
-        "description": "The standard UTC time string for the task deadline or planned completion."
+        "description": "The task deadline or planned completion date in YYYY-MM-DD format, without time or timezone."
     },
     "description": {
         "type": "string",
