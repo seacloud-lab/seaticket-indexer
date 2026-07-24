@@ -14,9 +14,6 @@ class GeneralTaskSeaDBAPI:
     def _table_name(self, connection_id):
         return SchemaTables.GENERAL_TASK.table_name(connection_id=connection_id)
 
-    def _task_user_table_name(self, connection_id):
-        return SchemaTables.GENERAL_TASK_USER.table_name(connection_id=connection_id)
-
     def get_need_ai_tasks_by_page(self, connection_id, page_size):
         table_name = self._table_name(connection_id)
         sql = f"""
@@ -71,14 +68,18 @@ class GeneralTaskSeaDBAPI:
         results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return {row.get('source_task_id'): row for row in results }
 
-    def get_existing_user_mapping_pks(self, connection_id, emails):
-        if not emails:
+    def get_all_existing_user_rows_by_ids(self, user_ids):
+        """Query existing user rows by user_id only (any connection).
+
+        Returns a dict: {user_id: {'_pk': ..., 'connection_id': [...]}}
+        """
+        if not user_ids:
             return {}
-        table_name = self._task_user_table_name(connection_id)
-        escaped_emails = "', '".join(e.replace("'", "''") for e in emails)
-        sql = f"SELECT email, _pk FROM `{table_name}` WHERE email IN ('{escaped_emails}')"
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        escaped_ids = "', '".join(uid.replace("'", "''") for uid in user_ids)
+        sql = f"SELECT user_id, _pk, connection_id FROM `{table_name}` WHERE user_id IN ('{escaped_ids}')"
         results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        return {row.get('email'): row.get('_pk') for row in results}
+        return {row.get('user_id'): {'_pk': row.get('_pk'), 'connection_id': row.get('connection_id') or []} for row in results}
 
     def append_rows(self, connection_id, rows):
         if not rows:
@@ -92,32 +93,63 @@ class GeneralTaskSeaDBAPI:
         return rows.get(source_task_id)
 
     def upsert_user_mappings(self, connection_id, user_mappings):
+        """Upsert user mappings with merge logic.
+
+        Same user_id across different connections is stored once with
+        connection_id list aggregated. Uses int64 list for connection_id.
+        """
         if not user_mappings:
             return
         now = datetime.datetime.now(datetime.UTC).isoformat()
-        emails = [str(user_mapping.get('email') or '').strip() for user_mapping in user_mappings]
-        emails = [e for e in emails if e]
-        existing_pks = self.get_existing_user_mapping_pks(connection_id, emails)
+
+        # Collect user_ids from mappings
+        user_ids = [str(user_mapping.get('email') or '').strip() for user_mapping in user_mappings]
+        user_ids = [uid for uid in user_ids if uid]
+
+        # Query ALL existing rows by user_id (not scoped to connection_id)
+        existing_map = self.get_all_existing_user_rows_by_ids(user_ids) if user_ids else {}
 
         inserts = []
         updates = []
         for user_mapping in user_mappings:
-            email = str(user_mapping.get('email') or '').strip()
+            user_id = str(user_mapping.get('email') or '').strip()
             name = str(user_mapping.get('name') or '').strip()
-            if not email or not name:
+            if not user_id or not name:
                 continue
-            row = {
-                SchemaTables.GENERAL_TASK_USER.column.email.name: email,
-                SchemaTables.GENERAL_TASK_USER.column.name.capitalize: name,
-                SchemaTables.GENERAL_TASK_USER.column.record_modified_time.name: now,
-            }
-            existing_pk = existing_pks.get(email)
-            if existing_pk:
-                updates.append({'pk': existing_pk, 'row': row})
-            else:
-                inserts.append(row)
 
-        table_name = self._task_user_table_name(connection_id)
+            existing = existing_map.get(user_id)
+            if existing:
+                existing_conn_ids = existing['connection_id']
+                if connection_id in existing_conn_ids:
+                    # Already known in this connection — just refresh name/time
+                    updates.append({
+                        'pk': existing['_pk'],
+                        'row': {
+                            SchemaTables.CONNECTION_USER.column.name.name: name,
+                            SchemaTables.CONNECTION_USER.column.record_modified_time.name: now,
+                        }
+                    })
+                else:
+                    # User exists in other connections — append this connection_id
+                    new_conn_ids = list(set(existing_conn_ids) | {connection_id})
+                    updates.append({
+                        'pk': existing['_pk'],
+                        'row': {
+                            SchemaTables.CONNECTION_USER.column.name.name: name,
+                            SchemaTables.CONNECTION_USER.column.connection_id.name: new_conn_ids,
+                            SchemaTables.CONNECTION_USER.column.record_modified_time.name: now,
+                        }
+                    })
+            else:
+                # Brand new user
+                inserts.append({
+                    SchemaTables.CONNECTION_USER.column.user_id.name: user_id,
+                    SchemaTables.CONNECTION_USER.column.name.name: name,
+                    SchemaTables.CONNECTION_USER.column.connection_id.name: [connection_id],
+                    SchemaTables.CONNECTION_USER.column.record_modified_time.name: now,
+                })
+
+        table_name = SchemaTables.CONNECTION_USER.table_name()
         if inserts:
             self.seadb_api.insert_rows(self.base_id, table_name, inserts)
         if updates:

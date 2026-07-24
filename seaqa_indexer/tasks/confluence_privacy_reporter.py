@@ -86,7 +86,7 @@ class ConfluencePrivacyReporterTimer(Thread):
                 for i in range(0, len(accounts), self.batch_size):
                     batch = accounts[i:i + self.batch_size]
                     payload = [
-                        {'accountId': a['account_id'], 'updatedAt': a['updated_time']}
+                        {'accountId': a['user_id'], 'updatedAt': a['record_modified_time']}
                         for a in batch
                     ]
 

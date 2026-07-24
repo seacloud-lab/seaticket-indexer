@@ -163,61 +163,96 @@ class ConfluenceSeaDBAPI:
     # ── User table methods ──────────────────────────────────────────────
 
     def upsert_user(self, connection_id, account_id, display_name):
-        """Insert or update a user record. Only stores non-empty, non-'Unknown user' names."""
+        """Insert or update a user record with merge logic.
+
+        If the user already exists (by user_id), append connection_id to the
+        list if not already present. If new, create with a single-element list.
+        """
         if not account_id or not display_name:
             return
-        table_name = SchemaTables.CONFLUENCE_USER.table_name(connection_id)
+        table_name = SchemaTables.CONNECTION_USER.table_name()
         now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+        escaped_account_id = account_id.replace("'", "''")
 
-        sql = f"SELECT `_pk` FROM `{table_name}` WHERE account_id='{account_id}'"
+        sql = f"SELECT `_pk`, `connection_id` FROM `{table_name}` WHERE user_id='{escaped_account_id}'"
         response = self.seadb_api.query_rows(self.base_id, sql)
         existing = response.get('results', [])
 
         if existing:
             pk = existing[0]['_pk']
-            update_row = {
-                'pk': pk,
-                'row': {
-                    SchemaTables.CONFLUENCE_USER.column.display_name.name: display_name,
-                    SchemaTables.CONFLUENCE_USER.column.updated_time.name: now_iso,
+            existing_conn_ids = existing[0].get('connection_id') or []
+            if connection_id in existing_conn_ids:
+                # User already known in this connection — just refresh name/time
+                update_row = {
+                    'pk': pk,
+                    'row': {
+                        SchemaTables.CONNECTION_USER.column.name.name: display_name,
+                        SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+                    }
                 }
-            }
-            self.seadb_api.update_rows(self.base_id, table_name, [update_row])
+                self.seadb_api.update_rows(self.base_id, table_name, [update_row])
+            else:
+                # User exists in other connections — append this connection_id
+                new_conn_ids = list(set(existing_conn_ids) | {connection_id})
+                update_row = {
+                    'pk': pk,
+                    'row': {
+                        SchemaTables.CONNECTION_USER.column.name.name: display_name,
+                        SchemaTables.CONNECTION_USER.column.connection_id.name: new_conn_ids,
+                        SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+                    }
+                }
+                self.seadb_api.update_rows(self.base_id, table_name, [update_row])
         else:
+            # Brand new user
             insert_row = {
-                SchemaTables.CONFLUENCE_USER.column.account_id.name: account_id,
-                SchemaTables.CONFLUENCE_USER.column.display_name.name: display_name,
-                SchemaTables.CONFLUENCE_USER.column.updated_time.name: now_iso,
+                SchemaTables.CONNECTION_USER.column.user_id.name: account_id,
+                SchemaTables.CONNECTION_USER.column.name.name: display_name,
+                SchemaTables.CONNECTION_USER.column.connection_id.name: [connection_id],
+                SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
             }
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 
-    def get_user_display_names(self, connection_id, account_ids):
-        """Batch-query display names for a list of account IDs."""
-        if not account_ids:
-            return {}
-        table_name = SchemaTables.CONFLUENCE_USER.table_name(connection_id)
-        ids_str = "', '".join(account_ids)
-        sql = f"SELECT account_id, display_name FROM `{table_name}` WHERE account_id IN ('{ids_str}')"
-        response = self.seadb_api.query_rows(self.base_id, sql)
-        records = response.get('results', [])
-        return {r['account_id']: r['display_name'] for r in records}
-
     def delete_user_by_account_id(self, connection_id, account_id):
-        """Delete a user record (for closed accounts from privacy reporting)."""
+        """Remove a connection from a user's connection_id list.
+
+        Removes the connection_id from the list. If the list becomes empty
+        after removal, deletes the entire row. Used for GDPR privacy reporting
+        when an Atlassian account is closed.
+        """
         if not account_id:
             return
-        table_name = SchemaTables.CONFLUENCE_USER.table_name(connection_id)
-        sql = f"SELECT `_pk` FROM `{table_name}` WHERE account_id='{account_id}'"
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        escaped_account_id = account_id.replace("'", "''")
+
+        sql = f"SELECT `_pk`, `connection_id` FROM `{table_name}` WHERE user_id='{escaped_account_id}'"
         response = self.seadb_api.query_rows(self.base_id, sql)
         results = response.get('results', [])
-        if results:
-            pks = [r['_pk'] for r in results]
-            self.seadb_api.delete_rows(self.base_id, table_name, pks)
+        if not results:
+            return
+
+        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+        for row in results:
+            existing_ids = row.get('connection_id') or []
+            if connection_id not in existing_ids:
+                continue
+            existing_ids.remove(connection_id)
+            if not existing_ids:
+                self.seadb_api.delete_rows(self.base_id, table_name, [row['_pk']])
+            else:
+                update_row = {
+                    'pk': row['_pk'],
+                    'row': {
+                        SchemaTables.CONNECTION_USER.column.connection_id.name: existing_ids,
+                        SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+                    }
+                }
+                self.seadb_api.update_rows(self.base_id, table_name, [update_row])
 
     def get_all_user_accounts(self, connection_id):
-        """Get all (account_id, updated_time) pairs for privacy reporting."""
-        table_name = SchemaTables.CONFLUENCE_USER.table_name(connection_id)
-        sql = f"SELECT `account_id`, `updated_time` FROM `{table_name}`"
+        """Get all (user_id, record_modified_time) pairs for a connection."""
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        sql = f"SELECT `user_id`, `record_modified_time` FROM `{table_name}` WHERE {connection_id} IN connection_id"
         response = self.seadb_api.query_rows(self.base_id, sql)
         return response.get('results', [])
 
