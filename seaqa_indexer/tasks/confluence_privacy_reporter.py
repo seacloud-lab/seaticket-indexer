@@ -90,15 +90,18 @@ class ConfluencePrivacyReporterTimer(Thread):
                 if not accounts:
                     continue
 
-                workspace_id = None
+                workspace_by_connection = {}
                 for connection in confluence_connections:
                     connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
                     workspace_id = connection_config.get('workspace_id')
                     if workspace_id:
-                        break
+                        workspace_by_connection[str(connection.id)] = workspace_id
 
-                any_batch_succeeded = False
+                accounts_by_id = {account['user_id']: account for account in accounts}
+                all_batches_succeeded = True
                 cycle_period = DEFAULT_CYCLE_DAYS
+                closed_pks = []
+                updated_names = {}
 
                 # Report the project-level user set in batches.
                 for i in range(0, len(accounts), self.batch_size):
@@ -122,6 +125,7 @@ class ConfluencePrivacyReporterTimer(Thread):
                             )
                         except Exception:
                             logger.exception('Failed to refresh token for project %s', project_uuid)
+                            all_batches_succeeded = False
                             continue
 
                     try:
@@ -129,9 +133,9 @@ class ConfluencePrivacyReporterTimer(Thread):
                     except Exception:
                         logger.exception('Privacy report API failed for project %s batch %d',
                                          project_uuid, i // self.batch_size)
+                        all_batches_succeeded = False
                         continue
 
-                    any_batch_succeeded = True
                     cycle_period = result.get('cycle_period', DEFAULT_CYCLE_DAYS)
 
                     for account_result in result.get('accounts', []):
@@ -143,26 +147,47 @@ class ConfluencePrivacyReporterTimer(Thread):
                         if status == 'closed':
                             logger.info('Deleting user data for closed account %s in project %s',
                                         account_id, project_uuid)
-                            confluence_seadb_api.delete_user(account_id)
+                            account = accounts_by_id.get(account_id)
+                            if account and account.get('_pk') is not None:
+                                closed_pks.append(account['_pk'])
 
-                        elif status == 'updated' and workspace_id:
+                        elif status == 'updated':
                             logger.info('Refreshing display name for updated account %s in project %s',
                                         account_id, project_uuid)
-                            try:
-                                name = confluence_api.get_user_display_name(account_id, workspace_id)
-                                if name:
-                                    confluence_seadb_api.update_user_name(account_id, name)
-                            except Exception:
-                                logger.exception('Failed to refresh user %s for project %s',
-                                                 account_id, project_uuid)
+                            account = accounts_by_id.get(account_id)
+                            connection_ids = (account or {}).get('connection_id') or []
+                            workspace_ids = [
+                                workspace_by_connection.get(str(connection_id))
+                                for connection_id in connection_ids
+                                if workspace_by_connection.get(str(connection_id))
+                            ]
+                            for workspace_id in workspace_ids:
+                                try:
+                                    name = confluence_api.get_user_display_name(account_id, workspace_id)
+                                    if name and account and account.get('_pk') is not None:
+                                        updated_names[account['_pk']] = name
+                                        break
+                                except Exception:
+                                    logger.warning(
+                                        'Failed to refresh user %s from workspace %s',
+                                        account_id,
+                                        workspace_id,
+                                        exc_info=True,
+                                    )
 
-                if any_batch_succeeded:
+                # Apply all status changes once per project after processing
+                # every batch, while still retaining successful batch results
+                # if another batch needs to be retried.
+                confluence_seadb_api.delete_users(closed_pks)
+                confluence_seadb_api.update_user_names(updated_names)
+
+                if all_batches_succeeded:
                     next_report_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=cycle_period)
                     self.seaqa_db.update_project_next_privacy_report_at(project_uuid, next_report_at)
                     logger.info('Privacy report completed for project %s, next report at %s (cycle=%d days)',
                                 project_uuid, next_report_at.isoformat(), cycle_period)
                 else:
-                    logger.warning('All privacy report batches failed for project %s, will retry next cycle',
+                    logger.warning('One or more privacy report batches failed for project %s, will retry next cycle',
                                    project_uuid)
 
             except Exception as e:

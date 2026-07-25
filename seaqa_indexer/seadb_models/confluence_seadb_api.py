@@ -249,50 +249,64 @@ class ConfluenceSeaDBAPI:
                 }
                 self.seadb_api.update_rows(self.base_id, table_name, [update_row])
 
-    def get_all_user_accounts(self, connection_id):
+    def get_all_user_accounts(self, connection_id, page_size=100):
         """Get all (user_id, record_modified_time) pairs for a connection."""
         table_name = SchemaTables.CONNECTION_USER.table_name()
-        sql = f"SELECT `user_id`, `record_modified_time` FROM `{table_name}` WHERE {connection_id} IN connection_id"
-        response = self.seadb_api.query_rows(self.base_id, sql)
-        return response.get('results', [])
+        results = []
+        offset = 0
+        while True:
+            sql = (
+                f"SELECT `user_id`, `record_modified_time` FROM `{table_name}` "
+                f"WHERE {connection_id} IN connection_id "
+                f"ORDER BY `_pk` LIMIT {page_size} OFFSET {offset}"
+            )
+            page = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+            results.extend(page)
+            if len(page) < page_size:
+                return results
+            offset += page_size
 
     def get_all_users(self):
-        """Get all user records (user_id, name, record_modified_time) in this project."""
+        """Get all project-level users and their related connection IDs."""
         table_name = SchemaTables.CONNECTION_USER.table_name()
-        sql = f"SELECT `_pk`, `user_id`, `name`, `record_modified_time` FROM `{table_name}`"
-        response = self.seadb_api.query_rows(self.base_id, sql)
-        return response.get('results', [])
+        results = []
+        page_size = 100
+        offset = 0
+        while True:
+            sql = (
+                f"SELECT `_pk`, `user_id`, `name`, `connection_id`, `record_modified_time` "
+                f"FROM `{table_name}` ORDER BY `_pk` LIMIT {page_size} OFFSET {offset}"
+            )
+            page = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+            results.extend(page)
+            if len(page) < page_size:
+                return results
+            offset += page_size
 
-    def delete_user(self, account_id):
-        """Delete a project-level user row by account ID."""
-        if not account_id:
+    def delete_users(self, pks):
+        """Delete project-level user rows by primary key."""
+        pks = [pk for pk in pks if pk is not None]
+        if not pks:
             return
         table_name = SchemaTables.CONNECTION_USER.table_name()
-        escaped_account_id = account_id.replace("'", "''")
-        sql = f"SELECT `_pk` FROM `{table_name}` WHERE user_id='{escaped_account_id}'"
-        rows = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if rows:
-            self.seadb_api.delete_rows(self.base_id, table_name, [row['_pk'] for row in rows])
+        self.seadb_api.delete_rows(self.base_id, table_name, list(set(pks)))
 
-    def update_user_name(self, account_id, name):
-        """Update a project-level user's display name."""
-        if not account_id or not name:
+    def update_user_names(self, user_names):
+        """Batch-update project-level user display names by primary key."""
+        if not user_names:
             return
         table_name = SchemaTables.CONNECTION_USER.table_name()
-        escaped_account_id = account_id.replace("'", "''")
-        sql = f"SELECT `_pk` FROM `{table_name}` WHERE user_id='{escaped_account_id}'"
-        rows = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if not rows:
-            return
         now_iso = datetime.datetime.now(datetime.UTC).isoformat()
         updates = [
             {
-                'pk': row['_pk'],
+                'pk': pk,
                 'row': {
                     SchemaTables.CONNECTION_USER.column.name.name: name,
                     SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
                 },
             }
-            for row in rows
+            for pk, name in user_names.items()
+            if pk is not None and name
         ]
-        self.seadb_api.update_rows(self.base_id, table_name, updates)
+        if updates:
+            self.seadb_api.update_rows(self.base_id, table_name, updates)
