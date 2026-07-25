@@ -19,7 +19,7 @@ class EmailSeaDBAPI:
         normalized_subject = subject.strip() if isinstance(subject, str) else str(subject).strip()
         return normalized_subject or "(No Subject)"
 
-    def save_or_update_email_to_db(self, connection_id, email, existed_email):
+    def save_or_update_email_to_db(self, connection_id, email, existed_email, is_first_sync):
         if not email['content']:
             h = html2text.HTML2Text()
             h.ignore_links = False
@@ -50,6 +50,7 @@ class EmailSeaDBAPI:
 
         if existed_email:
             _pk = existed_email.get('_pk')
+            insert_row['unread'] = not is_first_sync
             update_row = [
                 {
                     "pk": _pk,
@@ -59,6 +60,7 @@ class EmailSeaDBAPI:
             self.seadb_api.update_rows(self.base_id, table_name, update_row)
             return _pk
         else:
+            insert_row['unread'] = not is_first_sync
             resp = self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
             return resp.get('pks')[0]
 

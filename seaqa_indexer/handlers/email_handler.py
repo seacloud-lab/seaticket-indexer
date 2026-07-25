@@ -219,7 +219,7 @@ class EmailHandler(ConnectionHandler):
                 }
                 changed_email_list.append(email_info)
 
-                pk = email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email)
+                pk = email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email, is_first_sync)
                 upload_email_attachment(connection_id, project_uuid, storage, email, pk)
                 email_seadb_api.update_html_content_and_attachments(connection_id, pk, email)
                 if existed_email:
