@@ -256,3 +256,43 @@ class ConfluenceSeaDBAPI:
         response = self.seadb_api.query_rows(self.base_id, sql)
         return response.get('results', [])
 
+    def get_all_users(self):
+        """Get all user records (user_id, name, record_modified_time) in this project."""
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        sql = f"SELECT `_pk`, `user_id`, `name`, `record_modified_time` FROM `{table_name}`"
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        return response.get('results', [])
+
+    def delete_user(self, account_id):
+        """Delete a project-level user row by account ID."""
+        if not account_id:
+            return
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        escaped_account_id = account_id.replace("'", "''")
+        sql = f"SELECT `_pk` FROM `{table_name}` WHERE user_id='{escaped_account_id}'"
+        rows = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if rows:
+            self.seadb_api.delete_rows(self.base_id, table_name, [row['_pk'] for row in rows])
+
+    def update_user_name(self, account_id, name):
+        """Update a project-level user's display name."""
+        if not account_id or not name:
+            return
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        escaped_account_id = account_id.replace("'", "''")
+        sql = f"SELECT `_pk` FROM `{table_name}` WHERE user_id='{escaped_account_id}'"
+        rows = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if not rows:
+            return
+        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+        updates = [
+            {
+                'pk': row['_pk'],
+                'row': {
+                    SchemaTables.CONNECTION_USER.column.name.name: name,
+                    SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+                },
+            }
+            for row in rows
+        ]
+        self.seadb_api.update_rows(self.base_id, table_name, updates)

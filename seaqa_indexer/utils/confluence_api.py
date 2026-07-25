@@ -120,20 +120,29 @@ class ConfluenceAPI:
     @staticmethod
     def report_accounts(access_token, accounts):
         """Report account IDs to Atlassian privacy API.
-        Returns accounts that need action: [{'accountId': '...', 'status': 'closed|updated'}]."""
+
+        Returns:
+            dict with keys:
+                'accounts': list of dicts needing action [{'accountId': ..., 'status': 'closed|updated'}]
+                'cycle_period': int days until next report (from Cycle-Period response header)
+        """
         if not accounts:
-            return []
+            return {'accounts': [], 'cycle_period': 7}
         url = 'https://api.atlassian.com/app/report-accounts/'
         headers = {
             'Authorization': f'Bearer {access_token}',
             'Content-Type': 'application/json',
         }
         response = requests.post(url, json={'accounts': accounts}, headers=headers, timeout=60)
+        cycle_period = int(response.headers.get('Cycle-Period', 7))
         if response.status_code == 204:
-            return []
+            return {'accounts': [], 'cycle_period': cycle_period}
         response.raise_for_status()
         data = response.json()
-        return data.get('accounts') or []
+        return {
+            'accounts': data.get('accounts') or [],
+            'cycle_period': cycle_period,
+        }
 
     def list_spaces(self, workspace_id, cursor=None, limit=100):
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/api/v2/spaces'

@@ -101,7 +101,9 @@ class SeaqaDB(object):
     def get_connections_by_project_uuid(self, project_uuid):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
-            sql = """SELECT id, type FROM project_connection WHERE project_uuid=:project_uuid"""
+            sql = """SELECT id, type, config, deleted, is_active
+                     FROM project_connection
+                     WHERE project_uuid=:project_uuid"""
             connection = session.execute(text(sql), {'project_uuid': project_uuid}).fetchall()
             return connection
     
@@ -460,31 +462,32 @@ class SeaqaDB(object):
             session.execute(text(sql), {'cleaned_at': cleaned_at, 'connection_id': connection_id})
             session.commit()
 
-    def get_connections_need_privacy_report(self, recent_days, connection_type):
+    def get_projects_need_privacy_report(self, connection_type):
+        """Get projects whose next_privacy_report_at is due (within 1 day or NULL)."""
         with self.db_session_class() as session:
             sql = """
-                SELECT pc.id, pc.config, pc.project_uuid, pc.last_privacy_reported_at
-                FROM project_connection pc
-                INNER JOIN projects p ON p.uuid = pc.project_uuid
+                SELECT DISTINCT p.uuid AS project_uuid
+                FROM projects p
+                INNER JOIN project_connection pc ON pc.project_uuid = p.uuid
                 WHERE p.deleted = false
                 AND pc.deleted = false
                 AND pc.is_active = true
                 AND pc.type = :connection_type
                 AND (
-                    pc.last_privacy_reported_at IS NULL
-                    OR pc.last_privacy_reported_at <= DATE_SUB(NOW(), INTERVAL :recent_days DAY)
+                    p.next_privacy_report_at IS NULL
+                    OR p.next_privacy_report_at <= DATE_ADD(NOW(), INTERVAL 1 DAY)
                 )
             """
-            return session.execute(text(sql), {'recent_days': recent_days, 'connection_type': connection_type}).fetchall()
+            return session.execute(text(sql), {'connection_type': connection_type}).fetchall()
 
-    def update_connection_last_privacy_reported_at(self, connection_id, reported_at):
+    def update_project_next_privacy_report_at(self, project_uuid, next_report_at):
         with self.db_session_class() as session:
             sql = """
-                UPDATE project_connection
-                SET last_privacy_reported_at = :reported_at
-                WHERE id = :connection_id
+                UPDATE projects
+                SET next_privacy_report_at = :next_report_at
+                WHERE uuid = :project_uuid
             """
-            session.execute(text(sql), {'reported_at': reported_at, 'connection_id': connection_id})
+            session.execute(text(sql), {'next_report_at': next_report_at, 'project_uuid': project_uuid})
             session.commit()
 
     def uninstall_github_app(self, project_uuid, installation_id):
