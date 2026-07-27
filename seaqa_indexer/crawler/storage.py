@@ -43,6 +43,10 @@ class BaseStorage:
         """Delete all uploaded files for a project (/projects/{project_uuid}/*)."""
         raise NotImplementedError
 
+    def get_project_storage_usage(self, project_uuid):
+        """Return the current object bytes and count attributable to a project."""
+        raise NotImplementedError
+
 
 class S3Storage(BaseStorage):
     def __init__(self):
@@ -105,7 +109,7 @@ class S3Storage(BaseStorage):
     def batch_delete_files(self, site_id, project_uuid, filenames):
         prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=site_id)
         objects = [{'Key': prefix + filename} for filename in filenames]
-        self.client.delete_objects(Bucket=self.bucket, Delete={'Objects': objects})
+        self._delete_objects(self.bucket, objects)
 
     def list_files(self, site_id, project_uuid):
         return list(self.iter_files(site_id, project_uuid))
@@ -123,10 +127,9 @@ class S3Storage(BaseStorage):
                 if not key.endswith('.json'):
                     continue
                 yield key[len(prefix):]
-            if resp.get('IsTruncated'):
-                continuation_token = resp.get('NextContinuationToken')
-            else:
+            if not resp.get('IsTruncated'):
                 break
+            continuation_token = self._get_next_continuation_token(resp)
 
     def _delete_by_prefix(self, bucket, prefix):
         continuation_token = None
@@ -142,14 +145,59 @@ class S3Storage(BaseStorage):
                 for obj in contents:
                     to_delete.append({'Key': obj['Key']})
                     if len(to_delete) == 1000:
-                        self.client.delete_objects(Bucket=bucket, Delete={'Objects': to_delete})
+                        self._delete_objects(bucket, to_delete)
                         to_delete = []
-            if resp.get('IsTruncated'):
-                continuation_token = resp.get('NextContinuationToken')
-            else:
+            if not resp.get('IsTruncated'):
                 break
+            continuation_token = self._get_next_continuation_token(resp)
         if to_delete:
-            self.client.delete_objects(Bucket=bucket, Delete={'Objects': to_delete})
+            self._delete_objects(bucket, to_delete)
+
+    def _delete_objects(self, bucket, objects):
+        response = self.client.delete_objects(Bucket=bucket, Delete={'Objects': objects})
+        errors = response.get('Errors') or []
+        if errors:
+            error_codes = sorted({error.get('Code', 'Unknown') for error in errors})
+            raise RuntimeError('Failed to delete %s S3 objects, error codes: %s' % (len(errors), ', '.join(error_codes)))
+
+    def _sum_prefix(self, bucket, prefix):
+        total_size = 0
+        object_count = 0
+        continuation_token = None
+        while True:
+            params = {'Bucket': bucket, 'Prefix': prefix}
+            if continuation_token:
+                params['ContinuationToken'] = continuation_token
+            response = self.client.list_objects_v2(**params)
+            for obj in response.get('Contents') or []:
+                size = obj.get('Size')
+                if not isinstance(size, int) or size < 0:
+                    raise ValueError('Invalid S3 object size')
+                total_size += size
+                object_count += 1
+            if not response.get('IsTruncated'):
+                break
+            continuation_token = self._get_next_continuation_token(response)
+        return total_size, object_count
+
+    @staticmethod
+    def _get_next_continuation_token(response):
+        continuation_token = response.get('NextContinuationToken')
+        if not continuation_token:
+            raise RuntimeError('S3 response is truncated without continuation token')
+        return continuation_token
+
+    def get_project_storage_usage(self, project_uuid):
+        project_uuid_36 = uuid_str_to_36_chars(project_uuid)
+
+        file_size, file_object_count = self._sum_prefix(self.file_bucket, f'/projects/{project_uuid_36}/')
+        crawl_size, crawl_object_count = self._sum_prefix(self.bucket, f'{project_uuid}/')
+        return {
+            'file_size': file_size,
+            'file_object_count': file_object_count,
+            'crawl_data_size': crawl_size,
+            'crawl_object_count': crawl_object_count,
+        }
 
     def delete_connection_crawl_data(self, connection_id, project_uuid):
         prefix = KEY_PREFIX_FORMAT.format(project_uuid=project_uuid, site_id=connection_id)
@@ -160,11 +208,8 @@ class S3Storage(BaseStorage):
         self._delete_by_prefix(self.bucket, prefix)
 
     def delete_project_attachment(self, project_uuid):
-        if not self.file_bucket:
-            return
         project_uuid = uuid_str_to_36_chars(project_uuid)
-        prefix = f"projects/{project_uuid}/"
-        self._delete_by_prefix(self.file_bucket, prefix)
+        self._delete_by_prefix(self.file_bucket, f'/projects/{project_uuid}/')
 
 
 _storage = None

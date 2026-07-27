@@ -2,14 +2,16 @@ import logging
 import json
 import datetime
 
-from seaqa_indexer.utils.constants import CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES, IndexStatus
+from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES
 from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.handlers import get_handler
-from seaqa_indexer.syncer.utils import send_connection_sync_result_msg
+from seaqa_indexer.syncer.utils import publish_project_storage_update, send_connection_sync_result_msg
 from seaqa_indexer.utils.seahub_api import ResponseFormatException
 
 logger = logging.getLogger(__name__)
+
+STORAGE_USAGE_DIRTY_CONNECTION_TYPES = frozenset({ConnectionType.EMAIL.value, })
 
 
 def sync_connection(connection_id, seaqa_db, mq, db_session_class):
@@ -112,12 +114,17 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             sync_logger.log(f'Internal Server Error')
 
     if not is_sync_success:
+        if connection_type in STORAGE_USAGE_DIRTY_CONNECTION_TYPES:
+            publish_project_storage_update(mq, project_uuid)
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(connection_id, json.dumps(connection_status))
         sync_logger.stop_capture()
         if is_first_sync:
             send_connection_sync_result_msg(mq, project_uuid, connection_id, CrawlStatus.FAILED)
         return
+
+    if connection_type in STORAGE_USAGE_DIRTY_CONNECTION_TYPES:
+        publish_project_storage_update(mq, project_uuid)
 
     # finish sync
     connection_status['total_records'] = total_count

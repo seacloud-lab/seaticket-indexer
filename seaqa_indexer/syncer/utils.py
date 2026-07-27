@@ -3,11 +3,12 @@ import datetime
 import logging
 import json
 
-from seaqa_indexer.utils import time_to_utc_time, uuid_str_to_36_chars
+from seaqa_indexer.utils import time_to_utc_time, uuid_str_to_32_chars, uuid_str_to_36_chars
 
 logger = logging.getLogger(__name__)
 
 EMAIL_SYNC_INTERVAL_DAYS = 10
+PROJECT_STORAGE_UPDATE_CHANNEL = 'project_storage_update'
 
 
 def upload_email_attachment(connection_id, project_uuid, storage, email, pk):
@@ -125,3 +126,11 @@ def send_connection_sync_result_msg(mq, project_uuid, connection_id, status):
             logger.info('No one subscribed to web_notifications channel, event (%s) has not been send' % msg_content)
     except Exception as e:
         logger.error('send sync connection finish msg failed, error: %s', e)
+
+
+def publish_project_storage_update(mq, project_uuid):
+    try:
+        msg_content = json.dumps({'project_uuid': uuid_str_to_32_chars(project_uuid)})
+        mq.publish(PROJECT_STORAGE_UPDATE_CHANNEL, msg_content)
+    except Exception as e:
+        logger.warning('Failed to publish project storage update for project %s: %s', project_uuid, e)
