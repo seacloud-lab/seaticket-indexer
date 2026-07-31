@@ -11,6 +11,7 @@ from twisted.internet.threads import deferToThread
 
 from seaqa_indexer.crawler.spiders.site_crawler import SiteCrawlerSpider
 from seaqa_indexer.crawler.spiders.sitemap_crawler import SitemapCrawlerSpider
+from seaqa_indexer.crawler.url_scope import URLScope
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
 
@@ -85,7 +86,7 @@ class WebCrawl:
         return None
 
     def crawl(self, site_id, site_url, sitemap_url, project_uuid, connection_status, is_first_sync, success_call_back,
-              fail_call_back):
+              fail_call_back, exclude_paths=None):
         # Use deferToThread to push crawler task to thread pool
         d = deferToThread(
             self.prepare_crawler,
@@ -97,17 +98,19 @@ class WebCrawl:
             is_first_sync,
             success_call_back,
             fail_call_back,
+            exclude_paths,
         )
 
         d.addCallback(self.start_crawl)
 
     def prepare_crawler(self, site_id, site_url, sitemap_url, project_uuid, connection_status, is_first_sync, success_call_back,
-                        fail_call_back):
+                        fail_call_back, exclude_paths=None):
         """Prepare crawler parameters, execute in thread pool"""
         return {
             'site_id': site_id,
             'site_url': site_url,
             'sitemap_url': sitemap_url,
+            'exclude_paths': exclude_paths,
             'project_uuid': project_uuid,
             'connection_status': connection_status,
             'is_first_sync': is_first_sync,
@@ -120,14 +123,19 @@ class WebCrawl:
         site_id = crawler_params['site_id']
         site_url = crawler_params['site_url']
         sitemap_url = crawler_params['sitemap_url']
+        exclude_paths = crawler_params['exclude_paths']
         project_uuid = crawler_params['project_uuid']
         connection_status = crawler_params['connection_status']
         is_first_sync = crawler_params['is_first_sync']
         success_call_back = crawler_params['success_call_back']
         fail_call_back = crawler_params['fail_call_back']
 
+        # A file URL represents one page, so crawl it directly instead of
+        # applying a directory sitemap to its exact-file scope.
+        use_sitemap = sitemap_url and not URLScope(site_url, exclude_paths).is_file
+
         # Create crawler instance
-        if sitemap_url:
+        if use_sitemap:
             d = self.runner.crawl(
                 SitemapCrawlerSpider,
                 site_url,
@@ -138,7 +146,8 @@ class WebCrawl:
                 update_connection_status=self.update_connection_status,
                 seadb_api=self.seadb_api,
                 storage=self.storage,
-                sync_logger=self.sync_logger
+                sync_logger=self.sync_logger,
+                exclude_paths=exclude_paths
             )
         else:
             d = self.runner.crawl(
@@ -150,7 +159,8 @@ class WebCrawl:
                 update_connection_status=self.update_connection_status,
                 seadb_api=self.seadb_api,
                 storage=self.storage,
-                sync_logger=self.sync_logger
+                sync_logger=self.sync_logger,
+                exclude_paths=exclude_paths
             )
 
         d.addCallback(success_call_back, (site_id, project_uuid, is_first_sync))

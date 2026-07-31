@@ -3,6 +3,7 @@ import json
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.crawler.web_crawl import WebCrawl
+from seaqa_indexer.crawler.url_scope import URLScope
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.syncer.utils import send_connection_sync_result_msg
 
@@ -63,6 +64,7 @@ def craw_web(connection_id, db_session_class, mq):
     connection_config = json.loads(project_connection.config)
     site_url = connection_config.get('url')
     sitemap_url = connection_config.get('sitemap_url')
+    exclude_paths = connection_config.get('exclude_paths', [])
     project_uuid = str(project_connection.project_uuid)
 
     old_last_sync_time = project_connection.last_sync_time
@@ -73,14 +75,25 @@ def craw_web(connection_id, db_session_class, mq):
 
     web_crawl = WebCrawl(db_session_class, sync_logger)
 
-    if not sitemap_url:
+    # A file URL has no directory sitemap to discover.
+    if not sitemap_url and not URLScope(site_url).is_file:
         sitemap_url = web_crawl.get_sitemap_url(site_url)
         if sitemap_url:
             connection_config['sitemap_url'] = sitemap_url
             seaqa_db.update_connection_config(connection_id, json.dumps(connection_config))
 
     try:
-        web_crawl.crawl(connection_id, site_url, sitemap_url, project_uuid, connection_status, is_first_sync, success_call_back, failed_crawl_site)
+        web_crawl.crawl(
+            connection_id,
+            site_url,
+            sitemap_url,
+            project_uuid,
+            connection_status,
+            is_first_sync,
+            success_call_back,
+            failed_crawl_site,
+            exclude_paths=exclude_paths,
+        )
     except Exception as e:
         logger.exception('failed to crawl site: %s, error: %s', connection_id, e)
         sync_logger.log(f'Internal Server Error')

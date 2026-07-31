@@ -1,22 +1,21 @@
-from urllib.parse import urlparse
 from scrapy.linkextractors import LinkExtractor
 from scrapy.spiders import CrawlSpider, Rule
 from seaqa_indexer.crawler.utils import spider_parse_item, load_existing_site_info
+from seaqa_indexer.crawler.url_scope import URLScope
 
 
 class SiteCrawlerSpider(CrawlSpider):
     name = 'site_crawler'
 
-    rules = (
-        Rule(LinkExtractor(), callback='parse_item', follow=True),
-    )
-
-    def __init__(self, site_url, project_uuid, site_id, connection_status, update_connection_status, seadb_api, storage, sync_logger, *args, **kwargs):
+    def __init__(self, site_url, project_uuid, site_id, connection_status, update_connection_status, seadb_api, storage, sync_logger,
+                 exclude_paths=None, *args, **kwargs):
+        self.url_scope = URLScope(site_url, exclude_paths)
+        self.rules = (
+            Rule(LinkExtractor(), callback='parse_item', follow=True, process_links=self._filter_links),
+        )
         super(SiteCrawlerSpider, self).__init__(*args, **kwargs)
         self.start_urls = [site_url]
-        parsed_uri = urlparse(site_url)
-        domain = '{uri.netloc}'.format(uri=parsed_uri)
-        self.allowed_domains = [domain]
+        self.allowed_domains = [self.url_scope.netloc]
         self.project_uuid = project_uuid
         self.site_id = site_id
         self.connection_status = connection_status
@@ -36,8 +35,13 @@ class SiteCrawlerSpider(CrawlSpider):
         """Load the ETag and Last-Modified information of an existing file"""
         load_existing_site_info(self.site_id, self.project_uuid, self.existing_site_info, self.seadb_api)
 
+    def _filter_links(self, links):
+        return [link for link in links if self.url_scope.allows(link.url)]
+
     def parse_item(self, response):
         """Parse the page content and extract the data"""
+        if not self.url_scope.allows(response.url):
+            return
         item = spider_parse_item(self, response)
         if item:
             yield item
