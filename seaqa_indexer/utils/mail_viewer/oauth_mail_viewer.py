@@ -32,6 +32,8 @@ class OAuthMailViewer(BasicMailViewer):
             logger.error('OAuth mail viewer config is invalid. client_id: %s, token_url: %s', self.client_id, self.token_url)
             raise EmailConfigError('OAuth mail viewer configuration is incomplete')
 
+        self.session = requests.Session()
+
     def _request_access_token(self):
         if not self.access_token or self.expires_at is None or self.expires_at - time.time() < 300:
             params = {
@@ -44,7 +46,7 @@ class OAuthMailViewer(BasicMailViewer):
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
             }
-            response = requests.post(self.token_url, headers=headers, data=parse.urlencode(params))
+            response = self.session.post(self.token_url, headers=headers, data=parse.urlencode(params))
             try:
                 _check_and_raise_error(response)
             except Exception as e:
@@ -90,7 +92,7 @@ class OAuthMailViewer(BasicMailViewer):
         return headers
 
     def _request_json(self, url, params=None, headers=None):
-        response = requests.get(url, params=params, headers=self._get_headers(headers))
+        response = self.session.get(url, params=params, headers=self._get_headers(headers))
         try:
             _check_and_raise_error(response)
         except Exception as e:
@@ -99,7 +101,7 @@ class OAuthMailViewer(BasicMailViewer):
         return response.json()
 
     def _request_bytes(self, url, params=None, headers=None):
-        response = requests.get(url, params=params, headers=self._get_headers(headers))
+        response = self.session.get(url, params=params, headers=self._get_headers(headers))
         try:
             _check_and_raise_error(response)
         except Exception as e:
@@ -115,6 +117,9 @@ class OAuthMailViewer(BasicMailViewer):
 
     def get_provider_email_metadata(self, message_ref):
         return {}
+
+    def close(self):
+        self.session.close()
 
     def search_emails(self, start_date, end_date):
         self._request_access_token()
