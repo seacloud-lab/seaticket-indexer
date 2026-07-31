@@ -59,23 +59,41 @@ class ConfluencePrivacyReporterTimer(Thread):
                 except Exception as e:
                     logging.exception('confluence privacy report error: %s', e)
 
+    def _ensure_token_fresh(self, confluence_api, project_uuid):
+        """Refresh the Confluence OAuth token if it is near or past expiry."""
+        now = datetime.datetime.now(datetime.UTC)
+        if confluence_api.expires_at and time_to_utc_time(str(confluence_api.expires_at)) > now + datetime.timedelta(seconds=60):
+            return
+        logger.info('Refreshing Confluence access token for project %s', project_uuid)
+        new_tokens = confluence_api.refresh_access_token()
+        self.seaqa_db.update_project_confluence_oauth(
+            project_uuid,
+            new_tokens['access_token'],
+            new_tokens['expires_at'],
+            new_tokens['refresh_token'],
+        )
+
     def _report_and_cleanup(self):
-        projects = self.seaqa_db.get_projects_need_privacy_report(
+        projects = self.seaqa_db.get_projects_with_connections_by_type(
             ConnectionType.CONFLUENCE.value
         )
-        logger.info('Found %d projects for confluence privacy reporting', len(projects))
+        logger.info('Found %d projects with confluence connections', len(projects))
 
         for project in projects:
             project_uuid = project.project_uuid
 
             try:
+                confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
+
+                # Check if any user in this project is due for reporting
+                if not confluence_seadb_api.has_users_needing_report():
+                    continue
+
                 oauth = self.seaqa_db.get_project_confluence_oauth(project_uuid)
                 if not oauth or not oauth.access_token:
                     logger.warning('Confluence OAuth missing for project %s', project_uuid)
                     continue
 
-                # A project owns one aggregated user table. Connections only
-                # provide the workspace used to resolve updated display names.
                 confluence_connections = self.seaqa_db.get_project_connections_by_type(
                     project_uuid, ConnectionType.CONFLUENCE.value
                 )
@@ -83,7 +101,6 @@ class ConfluencePrivacyReporterTimer(Thread):
                     continue
 
                 confluence_api = ConfluenceAPI(oauth.access_token, oauth.refresh_token, oauth.expires_at)
-                confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
                 accounts = confluence_seadb_api.get_all_users()
                 if not accounts:
                     continue
@@ -110,21 +127,7 @@ class ConfluencePrivacyReporterTimer(Thread):
                     ]
 
                     # Refresh token if near expiry
-                    now = datetime.datetime.now(datetime.UTC)
-                    if not confluence_api.expires_at or time_to_utc_time(str(confluence_api.expires_at)) <= now + datetime.timedelta(seconds=60):
-                        logger.info('Refreshing Confluence access token for project %s', project_uuid)
-                        try:
-                            new_tokens = confluence_api.refresh_access_token()
-                            self.seaqa_db.update_project_confluence_oauth(
-                                project_uuid,
-                                new_tokens['access_token'],
-                                new_tokens['expires_at'],
-                                new_tokens['refresh_token'],
-                            )
-                        except Exception:
-                            logger.exception('Failed to refresh token for project %s', project_uuid)
-                            all_batches_succeeded = False
-                            continue
+                    self._ensure_token_fresh(confluence_api, project_uuid)
 
                     try:
                         result = ConfluenceAPI.report_accounts(confluence_api.access_token, payload)
@@ -181,9 +184,10 @@ class ConfluencePrivacyReporterTimer(Thread):
 
                 if all_batches_succeeded:
                     next_report_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=cycle_period)
-                    self.seaqa_db.update_project_next_privacy_report_at(project_uuid, next_report_at)
-                    logger.info('Privacy report completed for project %s, next report at %s (cycle=%d days)',
-                                project_uuid, next_report_at.isoformat(), cycle_period)
+                    all_pks = [a['_pk'] for a in accounts if a.get('_pk') is not None]
+                    confluence_seadb_api.update_users_next_report_at(all_pks, next_report_at)
+                    logger.info('Privacy report completed for project %s, %d users, next report at %s (cycle=%d days)',
+                                project_uuid, len(all_pks), next_report_at.isoformat(), cycle_period)
                 else:
                     logger.warning('One or more privacy report batches failed for project %s, will retry next cycle',
                                    project_uuid)

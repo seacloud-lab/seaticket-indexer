@@ -258,3 +258,39 @@ class ConfluenceSeaDBAPI:
         ]
         if updates:
             self.seadb_api.update_rows(self.base_id, table_name, updates)
+
+    def has_users_needing_report(self):
+        """Check if any users are due for privacy reporting.
+
+        Users with next_privacy_report_at NULL (never reported) or due within
+        1 day are considered needing report. The 1-day buffer allows retry
+        if a report fails, without exceeding the cycle period deadline.
+        """
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        deadline = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1)).isoformat()
+        sql = (
+            f"SELECT `_pk` FROM `{table_name}` "
+            f"WHERE `next_privacy_report_at` IS NULL "
+            f"OR `next_privacy_report_at` <= '{deadline}' "
+            f"LIMIT 1"
+        )
+        result = self.seadb_api.query_rows(self.base_id, sql)
+        return bool(result.get('results', []))
+
+    def update_users_next_report_at(self, pks, next_report_at):
+        """Batch-update next_privacy_report_at for the given user pks."""
+        pks = [pk for pk in pks if pk is not None]
+        if not pks:
+            return
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        next_iso = next_report_at.isoformat() if hasattr(next_report_at, 'isoformat') else str(next_report_at)
+        updates = [
+            {
+                'pk': pk,
+                'row': {
+                    SchemaTables.CONNECTION_USER.column.next_privacy_report_at.name: next_iso,
+                },
+            }
+            for pk in set(pks)
+        ]
+        self.seadb_api.update_rows(self.base_id, table_name, updates)

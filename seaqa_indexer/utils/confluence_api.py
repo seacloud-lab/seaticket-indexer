@@ -111,9 +111,13 @@ class ConfluenceAPI:
         if resp.status_code == 404:
             raise ConfluenceUserNotFoundException()
         resp.raise_for_status()
-        display_name = resp.json().get('displayName') or ''
-        # Don't return "Unknown user" for closed/deleted accounts (privacy requirement)
-        if display_name.lower() == 'unknown user':
+        data = resp.json()
+        # Corrupted deleted user record — accountId is the literal string "unknown"
+        if data.get('accountId') == 'unknown':
+            return ''
+        display_name = data.get('displayName') or ''
+        # Normal GDPR-deleted user — Atlassian returns "Former user" as display name
+        if display_name == 'Former user':
             return ''
         return display_name
 

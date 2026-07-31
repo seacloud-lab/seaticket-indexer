@@ -477,8 +477,8 @@ class SeaqaDB(object):
             session.execute(text(sql), {'cleaned_at': cleaned_at, 'connection_id': connection_id})
             session.commit()
 
-    def get_projects_need_privacy_report(self, connection_type):
-        """Get projects whose next_privacy_report_at is due (within 1 day or NULL)."""
+    def get_projects_with_connections_by_type(self, connection_type):
+        """Get all non-deleted projects that have active connections of the given type."""
         with self.db_session_class() as session:
             sql = """
                 SELECT DISTINCT p.uuid AS project_uuid
@@ -488,22 +488,8 @@ class SeaqaDB(object):
                 AND pc.deleted = false
                 AND pc.is_active = true
                 AND pc.type = :connection_type
-                AND (
-                    p.next_privacy_report_at IS NULL
-                    OR p.next_privacy_report_at <= DATE_ADD(NOW(), INTERVAL 1 DAY)
-                )
             """
             return session.execute(text(sql), {'connection_type': connection_type}).fetchall()
-
-    def update_project_next_privacy_report_at(self, project_uuid, next_report_at):
-        with self.db_session_class() as session:
-            sql = """
-                UPDATE projects
-                SET next_privacy_report_at = :next_report_at
-                WHERE uuid = :project_uuid
-            """
-            session.execute(text(sql), {'next_report_at': next_report_at, 'project_uuid': project_uuid})
-            session.commit()
 
     def uninstall_github_app(self, project_uuid, installation_id):
         project_uuid = uuid_str_to_36_chars(project_uuid)
