@@ -10,12 +10,13 @@ from .oauth_mail_viewer import OAuthMailViewer
 class GmailOAuthMailViewer(OAuthMailViewer):
     provider_name = 'Gmail'
     list_url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages'
+    request_timeout = (10, 60)
 
     def _request_json(self, url, params=None, headers=None):
         for retry_count in range(4):
             try:
                 return super()._request_json(url, params=params, headers=headers)
-            except requests.ConnectionError:
+            except (requests.ConnectionError, requests.Timeout):
                 if retry_count == 3:
                     raise
                 time.sleep(0.5 * (2 ** retry_count))

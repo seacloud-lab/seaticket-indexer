@@ -17,6 +17,7 @@ def _check_and_raise_error(response):
 
 class OAuthMailViewer(BasicMailViewer):
     provider_name = None
+    request_timeout = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -46,7 +47,7 @@ class OAuthMailViewer(BasicMailViewer):
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
             }
-            response = self.session.post(self.token_url, headers=headers, data=parse.urlencode(params))
+            response = self.session.post(self.token_url, headers=headers, data=parse.urlencode(params), timeout=self.request_timeout)
             try:
                 _check_and_raise_error(response)
             except Exception as e:
@@ -92,7 +93,7 @@ class OAuthMailViewer(BasicMailViewer):
         return headers
 
     def _request_json(self, url, params=None, headers=None):
-        response = self.session.get(url, params=params, headers=self._get_headers(headers))
+        response = self.session.get(url, params=params, headers=self._get_headers(headers), timeout=self.request_timeout)
         try:
             _check_and_raise_error(response)
         except Exception as e:
@@ -101,7 +102,7 @@ class OAuthMailViewer(BasicMailViewer):
         return response.json()
 
     def _request_bytes(self, url, params=None, headers=None):
-        response = self.session.get(url, params=params, headers=self._get_headers(headers))
+        response = self.session.get(url, params=params, headers=self._get_headers(headers), timeout=self.request_timeout)
         try:
             _check_and_raise_error(response)
         except Exception as e:
