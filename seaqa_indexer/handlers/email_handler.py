@@ -200,12 +200,23 @@ class EmailHandler(ConnectionHandler):
                 existed_email = {}
                 if not is_first_sync:
                     message_id = email.get('message_id')
+                    email_id = email.get('email_id')
+                    origin_thread_id = email.get('origin_thread_id')
                     modified_time = email.get('email_date')
-                    existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
+                    if email_id:
+                        existed_email = email_seadb_api.get_email_by_email_id(connection_id, email_id)
+                    if not existed_email:
+                        existed_email = email_seadb_api.get_email_by_message_id(connection_id, message_id)
                     if existed_email and existed_email.get('modified_time'):
                         existed_date = time_to_utc_time(str(existed_email.get('modified_time')))
                         email_thread_id = existed_email.get('thread_id')
-                        if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
+                        provider_metadata_changed = (
+                            existed_email.get('message_id') != message_id
+                            or bool(email_id and existed_email.get('email_id') != email_id)
+                            or bool(origin_thread_id and existed_email.get('origin_thread_id') != origin_thread_id)
+                        )
+                        is_up_to_date = (time_to_utc_time(modified_time) <= existed_date and email_thread_id and not provider_metadata_changed)
+                        if is_up_to_date:
                             logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
                             continue
                 email_info = {
@@ -215,6 +226,7 @@ class EmailHandler(ConnectionHandler):
                     'subject': email.get('subject'),
                     'is_sender': email.get('is_sender'),
                     'email_from': email.get('email_from'),
+                    'origin_thread_id': email.get('origin_thread_id'),
                     '_is_new_email': not bool(existed_email),
                 }
                 changed_email_list.append(email_info)
@@ -256,10 +268,11 @@ class EmailHandler(ConnectionHandler):
         old_thread_rows_by_id = {}
         for email in email_list:
             reply_to_message_id = email.get('reply_to_message_id')
-            if not reply_to_message_id:
-                continue
-
-            replied_email = email_seadb_api.get_email_by_message_id(connection_id, reply_to_message_id)
+            replied_email = {}
+            if reply_to_message_id:
+                replied_email = email_seadb_api.get_email_by_message_id(connection_id, reply_to_message_id)
+            if not replied_email and email.get('origin_thread_id'):
+                replied_email = email_seadb_api.get_email_by_origin_thread_id(connection_id, email.get('origin_thread_id'))
             thread_id = replied_email.get('thread_id')
             if not thread_id or thread_id in old_thread_rows_by_id:
                 continue

@@ -50,6 +50,7 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
         offset += page_size
 
     message2thread = {email['message_id']: email['thread_id'] for email in email_rows}
+    origin_thread2thread = {email['origin_thread_id']: email['thread_id'] for email in email_rows if email.get('origin_thread_id')}
     email_list = [email for email in email_list if not message2thread.get(email['message_id'])]
 
     # no_thread_reply_message_ids is the list of new emails' reply-ids who are not in last 30 days
@@ -72,12 +73,15 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
     for email in email_list:
         reply_to_id = email['reply_to_message_id']
         message_id = email['message_id']
+        origin_thread_id = email.get('origin_thread_id')
+        thread_id = message2thread.get(reply_to_id) or origin_thread2thread.get(origin_thread_id)
 
-        if reply_to_id in message2thread:  # checkout thread id from old message2thread
-            thread_id = message2thread[reply_to_id]
+        if thread_id:
             update_thread = {}
 
             message2thread[message_id] = thread_id
+            if origin_thread_id:
+                origin_thread2thread[origin_thread_id] = thread_id
             if thread_id in to_be_updated_thread_dict:
                 # update Last Updated
                 if time_to_utc_time(email['email_date']) > time_to_utc_time(to_be_updated_thread_dict[thread_id]['last_updated_at']):
@@ -106,6 +110,8 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
                 'last_updated_at': email['email_date']
             }
             message2thread[message_id] = insert_thread_id
+            if origin_thread_id:
+                origin_thread2thread[origin_thread_id] = insert_thread_id
             email_seadb_api.update_email_thread_id(connection_id, message_id, insert_thread_id)
 
 
