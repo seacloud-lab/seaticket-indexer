@@ -1063,13 +1063,16 @@ tables:
         column_type: text
       name:
         column_type: text
-      connection_id:
+      connection_ids:
         column_type: list
         column_data:
           list_type: int64
+      connection_type:
+        column_type: text
       record_modified_time:
         column_type: datetime
     indexes:
     - - user_id
-    - - connection_id
+    - - connection_type
+    - - connection_ids
     table_name: connection_user

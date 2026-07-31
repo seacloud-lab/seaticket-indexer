@@ -106,6 +106,21 @@ class SeaqaDB(object):
                      WHERE project_uuid=:project_uuid"""
             connection = session.execute(text(sql), {'project_uuid': project_uuid}).fetchall()
             return connection
+
+    def get_project_connections_by_type(self, project_uuid, connection_type):
+        """Get active, non-deleted connections of a specific type for a project."""
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = """SELECT id, type, config
+                     FROM project_connection
+                     WHERE project_uuid = :project_uuid
+                       AND type = :connection_type
+                       AND deleted = false
+                       AND is_active = true"""
+            return session.execute(text(sql), {
+                'project_uuid': project_uuid,
+                'connection_type': connection_type,
+            }).fetchall()
     
     def set_connection_pending_status(self, connection_id, status, connection_type):
         connection_status = json.dumps({

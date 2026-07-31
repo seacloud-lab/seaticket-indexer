@@ -76,11 +76,9 @@ class ConfluencePrivacyReporterTimer(Thread):
 
                 # A project owns one aggregated user table. Connections only
                 # provide the workspace used to resolve updated display names.
-                connections = self.seaqa_db.get_connections_by_project_uuid(project_uuid)
-                confluence_connections = [
-                    c for c in connections
-                    if c.type == ConnectionType.CONFLUENCE.value and not c.deleted and c.is_active
-                ]
+                confluence_connections = self.seaqa_db.get_project_connections_by_type(
+                    project_uuid, ConnectionType.CONFLUENCE.value
+                )
                 if not confluence_connections:
                     continue
 

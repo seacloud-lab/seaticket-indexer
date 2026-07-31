@@ -2,7 +2,7 @@ import datetime
 import html2text
 
 from seaqa_indexer.utils import time_to_utc_time
-from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT
+from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT, ConnectionType
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -174,13 +174,13 @@ class ConfluenceSeaDBAPI:
         now_iso = datetime.datetime.now(datetime.UTC).isoformat()
         escaped_account_id = account_id.replace("'", "''")
 
-        sql = f"SELECT `_pk`, `connection_id` FROM `{table_name}` WHERE user_id='{escaped_account_id}'"
+        sql = f"SELECT `_pk`, `connection_ids` FROM `{table_name}` WHERE user_id='{escaped_account_id}' AND connection_type='confluence'"
         response = self.seadb_api.query_rows(self.base_id, sql)
-        existing = response.get('results', [])
+        existing_user = response.get('results', [])
 
-        if existing:
-            pk = existing[0]['_pk']
-            existing_conn_ids = existing[0].get('connection_id') or []
+        if existing_user:
+            pk = existing_user[0]['_pk']
+            existing_conn_ids = existing_user[0].get('connection_ids') or []
             if connection_id in existing_conn_ids:
                 # User already known in this connection — just refresh name/time
                 update_row = {
@@ -193,12 +193,12 @@ class ConfluenceSeaDBAPI:
                 self.seadb_api.update_rows(self.base_id, table_name, [update_row])
             else:
                 # User exists in other connections — append this connection_id
-                new_conn_ids = list(set(existing_conn_ids) | {connection_id})
+                existing_conn_ids.append(connection_id)
                 update_row = {
                     'pk': pk,
                     'row': {
                         SchemaTables.CONNECTION_USER.column.name.name: display_name,
-                        SchemaTables.CONNECTION_USER.column.connection_id.name: new_conn_ids,
+                        SchemaTables.CONNECTION_USER.column.connection_ids.name: existing_conn_ids,
                         SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
                     }
                 }
@@ -208,63 +208,11 @@ class ConfluenceSeaDBAPI:
             insert_row = {
                 SchemaTables.CONNECTION_USER.column.user_id.name: account_id,
                 SchemaTables.CONNECTION_USER.column.name.name: display_name,
-                SchemaTables.CONNECTION_USER.column.connection_id.name: [connection_id],
+                SchemaTables.CONNECTION_USER.column.connection_ids.name: [connection_id],
+                SchemaTables.CONNECTION_USER.column.connection_type.name: ConnectionType.CONFLUENCE.value,
                 SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
             }
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
-
-    def delete_user_by_account_id(self, connection_id, account_id):
-        """Remove a connection from a user's connection_id list.
-
-        Removes the connection_id from the list. If the list becomes empty
-        after removal, deletes the entire row. Used for GDPR privacy reporting
-        when an Atlassian account is closed.
-        """
-        if not account_id:
-            return
-        table_name = SchemaTables.CONNECTION_USER.table_name()
-        escaped_account_id = account_id.replace("'", "''")
-
-        sql = f"SELECT `_pk`, `connection_id` FROM `{table_name}` WHERE user_id='{escaped_account_id}'"
-        response = self.seadb_api.query_rows(self.base_id, sql)
-        results = response.get('results', [])
-        if not results:
-            return
-
-        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
-        for row in results:
-            existing_ids = row.get('connection_id') or []
-            if connection_id not in existing_ids:
-                continue
-            existing_ids.remove(connection_id)
-            if not existing_ids:
-                self.seadb_api.delete_rows(self.base_id, table_name, [row['_pk']])
-            else:
-                update_row = {
-                    'pk': row['_pk'],
-                    'row': {
-                        SchemaTables.CONNECTION_USER.column.connection_id.name: existing_ids,
-                        SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
-                    }
-                }
-                self.seadb_api.update_rows(self.base_id, table_name, [update_row])
-
-    def get_all_user_accounts(self, connection_id, page_size=100):
-        """Get all (user_id, record_modified_time) pairs for a connection."""
-        table_name = SchemaTables.CONNECTION_USER.table_name()
-        results = []
-        offset = 0
-        while True:
-            sql = (
-                f"SELECT `user_id`, `record_modified_time` FROM `{table_name}` "
-                f"WHERE {connection_id} IN connection_id "
-                f"ORDER BY `_pk` LIMIT {page_size} OFFSET {offset}"
-            )
-            page = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-            results.extend(page)
-            if len(page) < page_size:
-                return results
-            offset += page_size
 
     def get_all_users(self):
         """Get all project-level users and their related connection IDs."""
@@ -274,7 +222,7 @@ class ConfluenceSeaDBAPI:
         offset = 0
         while True:
             sql = (
-                f"SELECT `_pk`, `user_id`, `name`, `connection_id`, `record_modified_time` "
+                f"SELECT `_pk`, `user_id`, `name`, `connection_ids`, `record_modified_time` "
                 f"FROM `{table_name}` ORDER BY `_pk` LIMIT {page_size} OFFSET {offset}"
             )
             page = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
