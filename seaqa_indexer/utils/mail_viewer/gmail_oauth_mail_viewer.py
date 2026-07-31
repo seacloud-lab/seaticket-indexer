@@ -1,5 +1,8 @@
 import base64
+import time
 from datetime import datetime, timezone
+
+import requests
 
 from .oauth_mail_viewer import OAuthMailViewer
 
@@ -7,6 +10,15 @@ from .oauth_mail_viewer import OAuthMailViewer
 class GmailOAuthMailViewer(OAuthMailViewer):
     provider_name = 'Gmail'
     list_url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages'
+
+    def _request_json(self, url, params=None, headers=None):
+        for retry_count in range(4):
+            try:
+                return super()._request_json(url, params=params, headers=headers)
+            except requests.ConnectionError:
+                if retry_count == 3:
+                    raise
+                time.sleep(0.5 * (2 ** retry_count))
 
     @staticmethod
     def format_search_date(date_value):
