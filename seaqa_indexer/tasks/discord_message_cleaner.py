@@ -10,6 +10,7 @@ from seaqa_indexer.utils.discord_api import DiscordAPI
 from seaqa_indexer.seadb_models.discord_seadb_api import DiscordSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.config import DISCORD_BOT_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -123,17 +124,12 @@ class DiscordMessageCleanerTimer(Thread):
                 connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
                 channel_id = connection_config.get('channel_id')
                 guild_id = connection_config.get('guild_id', '')
-                bot_token = connection_config.get('bot_token', '')
 
                 if not channel_id:
                     logger.warning('Discord channel_id missing for connection %s', connection_id)
                     continue
 
-                if not bot_token:
-                    logger.warning('Discord bot_token missing for connection %s', connection_id)
-                    continue
-
-                discord_api = DiscordAPI(bot_token)
+                discord_api = DiscordAPI(DISCORD_BOT_TOKEN)
 
                 # Fetch all threads + their message IDs from the forum channel.
                 # thread_message_ids maps thread_id → set of all message IDs in that thread

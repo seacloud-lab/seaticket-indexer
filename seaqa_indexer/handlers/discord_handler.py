@@ -11,6 +11,7 @@ from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.index_store.discord_index import DiscordIndex
 from seaqa_indexer.utils.constants import DataEventType
+from seaqa_indexer.config import DISCORD_BOT_TOKEN
 
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -120,17 +121,12 @@ class DiscordHandler(ConnectionHandler):
         # SYNC_SELECT fields store the full option object; extract the raw value
         if isinstance(channel_id, dict):
             channel_id = channel_id.get('value', '')
-        bot_token = config.get('bot_token', '')
-
-        if not bot_token:
-            logger.error(f'Discord bot_token is not configured in settings for connection {connection_id}')
-            return None, None, None, None
 
         if not channel_id:
             logger.error(f'Discord channel_id is missing for connection {connection_id}')
             return None, None, None, None
 
-        discord_api = DiscordAPI(bot_token)
+        discord_api = DiscordAPI(DISCORD_BOT_TOKEN)
         discord_seadb_api = DiscordSeaDBAPI(project_uuid)
 
         sync_count, total_count = self._sync_discord(
