@@ -3,7 +3,6 @@ import json
 from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.crawler.web_crawl import WebCrawl
-from seaqa_indexer.crawler.url_scope import URLScope
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.syncer.utils import send_connection_sync_result_msg
 
@@ -75,8 +74,7 @@ def craw_web(connection_id, db_session_class, mq):
 
     web_crawl = WebCrawl(db_session_class, sync_logger)
 
-    # A file URL has no directory sitemap to discover.
-    if not sitemap_url and not URLScope(site_url).is_file:
+    if not sitemap_url:
         sitemap_url = web_crawl.get_sitemap_url(site_url)
         if sitemap_url:
             connection_config['sitemap_url'] = sitemap_url

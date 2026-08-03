@@ -11,7 +11,6 @@ from twisted.internet.threads import deferToThread
 
 from seaqa_indexer.crawler.spiders.site_crawler import SiteCrawlerSpider
 from seaqa_indexer.crawler.spiders.sitemap_crawler import SitemapCrawlerSpider
-from seaqa_indexer.crawler.url_scope import URLScope
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.crawler.storage import get_storage
 
@@ -130,12 +129,8 @@ class WebCrawl:
         success_call_back = crawler_params['success_call_back']
         fail_call_back = crawler_params['fail_call_back']
 
-        # A file URL represents one page, so crawl it directly instead of
-        # applying a directory sitemap to its exact-file scope.
-        use_sitemap = sitemap_url and not URLScope(site_url, exclude_paths).is_file
-
         # Create crawler instance
-        if use_sitemap:
+        if sitemap_url:
             d = self.runner.crawl(
                 SitemapCrawlerSpider,
                 site_url,

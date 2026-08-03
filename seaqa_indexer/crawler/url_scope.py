@@ -1,20 +1,13 @@
-import re
 from urllib.parse import urlparse
 
 
 class URLScope:
-    """Restrict crawled URLs to the configured site path and exclusions."""
+    """Restrict crawled URLs to the configured site origin and exclusions."""
 
     def __init__(self, site_url, exclude_paths=None):
         parsed_site = urlparse(site_url)
         self.scheme = parsed_site.scheme.lower()
         self.netloc = parsed_site.netloc.lower()
-        self.base_path = self._normalize_path(parsed_site.path)
-        last_segment = self.base_path.rsplit('/', 1)[-1]
-        self.is_file = (
-            not parsed_site.path.endswith('/')
-            and bool(re.search(r'\.[A-Za-z][A-Za-z0-9_-]*$', last_segment))
-        )
         if isinstance(exclude_paths, str):
             exclude_paths = exclude_paths.splitlines()
         normalized_exclude_paths = []
@@ -38,14 +31,17 @@ class URLScope:
         base_path = cls._normalize_path(base_path)
         return base_path == '/' or path == base_path or path.startswith(base_path + '/')
 
+    def same_origin(self, url):
+        parsed_url = urlparse(url)
+        return (
+            parsed_url.scheme.lower() == self.scheme
+            and parsed_url.netloc.lower() == self.netloc
+        )
+
     def allows(self, url):
         parsed_url = urlparse(url)
-        if parsed_url.scheme.lower() != self.scheme or parsed_url.netloc.lower() != self.netloc:
+        if not self.same_origin(url):
             return False
 
         path = self._normalize_path(parsed_url.path)
-        if self.is_file and path != self.base_path:
-            return False
-        if not self.is_file and not self._path_matches(path, self.base_path):
-            return False
         return not any(self._path_matches(path, excluded_path) for excluded_path in self.exclude_paths)
