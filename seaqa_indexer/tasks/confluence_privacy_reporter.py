@@ -51,6 +51,8 @@ class ConfluencePrivacyReporterTimer(Thread):
 
     def run(self):
         while not self.finished.is_set():
+            self._report_and_cleanup()
+            print('confluence privacy reporter finished one cycle, waiting for next cycle...')
             self.finished.wait(self.interval)
             if not self.finished.is_set():
                 logging.info('starts to report confluence privacy data')
@@ -74,126 +76,132 @@ class ConfluencePrivacyReporterTimer(Thread):
         )
 
     def _report_and_cleanup(self):
-        projects = self.seaqa_db.get_projects_with_connections_by_type(
-            ConnectionType.CONFLUENCE.value
-        )
-        logger.info('Found %d projects with confluence connections', len(projects))
+        offset = 0
+        page_size = 500
 
-        for project in projects:
-            project_uuid = project.project_uuid
+        while True:
+            oauth_rows = self.seaqa_db.get_confluence_oauth_page(offset, page_size)
+            if not oauth_rows:
+                break
 
-            try:
-                confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
+            for oauth in oauth_rows:
+                project_uuid = oauth.project_uuid
 
-                # Check if any user in this project is due for reporting
-                if not confluence_seadb_api.has_users_needing_report():
-                    continue
-
-                oauth = self.seaqa_db.get_project_confluence_oauth(project_uuid)
-                if not oauth or not oauth.access_token:
-                    logger.warning('Confluence OAuth missing for project %s', project_uuid)
-                    continue
-
-                confluence_connections = self.seaqa_db.get_project_connections_by_type(
-                    project_uuid, ConnectionType.CONFLUENCE.value
-                )
-                if not confluence_connections:
-                    continue
-
-                confluence_api = ConfluenceAPI(oauth.access_token, oauth.refresh_token, oauth.expires_at)
-                accounts = confluence_seadb_api.get_all_users()
-                if not accounts:
-                    continue
-
-                workspace_by_connection = {}
-                for connection in confluence_connections:
-                    connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
-                    workspace_id = connection_config.get('workspace_id')
-                    if workspace_id:
-                        workspace_by_connection[str(connection.id)] = workspace_id
-
-                accounts_by_id = {account['user_id']: account for account in accounts}
-                cycle_period = DEFAULT_CYCLE_DAYS
-
-                # Report the project-level user set in batches.
-                for i in range(0, len(accounts), self.batch_size):
-                    batch = accounts[i:i + self.batch_size]
-                    payload = [
-                        {'accountId': a['user_id'], 'updatedAt': a['record_modified_time']}
-                        for a in batch
-                    ]
-
-                    # Refresh token if near expiry
-                    self._ensure_token_fresh(confluence_api, project_uuid)
-
-                    try:
-                        result = ConfluenceAPI.report_accounts(confluence_api.access_token, payload)
-                    except Exception:
-                        logger.exception('Privacy report API failed for project %s batch %d',
-                                         project_uuid, i // self.batch_size)
+                try:
+                    if not oauth.access_token:
+                        logger.warning('Confluence OAuth access token missing for project %s', project_uuid)
                         continue
 
-                    cycle_period = result.get('cycle_period', DEFAULT_CYCLE_DAYS)
-                    next_report_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=cycle_period)
+                    confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
 
-                    closed_pks = []
-                    updated_names = {}
-                    failed_pks = set()
+                    # Get users due for reporting (NULL or within 1 day of deadline)
+                    accounts = confluence_seadb_api.get_users_needing_report()
+                    if not accounts:
+                        continue
 
-                    for account_result in result.get('accounts', []):
-                        account_id = account_result.get('accountId')
-                        status = account_result.get('status')
-                        if not account_id:
+                    confluence_connections = self.seaqa_db.get_project_connections_by_type(
+                        project_uuid, ConnectionType.CONFLUENCE.value
+                    )
+                    if not confluence_connections:
+                        continue
+
+                    confluence_api = ConfluenceAPI(oauth.access_token, oauth.refresh_token, oauth.expires_at)
+
+                    workspace_by_connection = {}
+                    for connection in confluence_connections:
+                        connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
+                        workspace_id = connection_config.get('workspace_id')
+                        if workspace_id:
+                            workspace_by_connection[str(connection.id)] = workspace_id
+
+                    accounts_by_id = {account['user_id']: account for account in accounts}
+                    cycle_period = DEFAULT_CYCLE_DAYS
+
+                    # Report the project-level user set in batches.
+                    for i in range(0, len(accounts), self.batch_size):
+                        batch = accounts[i:i + self.batch_size]
+                        payload = [
+                            {'accountId': a['user_id'], 'updatedAt': a['record_modified_time']}
+                            for a in batch
+                        ]
+
+                        # Refresh token if near expiry
+                        self._ensure_token_fresh(confluence_api, project_uuid)
+
+                        try:
+                            result = confluence_api.report_accounts(payload)
+                        except Exception:
+                            logger.exception('Privacy report API failed for project %s batch %d',
+                                             project_uuid, i // self.batch_size)
                             continue
 
-                        if status == 'closed':
-                            logger.info('Deleting user data for closed account %s in project %s',
-                                        account_id, project_uuid)
-                            account = accounts_by_id.get(account_id)
-                            if account and account.get('_pk') is not None:
-                                closed_pks.append(account['_pk'])
+                        next_report_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=cycle_period)
 
-                        elif status == 'updated':
-                            logger.info('Refreshing display name for updated account %s in project %s',
-                                        account_id, project_uuid)
-                            account = accounts_by_id.get(account_id)
-                            connection_ids = (account or {}).get('connection_ids') or []
-                            workspace_ids = [
-                                workspace_by_connection.get(str(cid))
-                                for cid in connection_ids
-                                if workspace_by_connection.get(str(cid))
-                            ]
-                            refreshed = False
-                            for ws_id in workspace_ids:
-                                try:
-                                    name = confluence_api.get_user_display_name(account_id, ws_id)
-                                    if name and account and account.get('_pk') is not None:
-                                        updated_names[account['_pk']] = name
-                                        refreshed = True
-                                        break
-                                except Exception:
-                                    logger.warning('Failed to refresh user %s from workspace %s',
-                                                   account_id, ws_id, exc_info=True)
-                            if not refreshed and account and account.get('_pk') is not None:
-                                failed_pks.add(account['_pk'])
+                        closed_pks = []
+                        updated_names = {}
+                        failed_pks = set()
 
-                    # Apply status changes for this batch immediately
-                    confluence_seadb_api.delete_users(closed_pks)
-                    confluence_seadb_api.update_user_names(updated_names)
+                        for account_result in result.get('accounts', []):
+                            account_id = account_result.get('accountId')
+                            status = account_result.get('status')
+                            if not account_id:
+                                continue
 
-                    # Mark successfully reported users; exclude closed and failed-updated
-                    skip_pks = failed_pks | set(closed_pks)
-                    batch_pks = [
-                        a['_pk'] for a in batch
-                        if a.get('_pk') is not None and a['_pk'] not in skip_pks
-                    ]
-                    confluence_seadb_api.update_users_next_report_at(batch_pks, next_report_at)
+                            if status == 'closed':
+                                logger.info('Deleting user data for closed account %s in project %s',
+                                            account_id, project_uuid)
+                                account = accounts_by_id.get(account_id)
+                                if account and account.get('_pk') is not None:
+                                    closed_pks.append(account['_pk'])
 
-                logger.info('Privacy report completed for project %s, %d users total (cycle=%d days)',
-                            project_uuid, len(accounts), cycle_period)
+                            elif status == 'updated':
+                                logger.info('Refreshing display name for updated account %s in project %s',
+                                            account_id, project_uuid)
+                                account = accounts_by_id.get(account_id)
+                                if not account:
+                                    logger.warning('Account %s not found in project %s for update', account_id, project_uuid)
+                                    continue
+                                connection_ids = (account or {}).get('connection_ids') or []
+                                workspace_ids = [
+                                    workspace_by_connection.get(str(cid))
+                                    for cid in connection_ids
+                                    if workspace_by_connection.get(str(cid))
+                                ]
+                                refreshed = False
+                                for ws_id in workspace_ids:
+                                    try:
+                                        name = confluence_api.get_user_display_name(account_id, ws_id)
+                                        if name is not None:
+                                            updated_names[account['_pk']] = name
+                                            refreshed = True
+                                            break
+                                    except Exception:
+                                        logger.warning('Failed to refresh user %s from workspace %s',
+                                                       account_id, ws_id, exc_info=True)
+                                if not refreshed:
+                                    failed_pks.add(account['_pk'])
 
-            except Exception as e:
-                logger.exception('Failed privacy report for project %s: %s', project_uuid, e)
+                        # Apply status changes for this batch immediately
+                        confluence_seadb_api.delete_users(closed_pks)
+                        confluence_seadb_api.update_user_names(updated_names)
+
+                        # Mark successfully reported users; exclude closed and failed-updated
+                        skip_pks = failed_pks | set(closed_pks)
+                        batch_pks = [
+                            a['_pk'] for a in batch
+                            if a.get('_pk') is not None and a['_pk'] not in skip_pks
+                        ]
+                        confluence_seadb_api.update_users_next_report_at(batch_pks, next_report_at)
+
+                    logger.info('Privacy report completed for project %s, %d users total',
+                                project_uuid, len(accounts))
+
+                except Exception as e:
+                    logger.exception('Failed privacy report for project %s: %s', project_uuid, e)
+
+            if len(oauth_rows) < page_size:
+                break
+            offset += page_size
 
     def cancel(self):
         self.finished.set()

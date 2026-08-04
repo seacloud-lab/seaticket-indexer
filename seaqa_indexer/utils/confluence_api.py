@@ -121,8 +121,7 @@ class ConfluenceAPI:
             return ''
         return display_name
 
-    @staticmethod
-    def report_accounts(access_token, accounts):
+    def report_accounts(self, accounts):
         """Report account IDs to Atlassian privacy API.
 
         Returns:
@@ -134,11 +133,12 @@ class ConfluenceAPI:
             return {'accounts': [], 'cycle_period': 7}
         url = 'https://api.atlassian.com/app/report-accounts/'
         headers = {
-            'Authorization': f'Bearer {access_token}',
+            'Authorization': f'Bearer {self.access_token}',
             'Content-Type': 'application/json',
         }
         response = requests.post(url, json={'accounts': accounts}, headers=headers, timeout=60)
         cycle_period = int(response.headers.get('Cycle-Period', 7))
+        print(f'Privacy report response: status={response.status_code}, cycle_period={cycle_period}')
         if response.status_code == 204:
             return {'accounts': [], 'cycle_period': cycle_period}
         response.raise_for_status()

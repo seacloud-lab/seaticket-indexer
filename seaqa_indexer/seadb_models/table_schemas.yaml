@@ -1076,5 +1076,6 @@ tables:
     indexes:
     - - user_id
     - - connection_type
+    - - next_privacy_report_at
     - - connection_ids
     table_name: connection_user

@@ -376,6 +376,21 @@ class SeaqaDB(object):
             """
             return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
 
+    def get_confluence_oauth_page(self, offset=0, limit=100):
+        """Paginated query of project_confluence_oauth for non-deleted projects."""
+        with self.db_session_class() as session:
+            sql = """
+                SELECT pco.project_uuid, pco.access_token, pco.refresh_token, pco.expires_at
+                FROM project_confluence_oauth pco
+                INNER JOIN projects p ON p.uuid = pco.project_uuid
+                WHERE p.deleted = false
+                ORDER BY pco.project_uuid
+                LIMIT :limit OFFSET :offset
+            """
+            return session.execute(
+                text(sql), {'limit': limit, 'offset': offset}
+            ).fetchall()
+
     def update_project_confluence_oauth(self, project_uuid, access_token, expires_at, refresh_token):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
