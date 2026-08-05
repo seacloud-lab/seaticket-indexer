@@ -104,8 +104,12 @@ class GeneralTaskHandler(ConnectionHandler):
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, connection_status, seaqa_db, sync_logger):
         base_url = (config.get('base_url') or '').strip()
         api_token = (config.get('api_token') or '').strip()
+        table_id = config.get('table_id')
         if not base_url:
             sync_logger.log('General Task config missing base_url')
+            return None, None, None, None
+        if not table_id:
+            sync_logger.log('General Task config missing table_id')
             return None, None, None, None
 
         endpoint = base_url.rstrip('/')
@@ -120,6 +124,7 @@ class GeneralTaskHandler(ConnectionHandler):
         params['since_at'] = since
         params['sync_before'] = sync_before
         params['limit'] = self.FETCH_PAGE_SIZE
+        params['table_id'] = table_id
 
         headers = {}
         if api_token:
@@ -146,10 +151,7 @@ class GeneralTaskHandler(ConnectionHandler):
             tasks = data.get('tasks', [])
             user_mappings = data.get('user_mappings', [])
             if user_mappings:
-                try:
-                    general_task_seadb_api.upsert_user_mappings(connection_id, user_mappings)
-                except Exception as error:
-                    sync_logger.log(f'Upsert task user mappings failed: {error}')
+                general_task_seadb_api.upsert_user_mappings(connection_id, user_mappings)
             if tasks:
                 try:
                     general_task_seadb_api.ensure_task_column_options(connection_id, tasks)
