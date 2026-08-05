@@ -106,7 +106,7 @@ class ConfluenceAPI:
         if not account_id:
             return ''
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/rest/api/user'
-        params = {'accountId': account_id}
+        params = {'accountId': account_id, 'expand': 'operations'}
         resp = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
         if resp.status_code == 404:
             raise ConfluenceUserNotFoundException()
@@ -114,6 +114,10 @@ class ConfluenceAPI:
         data = resp.json()
         # Corrupted deleted user record — accountId is the literal string "unknown"
         if data.get('accountId') == 'unknown':
+            return ''
+        # Deactivated/unlicensed or GDPR-deleted user — operations will be empty
+        operations = data.get('operations') or []
+        if not operations:
             return ''
         display_name = data.get('displayName') or ''
         # Normal GDPR-deleted user — Atlassian returns "Former user" as display name

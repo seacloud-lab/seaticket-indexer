@@ -139,7 +139,6 @@ class ConfluencePrivacyReporterTimer(Thread):
 
                         closed_pks = []
                         updated_names = {}
-                        failed_pks = set()
 
                         for account_result in result.get('accounts', []):
                             account_id = account_result.get('accountId')
@@ -167,29 +166,24 @@ class ConfluencePrivacyReporterTimer(Thread):
                                     for cid in connection_ids
                                     if workspace_by_connection.get(str(cid))
                                 ]
-                                refreshed = False
                                 for ws_id in workspace_ids:
                                     try:
                                         name = confluence_api.get_user_display_name(account_id, ws_id)
-                                        if name is not None:
+                                        if name:
                                             updated_names[account['_pk']] = name
-                                            refreshed = True
                                             break
                                     except Exception:
                                         logger.warning('Failed to refresh user %s from workspace %s',
                                                        account_id, ws_id, exc_info=True)
-                                if not refreshed:
-                                    failed_pks.add(account['_pk'])
 
                         # Apply status changes for this batch immediately
                         confluence_seadb_api.delete_users(closed_pks)
                         confluence_seadb_api.update_user_names(updated_names)
 
-                        # Mark successfully reported users; exclude closed and failed-updated
-                        skip_pks = failed_pks | set(closed_pks)
+                        # Mark reported users; only exclude closed accounts
                         batch_pks = [
                             a['_pk'] for a in batch
-                            if a.get('_pk') is not None and a['_pk'] not in skip_pks
+                            if a.get('_pk') is not None and a['_pk'] not in closed_pks
                         ]
                         confluence_seadb_api.update_users_next_report_at(batch_pks, next_report_at)
 
