@@ -151,7 +151,10 @@ class GeneralTaskHandler(ConnectionHandler):
             tasks = data.get('tasks', [])
             user_mappings = data.get('user_mappings', [])
             if user_mappings:
-                general_task_seadb_api.upsert_user_mappings(connection_id, user_mappings)
+                try:
+                    general_task_seadb_api.upsert_user_mappings(connection_id, user_mappings)
+                except Exception as error:
+                    sync_logger.log(f'Upsert task user mappings failed: {error}')
             if tasks:
                 try:
                     general_task_seadb_api.ensure_task_column_options(connection_id, tasks)
