@@ -8,6 +8,9 @@ from seaqa_indexer.config import CONFLUENCE_CLIENT_ID, CONFLUENCE_CLIENT_SECRET
 from seaqa_indexer.utils import time_to_utc_time
 
 
+OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 60
+
+
 class ConfluenceUserNotFoundException(Exception):
     pass
 
@@ -64,7 +67,7 @@ class ConfluenceAPI:
             self.refresh_token = new_refresh_token
 
         expires_in = data.get('expires_in') or 3600
-        self.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(int(expires_in) - 60, 0))
+        self.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(int(expires_in) - OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS, 0))
 
         return {
             'access_token': self.access_token,

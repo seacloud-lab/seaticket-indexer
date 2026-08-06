@@ -5,6 +5,9 @@ from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.config import JIRA_CLIENT_ID, JIRA_CLIENT_SECRET
 
 
+OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 60
+
+
 class JiraAPI:
     def __init__(self, access_token, refresh_token, site_id, site_url, timeout=60):
         self.access_token = access_token
@@ -51,7 +54,7 @@ class JiraAPI:
             self.refresh_token = new_refresh_token
 
         expires_in = data.get('expires_in', 3600) or 3600
-        self.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(int(expires_in) - 60, 0))
+        self.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(int(expires_in) - OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS, 0))
 
         return {
             'access_token': self.access_token,
@@ -103,7 +106,7 @@ class JiraAPI:
         else:
             jql = f'project = "{project_key}" ORDER BY created ASC'
 
-        fields = 'summary,issuetype,status,priority,assignee,duedate,description,updated,created'
+        fields = 'summary,issuetype,status,priority,assignee,creator,duedate,description,updated,created'
 
         url = f'{self._api_base()}/rest/api/3/search/jql'
         params = {

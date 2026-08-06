@@ -1097,6 +1097,8 @@ tables:
         column_type: single-select
       assignees:
         column_type: list
+      author:
+        column_type: text
       issue_type:
         column_type: single-select
       due_date:

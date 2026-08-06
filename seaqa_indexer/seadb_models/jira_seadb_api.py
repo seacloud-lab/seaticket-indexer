@@ -155,22 +155,23 @@ class JiraSeaDBAPI:
         for added_option in need_added_options:
             self.seadb_api.add_column_option(self.base_id, added_option)
 
-    def sync_jira_priority_options(self, table_metadata, priorities):
+    def add_or_update_priority_column_options(self, table_metadata, priorities):
         options = []
         for priority in priorities or []:
             opt_id = priority.get('id')
             name = priority.get('name')
+            status_color = priority.get('statusColor')
             if not opt_id or not name:
                 continue
             options.append({
                 'id': opt_id,
                 'name': name,
-                'color': '#FFFFFF',
+                'color': status_color,
                 'text_color': '#000000',
             })
         self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.priority.name, options)
 
-    def sync_jira_status_options(self, table_metadata, statuses):
+    def add_or_update_status_column_options(self, table_metadata, statuses):
         category_colors = {
             'new': '#42526E',
             'indeterminate': '#0052CC',
@@ -194,7 +195,7 @@ class JiraSeaDBAPI:
             options.append(option)
         self._upsert_select_column_options(table_metadata, SchemaTables.JIRA_ISSUES.column.status.name, options)
 
-    def sync_jira_issue_type_options(self, table_metadata, issue_types):
+    def add_or_update_issue_type_column_options(self, table_metadata, issue_types):
         options = []
         for issue_type in issue_types or []:
             opt_id = issue_type.get('id')
@@ -211,7 +212,7 @@ class JiraSeaDBAPI:
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
-        sql = f"SELECT * FROM `{table_name}` WHERE `issue_id` = {issue_id}"
+        sql = f"SELECT `_pk`, `modified_time` FROM `{table_name}` WHERE `issue_id` = {issue_id}"
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]
@@ -236,6 +237,7 @@ class JiraSeaDBAPI:
             SchemaTables.JIRA_ISSUES.column.status.name: (fields_data.get('status') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.priority.name: (fields_data.get('priority') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.assignees.name: assignees_list,
+            SchemaTables.JIRA_ISSUES.column.author.name: (fields_data.get('creator') or {}).get('displayName'),
             SchemaTables.JIRA_ISSUES.column.issue_type.name: (fields_data.get('issuetype') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.due_date.name: time_to_utc_time(fields_data.get('duedate')).isoformat() if fields_data.get('duedate') else None,
             SchemaTables.JIRA_ISSUES.column.created_time.name: time_to_utc_time(fields_data.get('created')).isoformat(),
@@ -306,7 +308,7 @@ class JiraSeaDBAPI:
 
     def get_issues_by_page(self, connection_id, last_indexed_at, page_size, offset):
         issues_table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
-        sql = f"""SELECT * FROM `{issues_table_name}` 
+        sql = f"""SELECT `_pk`, `issue_id`, `deleted`, `outdated`, `content`, `title`, `modified_time` FROM `{issues_table_name}`
                 WHERE record_modified_time >= '{last_indexed_at}' 
                 LIMIT {page_size} OFFSET {offset}"""
         res = self.seadb_api.query_rows(self.base_id, sql)
@@ -316,7 +318,7 @@ class JiraSeaDBAPI:
     def get_need_ai_issues_by_page(self, connection_id, page_size):
         issues_table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
         sql = f"""
-            SELECT * FROM `{issues_table_name}`
+            SELECT `_pk`, `title`, `content` FROM `{issues_table_name}`
             WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time)
             AND (deleted IS NULL OR deleted = false)
             AND (outdated IS NULL OR outdated = false)
@@ -342,6 +344,6 @@ class JiraSeaDBAPI:
 
     def get_issue_comments_by_page(self, connection_id, issue_id, page_size, offset):
         comments_table_name = SchemaTables.JIRA_ISSUE_COMMENTS.table_name(connection_id)
-        sql_comments = f"SELECT * FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {offset}"
+        sql_comments = f"SELECT `_pk`, `comment_id`, `content` FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql_comments).get('results', [])
         return comments

@@ -50,6 +50,7 @@ class JiraIssueHandler(ConnectionHandler):
             'status': record.get('status', ''),
             'priority': record.get('priority', ''),
             'assignees': record.get('assignees', ''),
+            'author': record.get('author', ''),
             'issue_type': record.get('issue_type', ''),
             'url': url,
         }
@@ -97,15 +98,11 @@ class JiraIssueHandler(ConnectionHandler):
         # Refresh proactively if the token has expired
         if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
             jira_api = JiraAPI(access_token, refresh_token, site_id, site_url)
-            try:
-                new_tokens = jira_api.refresh_access_token()
-                access_token = new_tokens['access_token']
-                refresh_token = new_tokens['refresh_token']
-                expires_at = new_tokens['expires_at']
-                seaqa_db.update_project_jira_oauth(project_uuid, access_token, expires_at, refresh_token)
-            except Exception as e:
-                sync_logger.log(f'Failed to refresh Jira OAuth token: {e}')
-                return None, None, None, None
+            new_tokens = jira_api.refresh_access_token()
+            access_token = new_tokens['access_token']
+            refresh_token = new_tokens['refresh_token']
+            expires_at = new_tokens['expires_at']
+            seaqa_db.update_project_jira_oauth(project_uuid, access_token, expires_at, refresh_token)
 
         jira_api = JiraAPI(access_token, refresh_token, site_id, site_url)
         jira_seadb_api = JiraSeaDBAPI(project_uuid)
@@ -133,9 +130,9 @@ class JiraIssueHandler(ConnectionHandler):
             return
         priorities = jira_api.get_priorities()
         issue_types = jira_api.get_createmeta(project_key)
-        jira_seadb_api.sync_jira_priority_options(table_metadata, priorities)
-        jira_seadb_api.sync_jira_status_options(table_metadata, jira_api.get_statuses(project_key))
-        jira_seadb_api.sync_jira_issue_type_options(table_metadata, issue_types)
+        jira_seadb_api.add_or_update_priority_column_options(table_metadata, priorities)
+        jira_seadb_api.add_or_update_status_column_options(table_metadata, jira_api.get_statuses(project_key))
+        jira_seadb_api.add_or_update_issue_type_column_options(table_metadata, issue_types)
 
     def _sync_jira_issues(self, connection_id, project_uuid, jira_api, project_key,
                           old_last_sync_time, connection_status, seaqa_db, jira_seadb_api,
@@ -207,15 +204,6 @@ class JiraIssueHandler(ConnectionHandler):
 
         return sync_count, total_count
 
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables):
-        """Clean jira issue connection data including issues and comments tables."""
-        if tables:
-            issues_table_name = self.gen_table_name(connection_id)
-            comments_table_name = self.gen_comments_table_name(connection_id)
-            for table in tables:
-                if table['name'] in (issues_table_name, comments_table_name):
-                    seadb_api.delete_table(project_uuid, table['id'])
 
     def process_ai(self, seadb_api, storage, connection_id, project_uuid):
         page_size = 100
