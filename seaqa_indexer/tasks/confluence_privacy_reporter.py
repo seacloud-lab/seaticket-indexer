@@ -13,6 +13,7 @@ from seaqa_indexer.utils.constants import ConnectionType
 logger = logging.getLogger(__name__)
 
 DEFAULT_CYCLE_DAYS = 7
+REPORT_LOOKAHEAD_DAYS = 1
 
 
 class ConfluencePrivacyReporter(object):
@@ -95,7 +96,7 @@ class ConfluencePrivacyReporterTimer(Thread):
                     confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
 
                     # Get users due for reporting (NULL or within 1 day of deadline)
-                    accounts = confluence_seadb_api.get_users_needing_report()
+                    accounts = confluence_seadb_api.get_users_needing_report(REPORT_LOOKAHEAD_DAYS)
                     if not accounts:
                         continue
 
@@ -167,14 +168,10 @@ class ConfluencePrivacyReporterTimer(Thread):
                                     if workspace_by_connection.get(str(cid))
                                 ]
                                 for ws_id in workspace_ids:
-                                    try:
-                                        name = confluence_api.get_user_display_name(account_id, ws_id)
-                                        if name:
-                                            updated_names[account['_pk']] = name
-                                            break
-                                    except Exception:
-                                        logger.warning('Failed to refresh user %s from workspace %s',
-                                                       account_id, ws_id, exc_info=True)
+                                    name = confluence_api.get_user_display_name(account_id, ws_id)
+                                    if name:
+                                        updated_names[account['_pk']] = name
+                                        break
 
                         # Apply status changes for this batch immediately
                         confluence_seadb_api.delete_users(closed_pks)

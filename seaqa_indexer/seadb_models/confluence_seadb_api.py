@@ -214,10 +214,10 @@ class ConfluenceSeaDBAPI:
             }
             self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
 
-    def get_users_needing_report(self):
-        """Get users due for privacy reporting (next_privacy_report_at NULL or <= 1 day from now)."""
+    def get_users_needing_report(self, days_ahead):
+        """Get users due for privacy reporting (next_privacy_report_at NULL or <= days_ahead from now)."""
         table_name = SchemaTables.CONNECTION_USER.table_name()
-        deadline = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1)).isoformat()
+        deadline = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=days_ahead)).isoformat()
         results = []
         page_size = 100
         offset = 0

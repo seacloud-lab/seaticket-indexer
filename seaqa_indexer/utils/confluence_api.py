@@ -112,17 +112,14 @@ class ConfluenceAPI:
             raise ConfluenceUserNotFoundException()
         resp.raise_for_status()
         data = resp.json()
-        # Corrupted deleted user record — accountId is the literal string "unknown"
-        if data.get('accountId') == 'unknown':
+        # Corrupted or unresolvable user record — type will be "unknown"
+        if data.get('type') == 'unknown':
             return ''
         # Deactivated/unlicensed or GDPR-deleted user — operations will be empty
         operations = data.get('operations') or []
         if not operations:
             return ''
         display_name = data.get('displayName') or ''
-        # Normal GDPR-deleted user — Atlassian returns "Former user" as display name
-        if display_name == 'Former user':
-            return ''
         return display_name
 
     def report_accounts(self, accounts):

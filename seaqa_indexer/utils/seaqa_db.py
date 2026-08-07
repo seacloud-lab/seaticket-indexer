@@ -115,8 +115,7 @@ class SeaqaDB(object):
                      FROM project_connection
                      WHERE project_uuid = :project_uuid
                        AND type = :connection_type
-                       AND deleted = false
-                       AND is_active = true"""
+                       AND deleted = false"""
             return session.execute(text(sql), {
                 'project_uuid': project_uuid,
                 'connection_type': connection_type,
@@ -491,20 +490,6 @@ class SeaqaDB(object):
             """
             session.execute(text(sql), {'cleaned_at': cleaned_at, 'connection_id': connection_id})
             session.commit()
-
-    def get_projects_with_connections_by_type(self, connection_type):
-        """Get all non-deleted projects that have active connections of the given type."""
-        with self.db_session_class() as session:
-            sql = """
-                SELECT DISTINCT p.uuid AS project_uuid
-                FROM projects p
-                INNER JOIN project_connection pc ON pc.project_uuid = p.uuid
-                WHERE p.deleted = false
-                AND pc.deleted = false
-                AND pc.is_active = true
-                AND pc.type = :connection_type
-            """
-            return session.execute(text(sql), {'connection_type': connection_type}).fetchall()
 
     def uninstall_github_app(self, project_uuid, installation_id):
         project_uuid = uuid_str_to_36_chars(project_uuid)
