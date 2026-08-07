@@ -215,6 +215,7 @@ class EmailHandler(ConnectionHandler):
                     'subject': email.get('subject'),
                     'is_sender': email.get('is_sender'),
                     'email_from': email.get('email_from'),
+                    'answered': email.get('answered', False),
                     '_is_new_email': not bool(existed_email),
                 }
                 changed_email_list.append(email_info)
@@ -243,6 +244,9 @@ class EmailHandler(ConnectionHandler):
                 )
                 insert_and_update_thread_rows(email_seadb_api, connection_id, since, changed_email_list, is_first_sync)
                 self._publish_thread_events(email_seadb_api, connection_id, changed_email_list, old_thread_rows_by_id)
+
+        if is_first_sync:
+            self._backfill_reply_status(email_seadb_api, connection_id)
 
         connection_status['last_sync_changes'] = {
             'added': added_count,
@@ -326,3 +330,64 @@ class EmailHandler(ConnectionHandler):
                 log_object_name='email thread',
             )
             published_thread_ids.add(thread_id)
+
+    def _backfill_reply_status(self, email_seadb_api, connection_id):
+        """Backfill answered and is_answered for existing emails on first sync.
+
+        Email level: marks emails as answered where a user-sent reply exists
+        (reply_to_message_id + is_sender match). Complements Answered flag
+        for OAuth providers and catches any missed IMAP cases.
+
+        Thread level: for each thread, sets is_answered based on whether the
+        chronologically last inbound email (is_sender=False) has been answered.
+        """
+        email_table = self.gen_email_table_name(connection_id)
+        thread_table = self.gen_table_name(connection_id)
+
+        # Backfill email-level answered
+        sql = f"""
+            SELECT _pk FROM `{email_table}` AS e
+            WHERE e.answered IS NOT TRUE
+            AND EXISTS (
+                SELECT 1 FROM `{email_table}` AS r
+                WHERE r.reply_to_message_id = e.message_id AND r.is_sender = true
+            )
+        """
+        page_size = 100
+        while True:
+            paged_sql = f"{sql} LIMIT {page_size}"
+            result = email_seadb_api.seadb_api.query_rows(
+                email_seadb_api.base_id, paged_sql
+            )
+            rows = result.get('results', [])
+            if not rows:
+                break
+            updates = [
+                {"pk": row['_pk'], "row": {"answered": True}}
+                for row in rows
+            ]
+            email_seadb_api.seadb_api.update_rows(
+                email_seadb_api.base_id, email_table, updates
+            )
+            if len(rows) < page_size:
+                break
+
+        # Backfill thread-level is_answered
+        thread_sql = f"""
+            SELECT t._pk FROM `{thread_table}` AS t
+            WHERE t.is_answered IS NOT TRUE
+        """
+        while True:
+            paged_sql = f"{thread_sql} LIMIT {page_size}"
+            result = email_seadb_api.seadb_api.query_rows(
+                email_seadb_api.base_id, paged_sql
+            )
+            rows = result.get('results', [])
+            if not rows:
+                break
+            for row in rows:
+                email_seadb_api.recompute_thread_is_answered(
+                    connection_id, row['_pk']
+                )
+            if len(rows) < page_size:
+                break

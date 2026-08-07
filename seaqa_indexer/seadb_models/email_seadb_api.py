@@ -40,6 +40,7 @@ class EmailSeaDBAPI:
             'content': cleaned_content[:SEADB_CONTENT_SIZE_LIMIT],
             'reply_to_message_id': email['reply_to_message_id'],
             'is_sender': email['is_sender'],
+            'answered': email.get('answered', False),
             'email_id': email.get('email_id'),
             'origin_thread_id': email.get('origin_thread_id'),
             'deleted': False,
@@ -100,6 +101,7 @@ class EmailSeaDBAPI:
             SchemaTables.THREAD.column.title.name: self._normalize_subject(thread.get('subject')),
             SchemaTables.THREAD.column.modified_time.name: time_to_utc_time(thread['last_updated_at']).isoformat(),
             SchemaTables.THREAD.column.unread.name: thread.get('unread'),
+            SchemaTables.THREAD.column.is_answered.name: False,
             SchemaTables.THREAD.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             SchemaTables.THREAD.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             SchemaTables.THREAD.column.deleted.name: False
@@ -208,3 +210,41 @@ class EmailSeaDBAPI:
         if result:
             return result[0]
         return {}
+
+    def mark_email_answered(self, connection_id, reply_to_message_id):
+        """Mark the email referenced by reply_to_message_id as answered.
+
+        Used for OAuth providers as a computed fallback when \Answered flag
+        is not available. Idempotent for IMAP providers that already set
+        answered via \Answered flag.
+        """
+        if not reply_to_message_id:
+            return
+        table_name = SchemaTables.EMAIL.table_name(connection_id=connection_id)
+        sql = f"SELECT _pk FROM `{table_name}` WHERE `message_id`='{reply_to_message_id}'"
+        results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        if results:
+            _pk = results[0].get('_pk')
+            self.seadb_api.update_rows(self.base_id, table_name, [
+                {"pk": _pk, "row": {"answered": True}}
+            ])
+
+    def recompute_thread_is_answered(self, connection_id, thread_id):
+        """Recompute is_answered for a thread based on the last inbound email.
+
+        Finds the chronologically last email in the thread where is_sender=False,
+        and sets thread.is_answered to that email's answered value.
+        If no inbound emails exist, sets is_answered=False.
+        """
+        email_table = SchemaTables.EMAIL.table_name(connection_id=connection_id)
+        thread_table = SchemaTables.THREAD.table_name(connection_id=connection_id)
+        sql = f"""
+            SELECT answered FROM `{email_table}`
+            WHERE thread_id = {thread_id} AND is_sender = false
+            ORDER BY modified_time DESC LIMIT 1
+        """
+        result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        is_answered = result[0].get('answered') if result else False
+        self.seadb_api.update_rows(self.base_id, thread_table, [
+            {"pk": thread_id, "row": {"is_answered": is_answered}}
+        ])

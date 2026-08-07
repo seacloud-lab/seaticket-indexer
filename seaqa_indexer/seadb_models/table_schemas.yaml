@@ -455,6 +455,8 @@ tables:
         column_type: bool
       unread:
         column_type: bool
+      answered:
+        column_type: bool
       thread_id:
         column_type: int64
       email_id:
@@ -475,6 +477,8 @@ tables:
       modified_time:
         column_type: datetime
       unread:
+        column_type: bool
+      is_answered:
         column_type: bool
       sync_time:
         column_type: datetime

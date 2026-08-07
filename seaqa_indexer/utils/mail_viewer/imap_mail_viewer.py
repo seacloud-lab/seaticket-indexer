@@ -82,14 +82,18 @@ class ImapMailViewer(BasicMailViewer):
             offset = 10
             for i in range(0, len(email_ids), offset):
                 if self.email_type == 'fastmail':
-                    emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]', 'EMAILID', 'THREADID'])
+                    emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]', 'FLAGS', 'EMAILID', 'THREADID'])
                 else:
-                    emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]'])
+                    emails = self.server.fetch(email_ids[i: i + offset], ['BODY[]', 'FLAGS'])
                 is_sender = email_folder == sent_box
 
                 for _uid, message_data in emails.items():
                     mail_body = message_data[b'BODY[]']
                     extra_fields = {}
+                    # Parse IMAP FLAGS to extract \Answered
+                    flags = message_data.get(b'FLAGS', ())
+                    if any(b'\\Answered' in flag for flag in flags):
+                        extra_fields['answered'] = True
                     if self.email_type == 'fastmail':
                         extra_fields['email_id'] = message_data.get(b'EMAILID')[0].decode()
                         extra_fields['origin_thread_id'] = message_data.get(b'THREADID')[0].decode()

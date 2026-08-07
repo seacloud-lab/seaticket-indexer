@@ -68,6 +68,7 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
                 message2thread[email['message_id']] = email['thread_id']
 
     to_be_updated_thread_dict = {}
+    modified_thread_ids = set()
     # update email thread id
     for email in email_list:
         reply_to_id = email['reply_to_message_id']
@@ -94,6 +95,12 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
                 update_thread['thread_id'] = thread_id
                 email_seadb_api.update_thread_to_db(connection_id, update_thread)
             email_seadb_api.update_email_thread_id(connection_id, message_id, thread_id)
+
+            # Mark parent email as answered for OAuth fallback
+            if email.get('is_sender') and reply_to_id:
+                email_seadb_api.mark_email_answered(connection_id, reply_to_id)
+
+            modified_thread_ids.add(thread_id)
         else:
             insert_thread = {
                 'subject': email['subject'],
@@ -107,6 +114,16 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
             }
             message2thread[message_id] = insert_thread_id
             email_seadb_api.update_email_thread_id(connection_id, message_id, insert_thread_id)
+
+            # Mark parent email as answered for OAuth fallback
+            if email.get('is_sender') and reply_to_id:
+                email_seadb_api.mark_email_answered(connection_id, reply_to_id)
+
+            modified_thread_ids.add(insert_thread_id)
+
+    # Recompute is_answered for all threads modified in this batch
+    for thread_id in modified_thread_ids:
+        email_seadb_api.recompute_thread_is_answered(connection_id, thread_id)
 
 
 def send_connection_sync_result_msg(mq, project_uuid, connection_id, status):
