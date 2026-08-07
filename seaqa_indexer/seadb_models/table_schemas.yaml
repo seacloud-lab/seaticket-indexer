@@ -1069,9 +1069,9 @@ tables:
           list_type: int64
       connection_type:
         column_type: text
-      next_privacy_report_at:
-        column_type: datetime
       record_modified_time:
+        column_type: datetime
+      next_privacy_report_at:
         column_type: datetime
     indexes:
     - - user_id
