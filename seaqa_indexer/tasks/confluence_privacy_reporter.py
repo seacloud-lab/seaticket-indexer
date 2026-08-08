@@ -5,15 +5,14 @@ from threading import Thread, Event
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils import decrypt_config, time_to_utc_time
-from seaqa_indexer.utils.confluence_api import ConfluenceAPI, ConfluenceTokenInvalidError
+from seaqa_indexer.utils.confluence_api import ConfluenceAPI, ConfluenceTokenRevokedError, ConfluenceUserNotFoundException, DEFAULT_CYCLE_DAYS
 from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.constants import ConnectionType
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CYCLE_DAYS = 7
-REPORT_LOOKAHEAD_DAYS = 1
+REPORT_LOOKAHEAD_DAYS = 1 # day
 
 
 class ConfluencePrivacyReporter(object):
@@ -52,20 +51,17 @@ class ConfluencePrivacyReporterTimer(Thread):
 
     def run(self):
         while not self.finished.is_set():
-            self._report_and_cleanup()
-            print('confluence privacy reporter finished one cycle, waiting for next cycle...')
+            logger.info('starts to report confluence privacy data')
+            try:
+                self._report_and_cleanup()
+            except Exception:
+                logger.exception('confluence privacy report error')
             self.finished.wait(self.interval)
-            if not self.finished.is_set():
-                logging.info('starts to report confluence privacy data')
-                try:
-                    self._report_and_cleanup()
-                except Exception as e:
-                    logging.exception('confluence privacy report error: %s', e)
 
     def _ensure_token_fresh(self, confluence_api, project_uuid):
         """Refresh the Confluence OAuth token if it is near or past expiry."""
         now = datetime.datetime.now(datetime.UTC)
-        if confluence_api.expires_at and time_to_utc_time(str(confluence_api.expires_at)) > now + datetime.timedelta(seconds=60):
+        if confluence_api.expires_at and time_to_utc_time(str(confluence_api.expires_at)) > now + datetime.timedelta(seconds=120):
             return
         logger.info('Refreshing Confluence access token for project %s', project_uuid)
         new_tokens = confluence_api.refresh_access_token()
@@ -93,6 +89,19 @@ class ConfluencePrivacyReporterTimer(Thread):
                         logger.warning('Confluence OAuth access token missing for project %s', project_uuid)
                         continue
 
+                    confluence_connections = self.seaqa_db.get_project_connections_by_type(
+                        project_uuid, ConnectionType.CONFLUENCE.value
+                    )
+                    if not confluence_connections:
+                        continue
+
+                    connection_id_to_workspace_id = {}
+                    for connection in confluence_connections:
+                        connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
+                        workspace_id = connection_config.get('workspace_id')
+                        if workspace_id:
+                            connection_id_to_workspace_id[str(connection.id)] = workspace_id
+
                     confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
 
                     # Get users due for reporting (NULL or within 1 day of deadline)
@@ -100,23 +109,9 @@ class ConfluencePrivacyReporterTimer(Thread):
                     if not accounts:
                         continue
 
-                    confluence_connections = self.seaqa_db.get_project_connections_by_type(
-                        project_uuid, ConnectionType.CONFLUENCE.value
-                    )
-                    if not confluence_connections:
-                        continue
-
                     confluence_api = ConfluenceAPI(oauth.access_token, oauth.refresh_token, oauth.expires_at)
 
-                    workspace_by_connection = {}
-                    for connection in confluence_connections:
-                        connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
-                        workspace_id = connection_config.get('workspace_id')
-                        if workspace_id:
-                            workspace_by_connection[str(connection.id)] = workspace_id
-
                     accounts_by_id = {account['user_id']: account for account in accounts}
-                    cycle_period = DEFAULT_CYCLE_DAYS
 
                     # Report the project-level user set in batches.
                     for i in range(0, len(accounts), self.batch_size):
@@ -129,13 +124,8 @@ class ConfluencePrivacyReporterTimer(Thread):
                         # Refresh token if near expiry
                         self._ensure_token_fresh(confluence_api, project_uuid)
 
-                        try:
-                            result = confluence_api.report_accounts(payload)
-                        except Exception:
-                            logger.exception('Privacy report API failed for project %s batch %d',
-                                             project_uuid, i // self.batch_size)
-                            continue
-
+                        result = confluence_api.report_accounts(payload)
+                        cycle_period = result.get('cycle_period') or DEFAULT_CYCLE_DAYS
                         next_report_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=cycle_period)
 
                         closed_pks = []
@@ -148,38 +138,31 @@ class ConfluencePrivacyReporterTimer(Thread):
                                 continue
 
                             if status == 'closed':
-                                logger.info('Deleting user data for closed account %s in project %s',
-                                            account_id, project_uuid)
+                                logger.info('Deleting user data for closed account %s in project %s', account_id, project_uuid)
                                 account = accounts_by_id.get(account_id)
                                 if account and account.get('_pk') is not None:
                                     closed_pks.append(account['_pk'])
 
                             elif status == 'updated':
-                                logger.info('Refreshing display name for updated account %s in project %s',
-                                            account_id, project_uuid)
+                                logger.info('Refreshing display name for updated account %s in project %s', account_id, project_uuid)
                                 account = accounts_by_id.get(account_id)
-                                if not account:
-                                    logger.warning('Account %s not found in project %s for update', account_id, project_uuid)
-                                    continue
                                 connection_ids = (account or {}).get('connection_ids') or []
-                                workspace_ids = [
-                                    workspace_by_connection.get(str(cid))
+                                workspace_ids = set([
+                                    connection_id_to_workspace_id.get(str(cid))
                                     for cid in connection_ids
-                                    if workspace_by_connection.get(str(cid))
-                                ]
+                                    if connection_id_to_workspace_id.get(str(cid))
+                                ])
                                 for ws_id in workspace_ids:
                                     try:
                                         name = confluence_api.get_user_display_name(account_id, ws_id)
-                                    except Exception:
-                                        logger.warning('Failed to refresh name via workspace %s for account %s, '
-                                                       'trying next', ws_id, account_id)
+                                    except ConfluenceUserNotFoundException:
+                                        logger.warning('project_uuid %s workspace_id %s get display_name Failed for account %s, trying next', project_uuid, ws_id, account_id)
                                         continue
                                     if name:
                                         updated_names[account['_pk']] = name
                                         break
                                 else:
-                                    logger.info('No valid workspace for account %s in project %s, deleting user',
-                                                account_id, project_uuid)
+                                    logger.info('No valid workspace for account %s in project %s, deleting user', account_id, project_uuid)
                                     closed_pks.append(account['_pk'])
 
                         # Apply status changes for this batch immediately
@@ -193,14 +176,13 @@ class ConfluencePrivacyReporterTimer(Thread):
                         ]
                         confluence_seadb_api.update_users_next_report_at(batch_pks, next_report_at)
 
-                    logger.info('Privacy report completed for project %s, %d users total',
-                                project_uuid, len(accounts))
+                    logger.info('Privacy report completed for project %s, %d users total', project_uuid, len(accounts))
 
-                except ConfluenceTokenInvalidError:
-                    logger.warning('Confluence OAuth token invalid for project %s, '
-                                   'deleting all %d users', project_uuid, len(accounts))
-                    all_pks = [a['_pk'] for a in accounts]
-                    confluence_seadb_api.delete_users(all_pks)
+                except ConfluenceTokenRevokedError:
+                    logger.warning('Confluence OAuth token revoked for project %s, deleting all %d users', project_uuid, len(accounts))
+                    for i in range(0, len(accounts), self.batch_size):
+                        batch_accounts = accounts[i:i + self.batch_size]
+                        confluence_seadb_api.delete_users([a['_pk'] for a in batch_accounts])
                 except Exception as e:
                     logger.exception('Failed privacy report for project %s: %s', project_uuid, e)
 

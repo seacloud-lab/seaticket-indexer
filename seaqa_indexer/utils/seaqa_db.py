@@ -114,8 +114,7 @@ class SeaqaDB(object):
             sql = """SELECT id, type, config
                      FROM project_connection
                      WHERE project_uuid = :project_uuid
-                       AND type = :connection_type
-                       AND deleted = false"""
+                       AND type = :connection_type"""
             return session.execute(text(sql), {
                 'project_uuid': project_uuid,
                 'connection_type': connection_type,
@@ -382,7 +381,6 @@ class SeaqaDB(object):
                 SELECT pco.project_uuid, pco.access_token, pco.refresh_token, pco.expires_at
                 FROM project_confluence_oauth pco
                 INNER JOIN projects p ON p.uuid = pco.project_uuid
-                WHERE p.deleted = false
                 ORDER BY pco.project_uuid
                 LIMIT :limit OFFSET :offset
             """

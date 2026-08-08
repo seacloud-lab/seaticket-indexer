@@ -12,9 +12,10 @@ class ConfluenceUserNotFoundException(Exception):
     pass
 
 
-class ConfluenceTokenInvalidError(Exception):
+class ConfluenceTokenRevokedError(Exception):
     pass
 
+DEFAULT_CYCLE_DAYS = 7
 
 class ConfluenceAPI:
     def __init__(self, access_token, refresh_token=None, expires_at=None, timeout=60):
@@ -54,7 +55,7 @@ class ConfluenceAPI:
             timeout=self.timeout,
         )
         if response.status_code == 401:
-            raise ConfluenceTokenInvalidError()
+            raise ConfluenceTokenRevokedError()
         response.raise_for_status()
         data = response.json()
         self.access_token = data.get('access_token')
@@ -118,17 +119,12 @@ class ConfluenceAPI:
             raise ConfluenceUserNotFoundException()
         resp.raise_for_status()
         data = resp.json()
-        # Corrupted or unresolvable user record — type will be "unknown"
-        if data.get('type') == 'unknown':
-            return ''
         # Deactivated/unlicensed or GDPR-deleted user — operations will be empty
+        display_name = data.get('displayName') or ''
         operations = data.get('operations') or []
         if not operations:
-            return ''
-        display_name = data.get('displayName') or ''
-        # Atlassian appends this marker after a user loses the workspace license.
-        if re.search(r'\s*\(unlicensed\)\s*$', display_name, re.IGNORECASE):
-            return ''
+            return re.sub(r'\s*\(unlicensed\)\s*$', '', display_name, flags=re.IGNORECASE)
+
         return display_name
 
     def report_accounts(self, accounts):
@@ -147,7 +143,7 @@ class ConfluenceAPI:
             'Content-Type': 'application/json',
         }
         response = requests.post(url, json={'accounts': accounts}, headers=headers, timeout=60)
-        cycle_period = int(response.headers.get('Cycle-Period', 7))
+        cycle_period = int(response.headers.get('Cycle-Period', DEFAULT_CYCLE_DAYS))
         print(f'Privacy report response: status={response.status_code}, cycle_period={cycle_period}')
         if response.status_code == 204:
             return {'accounts': [], 'cycle_period': cycle_period}
