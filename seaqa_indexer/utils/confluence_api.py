@@ -12,6 +12,10 @@ class ConfluenceUserNotFoundException(Exception):
     pass
 
 
+class ConfluenceTokenInvalidError(Exception):
+    pass
+
+
 class ConfluenceAPI:
     def __init__(self, access_token, refresh_token=None, expires_at=None, timeout=60):
         self.access_token = access_token
@@ -49,6 +53,8 @@ class ConfluenceAPI:
             json=payload,
             timeout=self.timeout,
         )
+        if response.status_code == 401:
+            raise ConfluenceTokenInvalidError()
         response.raise_for_status()
         data = response.json()
         self.access_token = data.get('access_token')
@@ -120,6 +126,9 @@ class ConfluenceAPI:
         if not operations:
             return ''
         display_name = data.get('displayName') or ''
+        # Atlassian appends this marker after a user loses the workspace license.
+        if re.search(r'\s*\(unlicensed\)\s*$', display_name, re.IGNORECASE):
+            return ''
         return display_name
 
     def report_accounts(self, accounts):

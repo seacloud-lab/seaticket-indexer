@@ -5,7 +5,7 @@ from threading import Thread, Event
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils import decrypt_config, time_to_utc_time
-from seaqa_indexer.utils.confluence_api import ConfluenceAPI
+from seaqa_indexer.utils.confluence_api import ConfluenceAPI, ConfluenceTokenInvalidError
 from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.constants import ConnectionType
@@ -168,10 +168,19 @@ class ConfluencePrivacyReporterTimer(Thread):
                                     if workspace_by_connection.get(str(cid))
                                 ]
                                 for ws_id in workspace_ids:
-                                    name = confluence_api.get_user_display_name(account_id, ws_id)
+                                    try:
+                                        name = confluence_api.get_user_display_name(account_id, ws_id)
+                                    except Exception:
+                                        logger.warning('Failed to refresh name via workspace %s for account %s, '
+                                                       'trying next', ws_id, account_id)
+                                        continue
                                     if name:
                                         updated_names[account['_pk']] = name
                                         break
+                                else:
+                                    logger.info('No valid workspace for account %s in project %s, deleting user',
+                                                account_id, project_uuid)
+                                    closed_pks.append(account['_pk'])
 
                         # Apply status changes for this batch immediately
                         confluence_seadb_api.delete_users(closed_pks)
@@ -187,6 +196,11 @@ class ConfluencePrivacyReporterTimer(Thread):
                     logger.info('Privacy report completed for project %s, %d users total',
                                 project_uuid, len(accounts))
 
+                except ConfluenceTokenInvalidError:
+                    logger.warning('Confluence OAuth token invalid for project %s, '
+                                   'deleting all %d users', project_uuid, len(accounts))
+                    all_pks = [a['_pk'] for a in accounts]
+                    confluence_seadb_api.delete_users(all_pks)
                 except Exception as e:
                     logger.exception('Failed privacy report for project %s: %s', project_uuid, e)
 
