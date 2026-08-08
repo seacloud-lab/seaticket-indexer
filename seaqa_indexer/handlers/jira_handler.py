@@ -147,9 +147,12 @@ class JiraIssueHandler(ConnectionHandler):
 
         if is_first_sync:
             self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
+        
+        # JQL server-side filter: only fetch pages modified since the latest local record.
+        since = jira_seadb_api.get_latest_modified_time(connection_id)
 
         while True:
-            data = jira_api.search_issues(project_key, old_last_sync_time, start_at, page_size)
+            data = jira_api.search_issues(project_key, since, start_at, page_size)
             issues = data.get('issues', [])
             total = data.get('total', 0)
 
@@ -173,7 +176,6 @@ class JiraIssueHandler(ConnectionHandler):
                     added_count += 1
 
                 try:
-                    self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
                     jira_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
                 except OptionValueInvalidException as e:
                     logger.warning('The option name may not exist; resynchronize it. exception info is: %s', e)

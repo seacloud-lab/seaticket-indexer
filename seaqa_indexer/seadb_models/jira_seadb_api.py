@@ -347,3 +347,16 @@ class JiraSeaDBAPI:
         sql_comments = f"SELECT `_pk`, `comment_id`, `content` FROM `{comments_table_name}` WHERE issue_id = {issue_id} LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql_comments).get('results', [])
         return comments
+    
+    def get_latest_modified_time(self, connection_id):
+        table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
+        sql = f"""
+            SELECT `modified_time` FROM `{table_name}`
+            WHERE (deleted IS NULL OR deleted = false)
+            ORDER BY `modified_time` DESC
+            LIMIT 1
+        """
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        if response and 'results' in response and response['results']:
+            return response['results'][0].get('modified_time')
+        return None
