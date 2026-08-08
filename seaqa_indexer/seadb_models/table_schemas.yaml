@@ -478,7 +478,7 @@ tables:
         column_type: datetime
       unread:
         column_type: bool
-      is_answered:
+      is_replied:
         column_type: bool
       sync_time:
         column_type: datetime
@@ -510,6 +510,7 @@ tables:
     - - linked_ticket
     - - ai_processed_time
     - - record_modified_time
+    - - is_replied
     table_name: email_thread_{connection_id}
   KnowledgeBaseTable:
     columns:

@@ -50,6 +50,14 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
         offset += page_size
 
     message2thread = {email['message_id']: email['thread_id'] for email in email_rows}
+    # Existing emails can be re-synced with an updated Answered flag without
+    # needing their thread assignment changed. Their thread summary still
+    # needs to be recalculated.
+    modified_thread_ids = {
+        message2thread[email['message_id']]
+        for email in email_list
+        if message2thread.get(email['message_id'])
+    }
     email_list = [email for email in email_list if not message2thread.get(email['message_id'])]
 
     # no_thread_reply_message_ids is the list of new emails' reply-ids who are not in last 30 days
@@ -68,7 +76,6 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
                 message2thread[email['message_id']] = email['thread_id']
 
     to_be_updated_thread_dict = {}
-    modified_thread_ids = set()
     # update email thread id
     for email in email_list:
         reply_to_id = email['reply_to_message_id']
@@ -121,9 +128,9 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
 
             modified_thread_ids.add(insert_thread_id)
 
-    # Recompute is_answered for all threads modified in this batch
+    # Recompute is_replied for all threads modified in this batch.
     for thread_id in modified_thread_ids:
-        email_seadb_api.recompute_thread_is_answered(connection_id, thread_id)
+        email_seadb_api.recompute_thread_is_replied(connection_id, thread_id)
 
 
 def send_connection_sync_result_msg(mq, project_uuid, connection_id, status):
