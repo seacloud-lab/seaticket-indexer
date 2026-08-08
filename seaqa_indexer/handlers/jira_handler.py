@@ -173,6 +173,7 @@ class JiraIssueHandler(ConnectionHandler):
                     added_count += 1
 
                 try:
+                    self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
                     jira_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
                 except OptionValueInvalidException as e:
                     logger.warning('The option name may not exist; resynchronize it. exception info is: %s', e)

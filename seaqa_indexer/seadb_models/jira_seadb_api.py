@@ -43,10 +43,10 @@ class JiraSeaDBAPI:
         existing_map = {}
         old_names = set()
         for opt in existing_options:
-            opt_id = opt.get('id')
+            jira_id = opt.get('jira_id')
             opt_name = opt.get('name')
-            if opt_id:
-                existing_map[opt_id] = opt
+            if jira_id:
+                existing_map[jira_id] = opt
                 if opt_name:
                     old_names.add(opt_name)
 
@@ -70,7 +70,7 @@ class JiraSeaDBAPI:
                     'column_key': column_key,
                     'option_name': name,
                     'option_data': {
-                        'id': opt_id,
+                        'jira_id': opt_id,
                         'color': color,
                         'text_color': text_color,
                     },
@@ -88,7 +88,7 @@ class JiraSeaDBAPI:
             if text_color is not None and text_color != existing_text_color:
                 update_option_data['text_color'] = text_color
             if update_option_data:
-                update_option_data['id'] = opt_id
+                update_option_data['jira_id'] = opt_id
 
             new_name = name if name != existing_name else None
 
