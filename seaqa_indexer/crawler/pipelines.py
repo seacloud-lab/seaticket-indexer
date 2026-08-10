@@ -75,14 +75,14 @@ class BatchCrawlPipeline:
         filename = url_to_filename(url)
 
         table_name = SchemaTables.WEB_CRAWL.table_name(connection_id=self.site_id)
-        sql = f"""SELECT _pk FROM `{table_name}` WHERE url='{url}'"""
+        sql = f"""SELECT _pk, hash, deleted FROM `{table_name}` WHERE url='{url}'"""
         resp_result = self.seadb_api.query_rows(self.project_uuid, sql)
         results = resp_result.get('results')
         if results:
             old_hash = results[0].get('hash')
-            if hash and hash != old_hash:
+            is_deleted = results[0].get('deleted')
+            if (hash and hash != old_hash) or is_deleted:
                 self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
-                return
             rows = [
                 {
                     "pk": results[0].get('_pk'),
@@ -93,6 +93,7 @@ class BatchCrawlPipeline:
                         SchemaTables.WEB_CRAWL.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                         SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                         SchemaTables.WEB_CRAWL.column.hash.name: hash,
+                        SchemaTables.WEB_CRAWL.column.deleted.name: False,
                     }
                 }
             ]
@@ -108,6 +109,7 @@ class BatchCrawlPipeline:
                     SchemaTables.WEB_CRAWL.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     SchemaTables.WEB_CRAWL.column.hash.name: hash,
+                    SchemaTables.WEB_CRAWL.column.deleted.name: False,
                 }
             ]
             self.seadb_api.insert_rows(self.project_uuid, table_name, rows)
