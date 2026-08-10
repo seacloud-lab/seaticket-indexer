@@ -21,7 +21,7 @@ class SchemaTables:
     AGENT_ACTIONS = SCHEMA.AgentActionsTable
     NOTION = SCHEMA.NotionTable
     GENERAL_TASK = SCHEMA.GeneralTaskTable
-    GENERAL_TASK_USER = SCHEMA.GeneralTaskUserTable
+    CONNECTION_USER = SCHEMA.ConnectionUserTable
     LINEAR_ISSUES = SCHEMA.LinearIssuesTable
     LINEAR_ISSUE_COMMENTS = SCHEMA.LinearIssueCommentsTable
     CONFLUENCE = SCHEMA.ConfluenceTable

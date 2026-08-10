@@ -12,6 +12,11 @@ class ConfluenceUserNotFoundException(Exception):
     pass
 
 
+class ConfluenceTokenRevokedError(Exception):
+    pass
+
+DEFAULT_CYCLE_DAYS = 7
+
 class ConfluenceAPI:
     def __init__(self, access_token, refresh_token=None, expires_at=None, timeout=60):
         self.access_token = access_token
@@ -49,6 +54,8 @@ class ConfluenceAPI:
             json=payload,
             timeout=self.timeout,
         )
+        if response.status_code == 401:
+            raise ConfluenceTokenRevokedError()
         response.raise_for_status()
         data = response.json()
         self.access_token = data.get('access_token')
@@ -95,8 +102,8 @@ class ConfluenceAPI:
             'content': storage_body.get('value') or '',
             'created_time': history.get('createdDate'),
             'modified_time': version.get('when'),
-            'creator': created_by.get('accountId') or '',
-            'last_modifier': (version.get('by') or {}).get('accountId') or '',
+            'creator_id': created_by.get('accountId') or '',
+            'last_modifier_id': (version.get('by') or {}).get('accountId') or '',
             'parent_page_id': '',
         }
 
@@ -106,12 +113,46 @@ class ConfluenceAPI:
         if not account_id:
             return ''
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/rest/api/user'
-        params = {'accountId': account_id}
+        params = {'accountId': account_id, 'expand': 'operations'}
         resp = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
         if resp.status_code == 404:
             raise ConfluenceUserNotFoundException()
         resp.raise_for_status()
-        return resp.json().get('displayName') or ''
+        data = resp.json()
+        # Deactivated/unlicensed or GDPR-deleted user — operations will be empty
+        display_name = data.get('displayName') or ''
+        operations = data.get('operations') or []
+        if not operations:
+            return re.sub(r'\s*\(unlicensed\)\s*$', '', display_name, flags=re.IGNORECASE)
+
+        return display_name
+
+    def report_accounts(self, accounts):
+        """Report account IDs to Atlassian privacy API.
+
+        Returns:
+            dict with keys:
+                'accounts': list of dicts needing action [{'accountId': ..., 'status': 'closed|updated'}]
+                'cycle_period': int days until next report (from Cycle-Period response header)
+        """
+        if not accounts:
+            return {'accounts': [], 'cycle_period': 7}
+        url = 'https://api.atlassian.com/app/report-accounts/'
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+            'Content-Type': 'application/json',
+        }
+        response = requests.post(url, json={'accounts': accounts}, headers=headers, timeout=60)
+        cycle_period = int(response.headers.get('Cycle-Period', DEFAULT_CYCLE_DAYS))
+        print(f'Privacy report response: status={response.status_code}, cycle_period={cycle_period}')
+        if response.status_code == 204:
+            return {'accounts': [], 'cycle_period': cycle_period}
+        response.raise_for_status()
+        data = response.json()
+        return {
+            'accounts': data.get('accounts') or [],
+            'cycle_period': cycle_period,
+        }
 
     def list_spaces(self, workspace_id, cursor=None, limit=100):
         url = f'https://api.atlassian.com/ex/confluence/{workspace_id}/wiki/api/v2/spaces'

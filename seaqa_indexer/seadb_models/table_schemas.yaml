@@ -869,18 +869,6 @@ tables:
     - - sync_time
     - - ai_processed_time
     table_name: general_task_{connection_id}
-  GeneralTaskUserTable:
-    columns:
-      email:
-        column_type: text
-      name:
-        column_type: text
-      record_modified_time:
-        column_type: datetime
-    indexes:
-    - - email
-    - - record_modified_time
-    table_name: general_task_user_{connection_id}
   LinearIssuesTable:
     columns:
       issue_id:
@@ -977,9 +965,9 @@ tables:
         column_type: text
         column_data:
           compressed: true
-      creator:
+      creator_id:
         column_type: text
-      last_modifier:
+      last_modifier_id:
         column_type: text
       created_time:
         column_type: datetime
@@ -1069,3 +1057,25 @@ tables:
     - - thread_id
     - - message_id
     table_name: discord_thread_messages_{connection_id}
+  ConnectionUserTable:
+    columns:
+      user_id:
+        column_type: text
+      name:
+        column_type: text
+      connection_ids:
+        column_type: list
+        column_data:
+          list_type: int64
+      connection_type:
+        column_type: text
+      record_modified_time:
+        column_type: datetime
+      next_privacy_report_at:
+        column_type: datetime
+    indexes:
+    - - user_id
+    - - connection_type
+    - - next_privacy_report_at
+    - - connection_ids
+    table_name: connection_user

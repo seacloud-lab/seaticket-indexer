@@ -2,7 +2,7 @@ import datetime
 import html2text
 
 from seaqa_indexer.utils import time_to_utc_time
-from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT
+from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT, ConnectionType
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -49,8 +49,8 @@ class ConfluenceSeaDBAPI:
             SchemaTables.CONFLUENCE.column.modified_time.name: self._to_isoformat(confluence_page.get('modified_time')),
             SchemaTables.CONFLUENCE.column.sync_time.name: now_iso,
             SchemaTables.CONFLUENCE.column.record_modified_time.name: now_iso,
-            SchemaTables.CONFLUENCE.column.creator.name: confluence_page.get('creator'),
-            SchemaTables.CONFLUENCE.column.last_modifier.name: confluence_page.get('last_modifier'),
+            SchemaTables.CONFLUENCE.column.creator_id.name: confluence_page.get('creator_id'),
+            SchemaTables.CONFLUENCE.column.last_modifier_id.name: confluence_page.get('last_modifier_id'),
             SchemaTables.CONFLUENCE.column.page_id.name: confluence_page.get('page_id'),
             SchemaTables.CONFLUENCE.column.parent_page_id.name: confluence_page.get('parent_page_id'),
             SchemaTables.CONFLUENCE.column.deleted.name: bool(confluence_page.get('deleted', False)),
@@ -160,3 +160,123 @@ class ConfluenceSeaDBAPI:
         if updates:
             self.seadb_api.update_rows(self.base_id, table_name, updates)
 
+    # ── User table methods ──────────────────────────────────────────────
+
+    def upsert_user(self, connection_id, account_id, display_name):
+        """Insert or update a user record with merge logic.
+
+        If the user already exists (by user_id), append connection_id to the
+        list if not already present. If new, create with a single-element list.
+        """
+        if not account_id or not display_name:
+            return
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+        escaped_account_id = account_id.replace("'", "''")
+
+        sql = f"SELECT `_pk`, `connection_ids` FROM `{table_name}` WHERE user_id='{escaped_account_id}' AND connection_type='confluence'"
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        existing_user = response.get('results', [])
+
+        if existing_user:
+            pk = existing_user[0]['_pk']
+            existing_conn_ids = existing_user[0].get('connection_ids') or []
+            if connection_id in existing_conn_ids:
+                # User already known in this connection — just refresh name/time
+                update_row = {
+                    'pk': pk,
+                    'row': {
+                        SchemaTables.CONNECTION_USER.column.name.name: display_name,
+                        SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+                    }
+                }
+                self.seadb_api.update_rows(self.base_id, table_name, [update_row])
+            else:
+                # User exists in other connections — append this connection_id
+                existing_conn_ids.append(connection_id)
+                update_row = {
+                    'pk': pk,
+                    'row': {
+                        SchemaTables.CONNECTION_USER.column.name.name: display_name,
+                        SchemaTables.CONNECTION_USER.column.connection_ids.name: existing_conn_ids,
+                        SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+                    }
+                }
+                self.seadb_api.update_rows(self.base_id, table_name, [update_row])
+        else:
+            # Brand new user
+            insert_row = {
+                SchemaTables.CONNECTION_USER.column.user_id.name: account_id,
+                SchemaTables.CONNECTION_USER.column.name.name: display_name,
+                SchemaTables.CONNECTION_USER.column.connection_ids.name: [connection_id],
+                SchemaTables.CONNECTION_USER.column.connection_type.name: ConnectionType.CONFLUENCE.value,
+                SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+            }
+            self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
+
+    def get_users_needing_report(self, days_ahead):
+        """Get users due for privacy reporting (next_privacy_report_at NULL or <= days_ahead from now)."""
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        deadline = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=days_ahead)).isoformat()
+        results = []
+        page_size = 100
+        offset = 0
+        while True:
+            sql = (
+                f"SELECT `_pk`, `user_id`, `name`, `connection_ids`, `record_modified_time` "
+                f"FROM `{table_name}` "
+                f"WHERE connection_type='confluence' "
+                f"AND (next_privacy_report_at IS NULL OR next_privacy_report_at <= '{deadline}') "
+                f"ORDER BY `_pk` LIMIT {page_size} OFFSET {offset}"
+            )
+            page = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+            results.extend(page)
+            if len(page) < page_size:
+                return results
+            offset += page_size
+
+    def delete_users(self, pks):
+        """Delete project-level user rows by primary key."""
+        pks = [pk for pk in pks if pk is not None]
+        if not pks:
+            return
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        self.seadb_api.delete_rows(self.base_id, table_name, list(set(pks)))
+
+    def update_user_names(self, user_names):
+        """Batch-update project-level user display names by primary key."""
+        if not user_names:
+            return
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+        updates = [
+            {
+                'pk': pk,
+                'row': {
+                    SchemaTables.CONNECTION_USER.column.name.name: name,
+                    SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+                },
+            }
+            for pk, name in user_names.items()
+            if pk is not None and name
+        ]
+        if updates:
+            self.seadb_api.update_rows(self.base_id, table_name, updates)
+
+    def update_users_next_report_at(self, pks, next_report_at):
+        """Batch-update next_privacy_report_at for the given user pks."""
+        pks = [pk for pk in pks if pk is not None]
+        if not pks:
+            return
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        next_iso = next_report_at.isoformat() if hasattr(next_report_at, 'isoformat') else str(next_report_at)
+        updates = [
+            {
+                'pk': pk,
+                'row': {
+                    SchemaTables.CONNECTION_USER.column.next_privacy_report_at.name: next_iso,
+                },
+            }
+            for pk in set(pks)
+        ]
+        self.seadb_api.update_rows(self.base_id, table_name, updates)

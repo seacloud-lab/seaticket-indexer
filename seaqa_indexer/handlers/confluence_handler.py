@@ -153,15 +153,18 @@ class ConfluenceHandler(ConnectionHandler):
         # CQL server-side filter: only fetch pages modified since the latest local record.
         since = confluence_seadb_api.get_latest_modified_time(connection_id)
 
-        def _resolve_user(account_id):
-            if not account_id:
-                return ''
-            if account_id not in user_cache:
-                try:
-                    user_cache[account_id] = confluence_api.get_user_display_name(account_id, workspace_id)
-                except ConfluenceUserNotFoundException:
-                    user_cache[account_id] = ''
-            return user_cache[account_id]
+        def _upsert_user(account_id):
+            """Resolve account ID → display name and store in user table.
+            Does NOT modify the page dict — account IDs stay as-is."""
+            if not account_id or account_id in user_cache:
+                return
+            user_cache[account_id] = True  # mark as processed
+            try:
+                name = confluence_api.get_user_display_name(account_id, workspace_id)
+            except ConfluenceUserNotFoundException:
+                return
+            if name:
+                confluence_seadb_api.upsert_user(connection_id, account_id, name)
 
         space_contexts = [None] if space_keys is None else space_keys
         for space_key in space_contexts:
@@ -181,14 +184,9 @@ class ConfluenceHandler(ConnectionHandler):
                     if not page_id:
                         continue
 
-                    # Resolve user display names (same pattern as Notion)
-                    creator_id = page.get('creator')
-                    last_modifier_id = page.get('last_modifier')
-                    page['creator'] = _resolve_user(creator_id)
-                    if last_modifier_id and last_modifier_id == creator_id:
-                        page['last_modifier'] = page['creator']
-                    else:
-                        page['last_modifier'] = _resolve_user(last_modifier_id)
+                    # Upsert user display names into user table (account IDs stay on page dict)
+                    _upsert_user(page.get('creator_id'))
+                    _upsert_user(page.get('last_modifier_id'))
 
                     page_modified_time = time_to_utc_time(page.get('modified_time'))
                     existed_page = confluence_seadb_api.get_page_by_page_id(page_id, connection_id)
