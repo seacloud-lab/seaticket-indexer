@@ -104,18 +104,11 @@ class GeneralTaskHandler(ConnectionHandler):
     def sync(self, connection_id, project_uuid, config, old_last_sync_time, connection_status, seaqa_db, sync_logger):
         base_url = (config.get('base_url') or '').strip()
         api_token = (config.get('api_token') or '').strip()
-        table_id = config.get('table_id')
         if not base_url:
             sync_logger.log('General Task config missing base_url')
             return None, None, None, None
-        if not table_id:
-            sync_logger.log('General Task config missing table_id')
-            return None, None, None, None
 
-        endpoint = base_url.rstrip('/')
-        if not endpoint.endswith('/tasks'):
-            endpoint = f'{endpoint}/tasks'
-        endpoint = f'{endpoint}/'
+        endpoint = f'{base_url.rstrip("/")}/'
         params = {}
         since = None
         if old_last_sync_time:
@@ -124,7 +117,6 @@ class GeneralTaskHandler(ConnectionHandler):
         params['since_at'] = since
         params['sync_before'] = sync_before
         params['limit'] = self.FETCH_PAGE_SIZE
-        params['table_id'] = table_id
 
         headers = {}
         if api_token:
