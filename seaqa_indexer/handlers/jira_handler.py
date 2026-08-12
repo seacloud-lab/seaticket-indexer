@@ -97,14 +97,14 @@ class JiraIssueHandler(ConnectionHandler):
 
         # Refresh proactively if the token has expired
         if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
-            jira_api = JiraAPI(access_token, refresh_token, site_id, site_url)
+            jira_api = JiraAPI(access_token, refresh_token, site_id, site_url, expires_at=expires_at)
             new_tokens = jira_api.refresh_access_token()
             access_token = new_tokens['access_token']
             refresh_token = new_tokens['refresh_token']
             expires_at = new_tokens['expires_at']
             seaqa_db.update_project_jira_oauth(project_uuid, access_token, expires_at, refresh_token)
 
-        jira_api = JiraAPI(access_token, refresh_token, site_id, site_url)
+        jira_api = JiraAPI(access_token, refresh_token, site_id, site_url, expires_at=expires_at)
         jira_seadb_api = JiraSeaDBAPI(project_uuid)
 
         is_first_sync = not old_last_sync_time
@@ -144,12 +144,27 @@ class JiraIssueHandler(ConnectionHandler):
         updated_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
+        user_cache = set()
 
         if is_first_sync:
             self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
         
         # JQL server-side filter: only fetch pages modified since the latest local record.
         since = jira_seadb_api.get_latest_modified_time(connection_id)
+
+        def _upsert_user(user):
+            user = user or {}
+            account_id = user.get('accountId')
+            display_name = user.get('displayName')
+            if (
+                not account_id
+                or account_id == 'unknown'
+                or not display_name
+                or account_id in user_cache
+            ):
+                return
+            user_cache.add(account_id)
+            jira_seadb_api.upsert_user(connection_id, account_id, display_name)
 
         while True:
             data = jira_api.search_issues(project_key, since, start_at, page_size)
@@ -182,8 +197,13 @@ class JiraIssueHandler(ConnectionHandler):
                     self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
                     jira_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
 
+                _upsert_user(fields_data.get('creator'))
+                _upsert_user(fields_data.get('assignee'))
+
                 all_comments = jira_api.get_issue_comments(issue_key)
                 jira_seadb_api.save_or_update_issue_comments(connection_id, issue_id, issue_key, all_comments)
+                for comment in all_comments:
+                    _upsert_user(comment.get('author'))
 
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count

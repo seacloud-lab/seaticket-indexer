@@ -1,5 +1,6 @@
 import datetime
 import re
+import time
 import requests
 
 from urllib.parse import parse_qs, urlparse
@@ -145,9 +146,13 @@ class ConfluenceAPI:
             'Authorization': f'Bearer {self.access_token}',
             'Content-Type': 'application/json',
         }
-        response = requests.post(url, json={'accounts': accounts}, headers=headers, timeout=60)
+        while True:
+            response = requests.post(url, json={'accounts': accounts}, headers=headers, timeout=60)
+            if response.status_code != 429:
+                break
+            time.sleep(int(response.headers['Retry-After']))
+
         cycle_period = int(response.headers.get('Cycle-Period', DEFAULT_CYCLE_DAYS))
-        print(f'Privacy report response: status={response.status_code}, cycle_period={cycle_period}')
         if response.status_code == 204:
             return {'accounts': [], 'cycle_period': cycle_period}
         response.raise_for_status()

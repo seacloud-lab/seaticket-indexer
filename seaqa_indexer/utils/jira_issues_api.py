@@ -1,4 +1,5 @@
 import datetime
+import time
 import requests
 
 from seaqa_indexer.utils import time_to_utc_time
@@ -6,10 +7,23 @@ from seaqa_indexer.config import JIRA_CLIENT_ID, JIRA_CLIENT_SECRET
 
 
 OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 60
+DEFAULT_CYCLE_DAYS = 7
+
+
+class JiraUserOrSiteNotFoundException(Exception):
+    pass
+
+
+class JiraSiteUnavailableException(Exception):
+    pass
+
+
+class JiraTokenRevokedError(Exception):
+    pass
 
 
 class JiraAPI:
-    def __init__(self, access_token, refresh_token, site_id, site_url, timeout=60):
+    def __init__(self, access_token, refresh_token, site_id, site_url, timeout=60, expires_at=None):
         self.access_token = access_token
         self.refresh_token = refresh_token
         self.site_id = site_id
@@ -18,7 +32,7 @@ class JiraAPI:
         self.client_id = JIRA_CLIENT_ID
         self.client_secret = JIRA_CLIENT_SECRET
         self.token_url = 'https://auth.atlassian.com/oauth/token'
-        self.expires_at = None
+        self.expires_at = expires_at
         self.session = requests.Session()
 
     def _gen_headers(self):
@@ -46,6 +60,8 @@ class JiraAPI:
             json=payload,
             timeout=self.timeout,
         )
+        if response.status_code == 401:
+            raise JiraTokenRevokedError()
         response.raise_for_status()
         data = response.json()
         self.access_token = data.get('access_token')
@@ -60,6 +76,65 @@ class JiraAPI:
             'access_token': self.access_token,
             'refresh_token': self.refresh_token,
             'expires_at': self.expires_at,
+        }
+
+    def get_user_display_name(self, account_id):
+        if not account_id or account_id == 'unknown':
+            return ''
+
+        url = f'{self._api_base()}/rest/api/3/user'
+        response = self.session.get(
+            url,
+            headers=self._gen_headers(),
+            params={'accountId': account_id},
+            timeout=self.timeout,
+        )
+        if response.status_code == 404:
+            raise JiraUserOrSiteNotFoundException()
+        if response.status_code in (401, 403):
+            raise JiraSiteUnavailableException()
+        response.raise_for_status()
+        data = response.json()
+        if data.get('accountId') == 'unknown' or not data.get('active'):
+            return ''
+        return data.get('displayName') or ''
+
+    def get_accessible_resources(self):
+        response = self.session.get(
+            'https://api.atlassian.com/oauth/token/accessible-resources',
+            headers=self._gen_headers(),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json() or []
+
+    def report_accounts(self, accounts):
+        if not accounts:
+            return {'accounts': [], 'cycle_period': DEFAULT_CYCLE_DAYS}
+
+        while True:
+            response = requests.post(
+                'https://api.atlassian.com/app/report-accounts/',
+                json={'accounts': accounts},
+                headers={
+                    'Authorization': f'Bearer {self.access_token}',
+                    'Content-Type': 'application/json',
+                },
+                timeout=self.timeout,
+            )
+            if response.status_code != 429:
+                break
+            time.sleep(int(response.headers['Retry-After']))
+
+        cycle_period = int(
+            response.headers.get('Cycle-Period', DEFAULT_CYCLE_DAYS)
+        )
+        if response.status_code == 204:
+            return {'accounts': [], 'cycle_period': cycle_period}
+        response.raise_for_status()
+        return {
+            'accounts': response.json().get('accounts') or [],
+            'cycle_period': cycle_period,
         }
 
     def get_createmeta(self, project_key):

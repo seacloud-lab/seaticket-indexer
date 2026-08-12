@@ -249,7 +249,7 @@ class ConfluenceSeaDBAPI:
             return
         table_name = SchemaTables.CONNECTION_USER.table_name()
         now_iso = datetime.datetime.now(datetime.UTC).isoformat()
-        updates = [
+        updated_users = [
             {
                 'pk': pk,
                 'row': {
@@ -260,8 +260,8 @@ class ConfluenceSeaDBAPI:
             for pk, name in user_names.items()
             if pk is not None and name
         ]
-        if updates:
-            self.seadb_api.update_rows(self.base_id, table_name, updates)
+        if updated_users:
+            self.seadb_api.update_rows(self.base_id, table_name, updated_users)
 
     def update_users_next_report_at(self, pks, next_report_at):
         """Batch-update next_privacy_report_at for the given user pks."""
@@ -270,7 +270,7 @@ class ConfluenceSeaDBAPI:
             return
         table_name = SchemaTables.CONNECTION_USER.table_name()
         next_iso = next_report_at.isoformat() if hasattr(next_report_at, 'isoformat') else str(next_report_at)
-        updates = [
+        updated_users = [
             {
                 'pk': pk,
                 'row': {
@@ -279,4 +279,4 @@ class ConfluenceSeaDBAPI:
             }
             for pk in set(pks)
         ]
-        self.seadb_api.update_rows(self.base_id, table_name, updates)
+        self.seadb_api.update_rows(self.base_id, table_name, updated_users)

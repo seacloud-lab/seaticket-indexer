@@ -13,6 +13,7 @@ from seaqa_indexer.tasks.seafile_file_cleaner import SeafileFileCleaner
 from seaqa_indexer.tasks.confluence_page_cleaner import ConfluencePageCleaner
 from seaqa_indexer.tasks.discord_message_cleaner import DiscordMessageCleaner
 from seaqa_indexer.tasks.confluence_privacy_reporter import ConfluencePrivacyReporter
+from seaqa_indexer.tasks.jira_privacy_reporter import JiraPrivacyReporter
 from seaqa_indexer.tasks.deleted_records_cleaner import DeletedRecordsCleaner
 from seaqa_indexer.tasks.github_options_syncer import GithubOptionsSyncer
 from seaqa_indexer.tasks.web_crawl_task_publisher import WebCrawlTaskPublisher
@@ -46,6 +47,7 @@ class SeaqaIndexerApp(object):
         self.github_options_syncer = GithubOptionsSyncer()
         self.discord_message_cleaner = DiscordMessageCleaner()
         self.confluence_privacy_reporter = ConfluencePrivacyReporter()
+        self.jira_privacy_reporter = JiraPrivacyReporter()
 
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
 
@@ -75,6 +77,7 @@ class SeaqaIndexerApp(object):
         self.github_options_syncer.start()
         self.discord_message_cleaner.start()
         self.confluence_privacy_reporter.start()
+        self.jira_privacy_reporter.start()
         self.http_server.start()
 
     def _start_worker_monitor(self):

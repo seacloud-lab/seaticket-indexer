@@ -1,6 +1,7 @@
 import datetime
 
 from seaqa_indexer.utils import time_to_utc_time
+from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils.jira_utils import normalize_jira_text
@@ -227,7 +228,7 @@ class JiraSeaDBAPI:
         if content and len(content) > MAX_CONTENT_LENGTH:
             content = content[:MAX_CONTENT_LENGTH]
 
-        assignee = (fields_data.get('assignee') or {}).get('displayName')
+        assignee = (fields_data.get('assignee') or {}).get('accountId')
         assignees_list = [assignee] if assignee else []
         insert_row = {
             SchemaTables.JIRA_ISSUES.column.issue_id.name: int(issue.get('id')),
@@ -237,7 +238,7 @@ class JiraSeaDBAPI:
             SchemaTables.JIRA_ISSUES.column.status.name: (fields_data.get('status') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.priority.name: (fields_data.get('priority') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.assignees.name: assignees_list,
-            SchemaTables.JIRA_ISSUES.column.author.name: (fields_data.get('creator') or {}).get('displayName'),
+            SchemaTables.JIRA_ISSUES.column.author.name: (fields_data.get('creator') or {}).get('accountId'),
             SchemaTables.JIRA_ISSUES.column.issue_type.name: (fields_data.get('issuetype') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.due_date.name: time_to_utc_time(fields_data.get('duedate')).isoformat() if fields_data.get('duedate') else None,
             SchemaTables.JIRA_ISSUES.column.created_time.name: time_to_utc_time(fields_data.get('created')).isoformat(),
@@ -283,7 +284,7 @@ class JiraSeaDBAPI:
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.comment_id.name: int(comment_id),
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.issue_id.name: issue_id_int,
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.issue_key.name: issue_key,
-                SchemaTables.JIRA_ISSUE_COMMENTS.column.author.name: (comment.get('author') or {}).get('displayName'),
+                SchemaTables.JIRA_ISSUE_COMMENTS.column.author.name: (comment.get('author') or {}).get('accountId'),
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.content.name: normalize_jira_text(content),
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.created_time.name: time_to_utc_time(comment.get('created')).isoformat(),
                 SchemaTables.JIRA_ISSUE_COMMENTS.column.modified_time.name: time_to_utc_time(comment.get('updated')).isoformat(),
@@ -360,3 +361,121 @@ class JiraSeaDBAPI:
         if response and 'results' in response and response['results']:
             return response['results'][0].get('modified_time')
         return None
+
+    def upsert_user(self, connection_id, account_id, display_name):
+        if not account_id or account_id == 'unknown' or not display_name:
+            return
+
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+        escaped_account_id = account_id.replace("'", "''")
+        connection_type = ConnectionType.JIRA_ISSUE.value
+        sql = (
+            f"SELECT `_pk`, `connection_ids` FROM `{table_name}` "
+            f"WHERE user_id='{escaped_account_id}' "
+            f"AND connection_type='{connection_type}'"
+        )
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        existing_users = response.get('results', [])
+
+        if existing_users:
+            existing_user = existing_users[0]
+            connection_ids = existing_user.get('connection_ids') or []
+            row = {
+                SchemaTables.CONNECTION_USER.column.name.name: display_name,
+                SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+            }
+            if connection_id not in connection_ids:
+                row[SchemaTables.CONNECTION_USER.column.connection_ids.name] = connection_ids + [connection_id]
+            self.seadb_api.update_rows(self.base_id, table_name, [{
+                'pk': existing_user['_pk'],
+                'row': row,
+            }])
+            return
+
+        self.seadb_api.insert_rows(self.base_id, table_name, [{
+            SchemaTables.CONNECTION_USER.column.user_id.name: account_id,
+            SchemaTables.CONNECTION_USER.column.name.name: display_name,
+            SchemaTables.CONNECTION_USER.column.connection_ids.name: [connection_id],
+            SchemaTables.CONNECTION_USER.column.connection_type.name: connection_type,
+            SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+        }])
+
+    def get_users_needing_report(self, days_ahead):
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        deadline = (
+            datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=days_ahead)
+        ).isoformat()
+        results = []
+        page_size = 100
+        offset = 0
+        connection_type = ConnectionType.JIRA_ISSUE.value
+
+        while True:
+            sql = (
+                f"SELECT `_pk`, `user_id`, `name`, `connection_ids`, `record_modified_time` "
+                f"FROM `{table_name}` "
+                f"WHERE connection_type='{connection_type}' "
+                f"AND (next_privacy_report_at IS NULL OR next_privacy_report_at <= '{deadline}') "
+                f"ORDER BY `_pk` LIMIT {page_size} OFFSET {offset}"
+            )
+            page = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+            results.extend(page)
+            if len(page) < page_size:
+                return results
+            offset += page_size
+
+    def delete_users(self, pks):
+        pks = [pk for pk in pks if pk is not None]
+        if pks:
+            self.seadb_api.delete_rows(
+                self.base_id,
+                SchemaTables.CONNECTION_USER.table_name(),
+                list(set(pks)),
+            )
+
+    def update_user_names(self, user_names):
+        if not user_names:
+            return
+        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+        updated_users = [
+            {
+                'pk': pk,
+                'row': {
+                    SchemaTables.CONNECTION_USER.column.name.name: name,
+                    SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+                },
+            }
+            for pk, name in user_names.items()
+            if pk is not None and name
+        ]
+        if updated_users:
+            self.seadb_api.update_rows(
+                self.base_id,
+                SchemaTables.CONNECTION_USER.table_name(),
+                updated_users,
+            )
+
+    def update_users_next_report_at(self, pks, next_report_at):
+        pks = [pk for pk in pks if pk is not None]
+        if not pks:
+            return
+        next_iso = (
+            next_report_at.isoformat()
+            if hasattr(next_report_at, 'isoformat')
+            else str(next_report_at)
+        )
+        updated_users = [
+            {
+                'pk': pk,
+                'row': {
+                    SchemaTables.CONNECTION_USER.column.next_privacy_report_at.name: next_iso,
+                },
+            }
+            for pk in set(pks)
+        ]
+        self.seadb_api.update_rows(
+            self.base_id,
+            SchemaTables.CONNECTION_USER.table_name(),
+            updated_users,
+        )

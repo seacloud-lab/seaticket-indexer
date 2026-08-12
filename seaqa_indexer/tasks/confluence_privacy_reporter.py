@@ -64,12 +64,12 @@ class ConfluencePrivacyReporterTimer(Thread):
         if confluence_api.expires_at and time_to_utc_time(str(confluence_api.expires_at)) > now + datetime.timedelta(seconds=120):
             return
         logger.info('Refreshing Confluence access token for project %s', project_uuid)
-        new_tokens = confluence_api.refresh_access_token()
+        new_token = confluence_api.refresh_access_token()
         self.seaqa_db.update_project_confluence_oauth(
             project_uuid,
-            new_tokens['access_token'],
-            new_tokens['expires_at'],
-            new_tokens['refresh_token'],
+            new_token['access_token'],
+            new_token['expires_at'],
+            new_token['refresh_token'],
         )
 
     def _report_and_cleanup(self):
