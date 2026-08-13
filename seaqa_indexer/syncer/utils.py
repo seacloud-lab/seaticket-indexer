@@ -35,7 +35,9 @@ def upload_email_attachment(connection_id, project_uuid, storage, email, pk):
     email['html_content'] = html_content
 
 
-def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_list, is_first_sync=False):
+def insert_and_update_thread_rows(
+        email_seadb_api, connection_id, since, email_list, is_first_sync=False,
+        use_last_email_sender=False):
     email_list = sorted(email_list, key=lambda x: time_to_utc_time(x['email_date']))
     email_rows = []
     page_size = 100
@@ -130,7 +132,9 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
 
     # Recompute is_replied for all threads modified in this batch.
     for thread_id in modified_thread_ids:
-        email_seadb_api.recompute_thread_is_replied(connection_id, thread_id)
+        email_seadb_api.recompute_thread_is_replied(
+            connection_id, thread_id, use_last_email_sender=use_last_email_sender,
+        )
 
 
 def send_connection_sync_result_msg(mq, project_uuid, connection_id, status):
