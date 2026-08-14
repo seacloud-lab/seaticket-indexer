@@ -19,13 +19,13 @@ from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 logger = logging.getLogger(__name__)
 
-REPORT_LOOKAHEAD_DAYS = 1
+REPORT_LOOKAHEAD_DAYS = 1 # day
 
 
 class JiraPrivacyReporter(object):
     def __init__(self):
         self._enabled = True
-        self._interval = 24 * 60 * 60
+        self._interval = 24 * 60 * 60 # Check daily
 
     def start(self):
         if not self.is_enabled():
@@ -46,7 +46,7 @@ class JiraPrivacyReporterTimer(Thread):
         self.seaqa_db = SeaqaDB(self.db_session_class)
         self.finished = Event()
         self.interval = interval
-        self.batch_size = 90
+        self.batch_size = 90  # Atlassian API max per request
 
     def run(self):
         while not self.finished.is_set():
@@ -59,13 +59,8 @@ class JiraPrivacyReporterTimer(Thread):
 
     def _ensure_token_fresh(self, jira_api, project_uuid):
         now = datetime.datetime.now(datetime.UTC)
-        if (
-            jira_api.expires_at
-            and time_to_utc_time(str(jira_api.expires_at))
-            > now + datetime.timedelta(seconds=120)
-        ):
+        if jira_api.expires_at and time_to_utc_time(str(jira_api.expires_at)) > now + datetime.timedelta(seconds=120):
             return
-
         logger.info('Refreshing Jira access token for project %s', project_uuid)
         new_token = jira_api.refresh_access_token()
         self.seaqa_db.update_project_jira_oauth(
@@ -86,20 +81,15 @@ class JiraPrivacyReporterTimer(Thread):
 
             for oauth in oauth_rows:
                 project_uuid = oauth.project_uuid
-                jira_seadb_api = JiraSeaDBAPI(project_uuid)
                 accounts = []
 
                 try:
                     if not oauth.access_token:
-                        logger.warning(
-                            'Jira OAuth access token missing for project %s',
-                            project_uuid,
-                        )
+                        logger.warning('Jira OAuth access token missing for project %s', project_uuid)
                         continue
 
                     jira_connections = self.seaqa_db.get_project_connections_by_type(
-                        project_uuid,
-                        ConnectionType.JIRA_ISSUE.value,
+                        project_uuid, ConnectionType.JIRA_ISSUE.value
                     )
                     if not jira_connections:
                         continue
@@ -107,8 +97,6 @@ class JiraPrivacyReporterTimer(Thread):
                     jira_api = JiraAPI(
                         oauth.access_token,
                         oauth.refresh_token,
-                        '',
-                        '',
                         expires_at=oauth.expires_at,
                     )
                     self._ensure_token_fresh(jira_api, project_uuid)
@@ -120,25 +108,18 @@ class JiraPrivacyReporterTimer(Thread):
 
                     connection_id_to_site = {}
                     for connection in jira_connections:
-                        config = (
-                            decrypt_config(json.loads(connection.config))
-                            if connection.config
-                            else {}
-                        )
-                        site_id = config.get('site_id')
-                        site_url = config.get('site_url')
+                        connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
+                        site_id = connection_config.get('site_id')
                         if site_id and site_id in accessible_site_ids:
-                            connection_id_to_site[str(connection.id)] = (
-                                site_id,
-                                site_url,
-                            )
+                            connection_id_to_site[str(connection.id)] = site_id
 
                     if not connection_id_to_site:
                         continue
 
-                    accounts = jira_seadb_api.get_users_needing_report(
-                        REPORT_LOOKAHEAD_DAYS
-                    )
+                    jira_seadb_api = JiraSeaDBAPI(project_uuid)
+
+                    # Get users due for reporting (NULL or within 1 day of deadline)
+                    accounts = jira_seadb_api.get_users_needing_report(REPORT_LOOKAHEAD_DAYS)
                     accounts = [
                         account
                         for account in accounts
@@ -151,28 +132,22 @@ class JiraPrivacyReporterTimer(Thread):
                         account['user_id']: account for account in accounts
                     }
 
-                    for index in range(0, len(accounts), self.batch_size):
-                        batch = accounts[index:index + self.batch_size]
+                    for i in range(0, len(accounts), self.batch_size):
+                        batch = accounts[i:i + self.batch_size]
                         payload = [
-                            {
-                                'accountId': account['user_id'],
-                                'updatedAt': account['record_modified_time'],
-                            }
-                            for account in batch
+                            {'accountId': a['user_id'], 'updatedAt': a['record_modified_time']}
+                            for a in batch
                         ]
 
                         self._ensure_token_fresh(jira_api, project_uuid)
+
                         result = jira_api.report_accounts(payload)
-                        cycle_period = (
-                            result.get('cycle_period') or DEFAULT_CYCLE_DAYS
-                        )
-                        next_report_at = (
-                            datetime.datetime.now(datetime.UTC)
-                            + datetime.timedelta(days=cycle_period)
-                        )
+                        cycle_period = result.get('cycle_period') or DEFAULT_CYCLE_DAYS
+                        next_report_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=cycle_period)
 
                         closed_pks = []
                         updated_names = {}
+
                         for account_result in result.get('accounts', []):
                             account_id = account_result.get('accountId')
                             status = account_result.get('status')
@@ -181,6 +156,7 @@ class JiraPrivacyReporterTimer(Thread):
                                 continue
 
                             if status == 'closed':
+                                logger.info('Deleting user data for closed account %s in project %s', account_id, project_uuid)
                                 closed_pks.append(account['_pk'])
                                 continue
 
@@ -188,14 +164,11 @@ class JiraPrivacyReporterTimer(Thread):
                                 continue
 
                             for connection_id in account.get('connection_ids') or []:
-                                site = connection_id_to_site.get(str(connection_id))
-                                if not site:
+                                site_id = connection_id_to_site.get(str(connection_id))
+                                if not site_id:
                                     continue
-                                site_id, site_url = site
-                                jira_api.site_id = site_id
-                                jira_api.site_url = (site_url or '').rstrip('/')
                                 try:
-                                    name = jira_api.get_user_display_name(account_id)
+                                    name = jira_api.get_user_display_name(account_id, site_id)
                                 except JiraUserOrSiteNotFoundException:
                                     continue
                                 except JiraSiteUnavailableException:

@@ -23,11 +23,9 @@ class JiraTokenRevokedError(Exception):
 
 
 class JiraAPI:
-    def __init__(self, access_token, refresh_token, site_id, site_url, timeout=60, expires_at=None):
+    def __init__(self, access_token, refresh_token, timeout=60, expires_at=None):
         self.access_token = access_token
         self.refresh_token = refresh_token
-        self.site_id = site_id
-        self.site_url = site_url.rstrip('/') if site_url else ''
         self.timeout = timeout
         self.client_id = JIRA_CLIENT_ID
         self.client_secret = JIRA_CLIENT_SECRET
@@ -41,8 +39,8 @@ class JiraAPI:
             'Accept': 'application/json',
         }
 
-    def _api_base(self):
-        return f'https://api.atlassian.com/ex/jira/{self.site_id}'
+    def _api_base(self, site_id):
+        return f'https://api.atlassian.com/ex/jira/{site_id}'
 
     def refresh_access_token(self):
         """Refresh the Jira OAuth access token."""
@@ -78,11 +76,11 @@ class JiraAPI:
             'expires_at': self.expires_at,
         }
 
-    def get_user_display_name(self, account_id):
+    def get_user_display_name(self, account_id, site_id):
         if not account_id or account_id == 'unknown':
             return ''
 
-        url = f'{self._api_base()}/rest/api/3/user'
+        url = f'{self._api_base(site_id)}/rest/api/3/user'
         response = self.session.get(
             url,
             headers=self._gen_headers(),
@@ -91,7 +89,7 @@ class JiraAPI:
         )
         if response.status_code == 404:
             raise JiraUserOrSiteNotFoundException()
-        if response.status_code in (401, 403):
+        if response.status_code == 403:
             raise JiraSiteUnavailableException()
         response.raise_for_status()
         data = response.json()
@@ -137,8 +135,8 @@ class JiraAPI:
             'cycle_period': cycle_period,
         }
 
-    def get_createmeta(self, project_key):
-        url = f'{self._api_base()}/rest/api/3/issue/createmeta'
+    def get_createmeta(self, project_key, site_id):
+        url = f'{self._api_base(site_id)}/rest/api/3/issue/createmeta'
         params = {
             'projectKeys': project_key,
             'expand': 'projects.issuetypes.fields',
@@ -153,14 +151,14 @@ class JiraAPI:
         issue_types = project.get('issuetypes', [])
         return issue_types
 
-    def get_priorities(self):
-        url = f'{self._api_base()}/rest/api/2/priority'
+    def get_priorities(self, site_id):
+        url = f'{self._api_base(site_id)}/rest/api/2/priority'
         response = self.session.get(url, headers=self._gen_headers(), timeout=self.timeout)
         response.raise_for_status()
         return response.json() or []
 
-    def get_statuses(self, project_key):
-        url = f'{self._api_base()}/rest/api/2/project/{project_key}/statuses/'
+    def get_statuses(self, project_key, site_id):
+        url = f'{self._api_base(site_id)}/rest/api/2/project/{project_key}/statuses/'
         response = self.session.get(url, headers=self._gen_headers(), timeout=self.timeout)
         response.raise_for_status()
         metadata = response.json() or []
@@ -174,7 +172,7 @@ class JiraAPI:
                     seen_ids.add(s_id)
         return unique_statuses
 
-    def search_issues(self, project_key, old_last_sync_time, start_at=0, max_results=50):
+    def search_issues(self, project_key, old_last_sync_time, site_id, start_at=0, max_results=50):
         if old_last_sync_time:
             since_time = time_to_utc_time(str(old_last_sync_time)).strftime('%Y-%m-%d %H:%M')
             jql = f'project = "{project_key}" AND updated >= "{since_time}" ORDER BY updated ASC'
@@ -183,7 +181,7 @@ class JiraAPI:
 
         fields = 'summary,issuetype,status,priority,assignee,creator,duedate,description,updated,created'
 
-        url = f'{self._api_base()}/rest/api/3/search/jql'
+        url = f'{self._api_base(site_id)}/rest/api/3/search/jql'
         params = {
             'jql': jql,
             'fields': fields,
@@ -194,14 +192,14 @@ class JiraAPI:
         response.raise_for_status()
         return response.json()
 
-    def get_issue_comments(self, issue_key, start_at=0, max_results=100):
+    def get_issue_comments(self, issue_key, site_id, start_at=0, max_results=100):
         """Fetch all comments for a given issue, paginated.
 
         Returns a flat list of all comment dicts across all pages.
         """
         all_comments = []
         while True:
-            url = f'{self._api_base()}/rest/api/3/issue/{issue_key}/comment'
+            url = f'{self._api_base(site_id)}/rest/api/3/issue/{issue_key}/comment'
             params = {
                 'startAt': start_at,
                 'maxResults': max_results,

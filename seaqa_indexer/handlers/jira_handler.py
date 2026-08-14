@@ -79,7 +79,6 @@ class JiraIssueHandler(ConnectionHandler):
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
         site_id = config.get('site_id')
-        site_url = config.get('site_url', '')
         project_key = config.get('project_key')
 
         if not site_id or not project_key:
@@ -97,14 +96,14 @@ class JiraIssueHandler(ConnectionHandler):
 
         # Refresh proactively if the token has expired
         if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
-            jira_api = JiraAPI(access_token, refresh_token, site_id, site_url, expires_at=expires_at)
+            jira_api = JiraAPI(access_token, refresh_token, expires_at=expires_at)
             new_tokens = jira_api.refresh_access_token()
             access_token = new_tokens['access_token']
             refresh_token = new_tokens['refresh_token']
             expires_at = new_tokens['expires_at']
             seaqa_db.update_project_jira_oauth(project_uuid, access_token, expires_at, refresh_token)
 
-        jira_api = JiraAPI(access_token, refresh_token, site_id, site_url, expires_at=expires_at)
+        jira_api = JiraAPI(access_token, refresh_token, expires_at=expires_at)
         jira_seadb_api = JiraSeaDBAPI(project_uuid)
 
         is_first_sync = not old_last_sync_time
@@ -113,6 +112,7 @@ class JiraIssueHandler(ConnectionHandler):
             connection_id,
             project_uuid,
             jira_api,
+            site_id,
             project_key,
             old_last_sync_time,
             connection_status,
@@ -123,18 +123,18 @@ class JiraIssueHandler(ConnectionHandler):
 
         return sync_count, total_count, False, config
 
-    def _sync_jira_options(self, connection_id, jira_api, project_key, jira_seadb_api):
+    def _sync_jira_options(self, connection_id, jira_api, site_id, project_key, jira_seadb_api):
         """Sync Jira select-column options (priorities, statuses, issue types)."""
         table_metadata = jira_seadb_api.get_table_metadata(connection_id)
         if not table_metadata:
             return
-        priorities = jira_api.get_priorities()
-        issue_types = jira_api.get_createmeta(project_key)
+        priorities = jira_api.get_priorities(site_id)
+        issue_types = jira_api.get_createmeta(project_key, site_id)
         jira_seadb_api.add_or_update_priority_column_options(table_metadata, priorities)
-        jira_seadb_api.add_or_update_status_column_options(table_metadata, jira_api.get_statuses(project_key))
+        jira_seadb_api.add_or_update_status_column_options(table_metadata, jira_api.get_statuses(project_key, site_id))
         jira_seadb_api.add_or_update_issue_type_column_options(table_metadata, issue_types)
 
-    def _sync_jira_issues(self, connection_id, project_uuid, jira_api, project_key,
+    def _sync_jira_issues(self, connection_id, project_uuid, jira_api, site_id, project_key,
                           old_last_sync_time, connection_status, seaqa_db, jira_seadb_api,
                           is_first_sync):
         page_size = 50
@@ -147,7 +147,7 @@ class JiraIssueHandler(ConnectionHandler):
         user_cache = set()
 
         if is_first_sync:
-            self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
+            self._sync_jira_options(connection_id, jira_api, site_id, project_key, jira_seadb_api)
         
         # JQL server-side filter: only fetch pages modified since the latest local record.
         since = jira_seadb_api.get_latest_modified_time(connection_id)
@@ -167,7 +167,7 @@ class JiraIssueHandler(ConnectionHandler):
             jira_seadb_api.upsert_user(connection_id, account_id, display_name)
 
         while True:
-            data = jira_api.search_issues(project_key, since, start_at, page_size)
+            data = jira_api.search_issues(project_key, since, site_id, start_at, page_size)
             issues = data.get('issues', [])
             total = data.get('total', 0)
 
@@ -194,13 +194,13 @@ class JiraIssueHandler(ConnectionHandler):
                     jira_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
                 except OptionValueInvalidException as e:
                     logger.warning('The option name may not exist; resynchronize it. exception info is: %s', e)
-                    self._sync_jira_options(connection_id, jira_api, project_key, jira_seadb_api)
+                    self._sync_jira_options(connection_id, jira_api, site_id, project_key, jira_seadb_api)
                     jira_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
 
                 _upsert_user(fields_data.get('creator'))
                 _upsert_user(fields_data.get('assignee'))
 
-                all_comments = jira_api.get_issue_comments(issue_key)
+                all_comments = jira_api.get_issue_comments(issue_key, site_id)
                 jira_seadb_api.save_or_update_issue_comments(connection_id, issue_id, issue_key, all_comments)
                 for comment in all_comments:
                     _upsert_user(comment.get('author'))

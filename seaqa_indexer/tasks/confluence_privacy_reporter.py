@@ -5,7 +5,7 @@ from threading import Thread, Event
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils import decrypt_config, time_to_utc_time
-from seaqa_indexer.utils.confluence_api import ConfluenceAPI, ConfluenceTokenRevokedError, ConfluenceUserNotFoundException, DEFAULT_CYCLE_DAYS
+from seaqa_indexer.utils.confluence_api import ConfluenceAPI, ConfluenceWorkspaceUnavailableException, ConfluenceTokenRevokedError, ConfluenceUserNotFoundException, DEFAULT_CYCLE_DAYS
 from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.utils.constants import ConnectionType
@@ -83,6 +83,8 @@ class ConfluencePrivacyReporterTimer(Thread):
 
             for oauth in oauth_rows:
                 project_uuid = oauth.project_uuid
+                confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
+                accounts = []
 
                 try:
                     if not oauth.access_token:
@@ -95,21 +97,28 @@ class ConfluencePrivacyReporterTimer(Thread):
                     if not confluence_connections:
                         continue
 
+                    confluence_api = ConfluenceAPI(oauth.access_token, oauth.refresh_token, oauth.expires_at)
+                    self._ensure_token_fresh(confluence_api, project_uuid)
+                    accessible_workspace_ids = {
+                        resource.get('id')
+                        for resource in confluence_api.get_accessible_resources()
+                        if resource.get('id')
+                    }
+
                     connection_id_to_workspace_id = {}
                     for connection in confluence_connections:
                         connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
                         workspace_id = connection_config.get('workspace_id')
-                        if workspace_id:
+                        if workspace_id and workspace_id in accessible_workspace_ids:
                             connection_id_to_workspace_id[str(connection.id)] = workspace_id
 
-                    confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)
+                    if not connection_id_to_workspace_id:
+                        continue
 
                     # Get users due for reporting (NULL or within 1 day of deadline)
                     accounts = confluence_seadb_api.get_users_needing_report(REPORT_LOOKAHEAD_DAYS)
                     if not accounts:
                         continue
-
-                    confluence_api = ConfluenceAPI(oauth.access_token, oauth.refresh_token, oauth.expires_at)
 
                     accounts_by_id = {account['user_id']: account for account in accounts}
 
@@ -157,6 +166,9 @@ class ConfluencePrivacyReporterTimer(Thread):
                                         name = confluence_api.get_user_display_name(account_id, ws_id)
                                     except ConfluenceUserNotFoundException:
                                         logger.warning('project_uuid %s workspace_id %s get display_name Failed for account %s, trying next', project_uuid, ws_id, account_id)
+                                        continue
+                                    except ConfluenceWorkspaceUnavailableException:
+                                        logger.warning('project_uuid %s workspace_id %s unavailable for account %s, trying next', project_uuid, ws_id, account_id)
                                         continue
                                     if name:
                                         updated_names[account['_pk']] = name

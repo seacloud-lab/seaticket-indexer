@@ -16,6 +16,10 @@ class ConfluenceUserNotFoundException(Exception):
     pass
 
 
+class ConfluenceWorkspaceUnavailableException(Exception):
+    pass
+
+
 class ConfluenceTokenRevokedError(Exception):
     pass
 
@@ -121,6 +125,8 @@ class ConfluenceAPI:
         resp = self.session.get(url, headers=self._gen_headers(), params=params, timeout=self.timeout)
         if resp.status_code == 404:
             raise ConfluenceUserNotFoundException()
+        if resp.status_code == 403:
+            raise ConfluenceWorkspaceUnavailableException()
         resp.raise_for_status()
         data = resp.json()
         # Deactivated/unlicensed or GDPR-deleted user — operations will be empty
@@ -130,6 +136,15 @@ class ConfluenceAPI:
             return re.sub(r'\s*\(unlicensed\)\s*$', '', display_name, flags=re.IGNORECASE)
 
         return display_name
+
+    def get_accessible_resources(self):
+        response = self.session.get(
+            'https://api.atlassian.com/oauth/token/accessible-resources',
+            headers=self._gen_headers(),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json() or []
 
     def report_accounts(self, accounts):
         """Report account IDs to Atlassian privacy API.
