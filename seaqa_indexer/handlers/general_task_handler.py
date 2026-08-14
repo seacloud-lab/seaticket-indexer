@@ -108,10 +108,7 @@ class GeneralTaskHandler(ConnectionHandler):
             sync_logger.log('General Task config missing base_url')
             return None, None, None, None
 
-        endpoint = base_url.rstrip('/')
-        if not endpoint.endswith('/tasks'):
-            endpoint = f'{endpoint}/tasks'
-        endpoint = f'{endpoint}/'
+        endpoint = f'{base_url.rstrip("/")}/'
         params = {}
         since = None
         if old_last_sync_time:

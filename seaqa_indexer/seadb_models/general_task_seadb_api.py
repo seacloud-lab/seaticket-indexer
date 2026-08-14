@@ -117,7 +117,6 @@ class GeneralTaskSeaDBAPI:
             name = str(user_mapping.get('name') or '').strip()
             if not user_id or not name:
                 continue
-
             existing_user = existing_user_row_map.get(user_id)
             if existing_user:
                 existing_conn_ids = existing_user['connection_ids']
