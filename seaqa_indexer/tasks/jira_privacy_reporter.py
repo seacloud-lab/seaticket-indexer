@@ -7,7 +7,7 @@ from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.seadb_models.jira_seadb_api import JiraSeaDBAPI
 from seaqa_indexer.utils import decrypt_config, time_to_utc_time
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.utils.jira_issues_api import (
+from seaqa_indexer.utils.jira_api import (
     DEFAULT_CYCLE_DAYS,
     JiraAPI,
     JiraSiteUnavailableException,
@@ -50,6 +50,7 @@ class JiraPrivacyReporterTimer(Thread):
 
     def run(self):
         while not self.finished.is_set():
+            self._report_and_cleanup()
             logger.info('starts to report Jira privacy data')
             try:
                 self._report_and_cleanup()
@@ -63,8 +64,9 @@ class JiraPrivacyReporterTimer(Thread):
             return
         logger.info('Refreshing Jira access token for project %s', project_uuid)
         new_token = jira_api.refresh_access_token()
-        self.seaqa_db.update_project_jira_oauth(
+        self.seaqa_db.update_project_connection_oauth(
             project_uuid,
+            ConnectionType.JIRA_ISSUE.value,
             new_token['access_token'],
             new_token['expires_at'],
             new_token['refresh_token'],
@@ -73,9 +75,8 @@ class JiraPrivacyReporterTimer(Thread):
     def _report_and_cleanup(self):
         offset = 0
         page_size = 500
-
         while True:
-            oauth_rows = self.seaqa_db.get_jira_oauth_page(offset, page_size)
+            oauth_rows = self.seaqa_db.get_connection_oauth_page(ConnectionType.JIRA_ISSUE.value, offset, page_size)
             if not oauth_rows:
                 break
 
@@ -163,10 +164,12 @@ class JiraPrivacyReporterTimer(Thread):
                             if status != 'updated':
                                 continue
 
-                            for connection_id in account.get('connection_ids') or []:
-                                site_id = connection_id_to_site.get(str(connection_id))
-                                if not site_id:
-                                    continue
+                            site_ids = set([
+                                connection_id_to_site.get(str(cid))
+                                for cid in account.get('connection_ids') or []
+                                if connection_id_to_site.get(str(cid))
+                            ])
+                            for site_id in site_ids:
                                 try:
                                     name = jira_api.get_user_display_name(account_id, site_id)
                                 except JiraUserOrSiteNotFoundException:
@@ -178,45 +181,26 @@ class JiraPrivacyReporterTimer(Thread):
                                     break
                             else:
                                 logger.info(
-                                    'No valid Jira site for account %s in project %s; '
-                                    'deleting user',
-                                    account_id,
-                                    project_uuid,
-                                )
+                                    'No valid Jira site for account %s in project %s; deleting user', account_id, project_uuid)
                                 closed_pks.append(account['_pk'])
 
                         jira_seadb_api.delete_users(closed_pks)
                         jira_seadb_api.update_user_names(updated_names)
-                        jira_seadb_api.update_users_next_report_at(
-                            [
-                                account['_pk']
-                                for account in batch
-                                if account.get('_pk') is not None
-                                and account['_pk'] not in closed_pks
-                            ],
-                            next_report_at,
-                        )
+                        batch_pks = [
+                            a['_pk'] for a in batch
+                            if a.get('_pk') is not None and a['_pk'] not in closed_pks
+                        ]
+                        jira_seadb_api.update_users_next_report_at(batch_pks, next_report_at)
 
-                    logger.info(
-                        'Privacy report completed for Jira project %s, %d users total',
-                        project_uuid,
-                        len(accounts),
-                    )
+                    logger.info('Privacy report completed for Jira project %s, %d users total', project_uuid, len(accounts))
 
                 except JiraTokenRevokedError:
-                    logger.warning(
-                        'Jira OAuth token revoked for project %s, deleting all %d users',
-                        project_uuid,
-                        len(accounts),
-                    )
-                    jira_seadb_api.delete_users(
-                        [account['_pk'] for account in accounts]
-                    )
+                    logger.warning('Jira OAuth token revoked for project %s, deleting all %d users', project_uuid, len(accounts))
+                    for i in range(0, len(accounts), self.batch_size):
+                        batch_accounts = accounts[i:i + self.batch_size]
+                        jira_seadb_api.delete_users([a['_pk'] for a in batch_accounts])
                 except Exception:
-                    logger.exception(
-                        'Failed privacy report for Jira project %s',
-                        project_uuid,
-                    )
+                    logger.exception('Failed privacy report for Jira project %s', project_uuid)
 
             if len(oauth_rows) < page_size:
                 break

@@ -142,19 +142,18 @@ class ConfluencePrivacyReporterTimer(Thread):
 
                         for account_result in result.get('accounts', []):
                             account_id = account_result.get('accountId')
+                            account = accounts_by_id.get(account_id)
                             status = account_result.get('status')
                             if not account_id:
                                 continue
 
                             if status == 'closed':
                                 logger.info('Deleting user data for closed account %s in project %s', account_id, project_uuid)
-                                account = accounts_by_id.get(account_id)
                                 if account and account.get('_pk') is not None:
                                     closed_pks.append(account['_pk'])
 
                             elif status == 'updated':
                                 logger.info('Refreshing display name for updated account %s in project %s', account_id, project_uuid)
-                                account = accounts_by_id.get(account_id)
                                 connection_ids = (account or {}).get('connection_ids') or []
                                 workspace_ids = set([
                                     connection_id_to_workspace_id.get(str(cid))

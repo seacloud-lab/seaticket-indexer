@@ -127,6 +127,7 @@ class JiraAPI:
         cycle_period = int(
             response.headers.get('Cycle-Period', DEFAULT_CYCLE_DAYS)
         )
+
         if response.status_code == 204:
             return {'accounts': [], 'cycle_period': cycle_period}
         response.raise_for_status()

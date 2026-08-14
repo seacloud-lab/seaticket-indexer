@@ -9,7 +9,7 @@ from seaqa_indexer.seadb_models.jira_seadb_api import JiraSeaDBAPI
 from seaqa_indexer.index.index_store.jira_issues_index import JiraIssuesIndex
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.index.utils import gen_index_name_by_type
-from seaqa_indexer.utils.jira_issues_api import JiraAPI
+from seaqa_indexer.utils.jira_api import JiraAPI
 from seaqa_indexer.utils.seadb_api import OptionValueInvalidException
 
 
@@ -85,7 +85,7 @@ class JiraIssueHandler(ConnectionHandler):
             sync_logger.log('Jira configuration is invalid')
             return None, None, None, None
 
-        oauth = seaqa_db.get_project_jira_oauth(project_uuid)
+        oauth = seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.JIRA_ISSUE.value)
         if not oauth:
             sync_logger.log('Jira OAuth not found')
             return None, None, None, None
@@ -101,7 +101,7 @@ class JiraIssueHandler(ConnectionHandler):
             access_token = new_tokens['access_token']
             refresh_token = new_tokens['refresh_token']
             expires_at = new_tokens['expires_at']
-            seaqa_db.update_project_jira_oauth(project_uuid, access_token, expires_at, refresh_token)
+            seaqa_db.update_project_connection_oauth(project_uuid, ConnectionType.JIRA_ISSUE.value, access_token, expires_at, refresh_token)
 
         jira_api = JiraAPI(access_token, refresh_token, expires_at=expires_at)
         jira_seadb_api = JiraSeaDBAPI(project_uuid)
