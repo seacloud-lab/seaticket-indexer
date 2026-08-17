@@ -229,39 +229,23 @@ class EmailSeaDBAPI:
                 {"pk": _pk, "row": {"answered": True}}
             ])
 
-    def recompute_thread_is_replied(self, connection_id, thread_id, use_last_email_sender=False):
-        """Recompute is_replied for a thread based on the last inbound email.
+    def recompute_thread_is_replied(self, connection_id, thread_id):
+        """Recompute is_replied from the last non-deleted email in a thread.
 
-        Finds the chronologically last email in the thread where is_sender=False,
-        and sets thread.is_replied to that email's answered value.
-        If no inbound emails exist, sets is_replied=False.
-
-        Gmail uses the last non-deleted email instead: a thread is replied only
-        when that email was sent by the connected mailbox and is a reply.
+        A thread is replied only when its last email was sent by the connected
+        mailbox and references another message as a reply.
         """
         email_table = SchemaTables.EMAIL.table_name(connection_id=connection_id)
         thread_table = SchemaTables.THREAD.table_name(connection_id=connection_id)
-        if use_last_email_sender:
-            sql = f"""
-                SELECT is_sender, reply_to_message_id FROM `{email_table}`
-                WHERE thread_id = {thread_id}
-                AND deleted = false
-                ORDER BY modified_time DESC, _pk DESC LIMIT 1
-            """
-        else:
-            sql = f"""
-                SELECT answered FROM `{email_table}`
-                WHERE thread_id = {thread_id}
-                AND is_sender = false
-                AND deleted = false
-                ORDER BY modified_time DESC, _pk DESC LIMIT 1
-            """
+        sql = f"""
+            SELECT is_sender, reply_to_message_id FROM `{email_table}`
+            WHERE thread_id = {thread_id}
+            AND deleted = false
+            ORDER BY modified_time DESC, _pk DESC LIMIT 1
+        """
         result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
-        if use_last_email_sender:
-            last_email = result[0] if result else {}
-            is_replied = bool(last_email.get('is_sender') and last_email.get('reply_to_message_id'))
-        else:
-            is_replied = bool(result and result[0].get('answered'))
+        last_email = result[0] if result else {}
+        is_replied = bool(last_email.get('is_sender') and last_email.get('reply_to_message_id'))
         self.seadb_api.update_rows(self.base_id, thread_table, [
             {"pk": thread_id, "row": {"is_replied": is_replied}}
         ])

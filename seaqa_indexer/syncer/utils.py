@@ -36,8 +36,7 @@ def upload_email_attachment(connection_id, project_uuid, storage, email, pk):
 
 
 def insert_and_update_thread_rows(
-        email_seadb_api, connection_id, since, email_list, is_first_sync=False,
-        use_last_email_sender=False):
+        email_seadb_api, connection_id, since, email_list, is_first_sync=False):
     email_list = sorted(email_list, key=lambda x: time_to_utc_time(x['email_date']))
     email_rows = []
     page_size = 100
@@ -133,7 +132,7 @@ def insert_and_update_thread_rows(
     # Recompute is_replied for all threads modified in this batch.
     for thread_id in modified_thread_ids:
         email_seadb_api.recompute_thread_is_replied(
-            connection_id, thread_id, use_last_email_sender=use_last_email_sender,
+            connection_id, thread_id,
         )
 
 

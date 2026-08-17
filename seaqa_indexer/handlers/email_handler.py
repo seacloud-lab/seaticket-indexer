@@ -128,8 +128,7 @@ class EmailHandler(ConnectionHandler):
 
         try:
             sync_count, total_count = self._sync_email(connection_id, project_uuid, connection_status, since,
-                             mail_viewer, seaqa_db, email_seadb_api, storage, is_first_update,
-                             config.get('server_provider') == 'Gmail')
+                             mail_viewer, seaqa_db, email_seadb_api, storage, is_first_update)
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s email sync failed: %s', connection_id, e)
             sync_logger.log(str(e))
@@ -177,8 +176,7 @@ class EmailHandler(ConnectionHandler):
 
     def _sync_email(
             self, connection_id, project_uuid, connection_status, since, mail_viewer,
-            seaqa_db, email_seadb_api, storage, is_first_sync,
-            use_last_email_sender=False):
+            seaqa_db, email_seadb_api, storage, is_first_sync):
         sync_count = 0
         added_count = 0
         updated_count = 0
@@ -249,14 +247,12 @@ class EmailHandler(ConnectionHandler):
                 )
                 insert_and_update_thread_rows(
                     email_seadb_api, connection_id, since, changed_email_list, is_first_sync,
-                    use_last_email_sender=use_last_email_sender,
                 )
                 self._publish_thread_events(email_seadb_api, connection_id, changed_email_list, old_thread_rows_by_id)
 
         if is_first_sync:
             self._backfill_reply_status(
                 email_seadb_api, connection_id,
-                use_last_email_sender=use_last_email_sender,
             )
 
         connection_status['last_sync_changes'] = {
@@ -342,16 +338,15 @@ class EmailHandler(ConnectionHandler):
             )
             published_thread_ids.add(thread_id)
 
-    def _backfill_reply_status(self, email_seadb_api, connection_id, use_last_email_sender=False):
+    def _backfill_reply_status(self, email_seadb_api, connection_id):
         """Backfill answered and is_replied for existing emails on first sync.
 
         Email level: marks emails as answered where a user-sent reply exists
         (reply_to_message_id + is_sender match). Complements Answered flag
         for OAuth providers and catches any missed IMAP cases.
 
-        Thread level: Gmail sets is_replied according to whether the last
-        non-deleted email was sent by the connected mailbox. Other providers
-        use the answered state of the last inbound email.
+        Thread level: a thread is replied only when its last non-deleted email
+        was sent by the connected mailbox and is a reply.
         """
         email_table = self.gen_email_table_name(connection_id)
         thread_table = self.gen_table_name(connection_id)
@@ -402,7 +397,6 @@ class EmailHandler(ConnectionHandler):
             for row in rows:
                 email_seadb_api.recompute_thread_is_replied(
                     connection_id, row['_pk'],
-                    use_last_email_sender=use_last_email_sender,
                 )
             if len(rows) < page_size:
                 break
