@@ -47,11 +47,52 @@ class SeaqaDB(object):
     def update_project_linear_oauth(self, project_uuid, access_token, expires_at, refresh_token):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
-            cmd = """UPDATE project_linear_oauth 
-                        SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at 
+            cmd = """UPDATE project_linear_oauth
+                        SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at
                         WHERE project_uuid=:project_uuid"""
             session.execute(text(cmd), {
                 'project_uuid': project_uuid,
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'expires_at': expires_at,
+            })
+            session.commit()
+
+    def get_project_connection_oauth(self, project_uuid, connection_type):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = """SELECT access_token, refresh_token, expires_at
+                     FROM project_connection_oauth
+                     WHERE project_uuid=:project_uuid AND type=:connection_type
+                     """
+            row = session.execute(text(sql), {
+                'project_uuid': project_uuid,
+                'connection_type': connection_type,
+            }).fetchone()
+            return row
+
+    def get_connection_oauth_page(self, connection_type, offset=0, limit=100):
+        with self.db_session_class() as session:
+            sql = """
+                SELECT project_uuid, access_token, refresh_token, expires_at
+                FROM project_connection_oauth
+                WHERE type=:connection_type
+                ORDER BY project_uuid
+                LIMIT :limit OFFSET :offset
+            """
+            return session.execute(
+                text(sql), {'connection_type': connection_type, 'limit': limit, 'offset': offset}
+            ).fetchall()
+
+    def update_project_connection_oauth(self, project_uuid, connection_type, access_token, expires_at, refresh_token):
+        project_uuid = uuid_str_to_32_chars(project_uuid)
+        with self.db_session_class() as session:
+            cmd = """UPDATE project_connection_oauth
+                        SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at
+                        WHERE project_uuid=:project_uuid AND type=:connection_type"""
+            session.execute(text(cmd), {
+                'project_uuid': project_uuid,
+                'connection_type': connection_type,
                 'access_token': access_token,
                 'refresh_token': refresh_token,
                 'expires_at': expires_at,
@@ -375,13 +416,12 @@ class SeaqaDB(object):
             return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
 
     def get_confluence_oauth_page(self, offset=0, limit=100):
-        """Paginated query of project_confluence_oauth for non-deleted projects."""
+        """Paginated query of project_confluence_oauth."""
         with self.db_session_class() as session:
             sql = """
-                SELECT pco.project_uuid, pco.access_token, pco.refresh_token, pco.expires_at
-                FROM project_confluence_oauth pco
-                INNER JOIN projects p ON p.uuid = pco.project_uuid
-                ORDER BY pco.project_uuid
+                SELECT project_uuid, access_token, refresh_token, expires_at
+                FROM project_confluence_oauth
+                ORDER BY project_uuid
                 LIMIT :limit OFFSET :offset
             """
             return session.execute(

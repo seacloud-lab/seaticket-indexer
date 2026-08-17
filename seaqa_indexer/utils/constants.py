@@ -25,6 +25,7 @@ class AIStatus:
 class ConnectionType(Enum):
     EMAIL = 'email'
     GITHUB_ISSUE = 'github_issue'
+    JIRA_ISSUE = 'jira_issue'
     DISCOURSE_FORUM = 'discourse_forum'
     GENERAL_TASK = 'general_task'
     SITE = 'site'

@@ -214,7 +214,7 @@ class SeaDBAPI:
         return parse_response(response)
 
 
-    def delete_column_option(self, base_id, table_id, column_key, option_id=None, option_ids=None):
+    def delete_column_option(self, base_id, table_id, column_key, option_id=None, option_ids=None, option_names=None):
         base_id = uuid_str_to_36_chars(base_id)
         url = f'{self.server_url}/api/v1/{base_id}/column-options'
         data = {
@@ -225,6 +225,8 @@ class SeaDBAPI:
             data['option_id'] = option_id
         if option_ids:
             data['option_ids'] = option_ids
+        if option_names:
+            data['option_names'] = option_names
 
         response = requests.delete(url, json=data, headers=self.headers, timeout=self.timeout)
         return parse_response(response)

@@ -170,15 +170,6 @@ class LinearIssueHandler(ConnectionHandler):
 
         return total_deleted
 
-    def clean_connection_data(self, storage, seadb_api, project_uuid,
-                              connection_id, tables):
-        """Clean linear issue connection data including issues and comments tables."""
-        if tables:
-            issues_table_name = self.gen_table_name(connection_id)
-            comments_table_name = self.gen_comments_table_name(connection_id)
-            for table in tables:
-                if table['name'] in (issues_table_name, comments_table_name):
-                    seadb_api.delete_table(project_uuid, table['id'])
 
     def sync_linear_options(self, connection_id, linear_seadb_api, linear_api, team_id=None):
             table_info = linear_seadb_api.get_table_metadata(connection_id)
