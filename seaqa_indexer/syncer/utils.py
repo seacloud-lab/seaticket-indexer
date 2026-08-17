@@ -51,9 +51,8 @@ def insert_and_update_thread_rows(
         offset += page_size
 
     message2thread = {email['message_id']: email['thread_id'] for email in email_rows}
-    # Existing emails can be re-synced with an updated Answered flag without
-    # needing their thread assignment changed. Their thread summary still
-    # needs to be recalculated.
+    # Existing emails can be re-synced without changing their thread assignment.
+    # Their thread summary still needs to be recalculated.
     modified_thread_ids = {
         message2thread[email['message_id']]
         for email in email_list
@@ -104,10 +103,6 @@ def insert_and_update_thread_rows(
                 email_seadb_api.update_thread_to_db(connection_id, update_thread)
             email_seadb_api.update_email_thread_id(connection_id, message_id, thread_id)
 
-            # Mark parent email as answered for OAuth fallback
-            if email.get('is_sender') and reply_to_id:
-                email_seadb_api.mark_email_answered(connection_id, reply_to_id)
-
             modified_thread_ids.add(thread_id)
         else:
             insert_thread = {
@@ -122,10 +117,6 @@ def insert_and_update_thread_rows(
             }
             message2thread[message_id] = insert_thread_id
             email_seadb_api.update_email_thread_id(connection_id, message_id, insert_thread_id)
-
-            # Mark parent email as answered for OAuth fallback
-            if email.get('is_sender') and reply_to_id:
-                email_seadb_api.mark_email_answered(connection_id, reply_to_id)
 
             modified_thread_ids.add(insert_thread_id)
 

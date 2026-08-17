@@ -455,8 +455,6 @@ tables:
         column_type: bool
       unread:
         column_type: bool
-      answered:
-        column_type: bool
       thread_id:
         column_type: int64
       email_id:

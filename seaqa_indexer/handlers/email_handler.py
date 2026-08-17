@@ -207,8 +207,7 @@ class EmailHandler(ConnectionHandler):
                     if existed_email and existed_email.get('modified_time'):
                         existed_date = time_to_utc_time(str(existed_email.get('modified_time')))
                         email_thread_id = existed_email.get('thread_id')
-                        answered_changed = bool(email.get('answered')) and not bool(existed_email.get('answered'))
-                        if time_to_utc_time(modified_time) <= existed_date and email_thread_id and not answered_changed:
+                        if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
                             logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
                             continue
                 email_info = {
@@ -218,7 +217,6 @@ class EmailHandler(ConnectionHandler):
                     'subject': email.get('subject'),
                     'is_sender': email.get('is_sender'),
                     'email_from': email.get('email_from'),
-                    'answered': email.get('answered', False),
                     '_is_new_email': not bool(existed_email),
                 }
                 changed_email_list.append(email_info)
@@ -251,7 +249,7 @@ class EmailHandler(ConnectionHandler):
                 self._publish_thread_events(email_seadb_api, connection_id, changed_email_list, old_thread_rows_by_id)
 
         if is_first_sync:
-            self._backfill_reply_status(
+            self._backfill_thread_reply_status(
                 email_seadb_api, connection_id,
             )
 
@@ -338,49 +336,18 @@ class EmailHandler(ConnectionHandler):
             )
             published_thread_ids.add(thread_id)
 
-    def _backfill_reply_status(self, email_seadb_api, connection_id):
-        """Backfill answered and is_replied for existing emails on first sync.
+    def _backfill_thread_reply_status(self, email_seadb_api, connection_id):
+        """Backfill is_replied for existing threads on first sync.
 
-        Email level: marks emails as answered where a user-sent reply exists
-        (reply_to_message_id + is_sender match). Complements Answered flag
-        for OAuth providers and catches any missed IMAP cases.
-
-        Thread level: a thread is replied only when its last non-deleted email
-        was sent by the connected mailbox and is a reply.
+        A thread is replied only when its last non-deleted email was sent by
+        the connected mailbox and is a reply.
         """
-        email_table = self.gen_email_table_name(connection_id)
         thread_table = self.gen_table_name(connection_id)
 
-        # Backfill email-level answered
-        sql = f"""
-            SELECT _pk FROM `{email_table}` AS e
-            WHERE e.answered IS NOT TRUE
-            AND EXISTS (
-                SELECT 1 FROM `{email_table}` AS r
-                WHERE r.reply_to_message_id = e.message_id AND r.is_sender = true
-            )
-        """
         page_size = 100
-        while True:
-            paged_sql = f"{sql} LIMIT {page_size}"
-            result = email_seadb_api.seadb_api.query_rows(
-                email_seadb_api.base_id, paged_sql
-            )
-            rows = result.get('results', [])
-            if not rows:
-                break
-            updated_records = [
-                {"pk": row['_pk'], "row": {"answered": True}}
-                for row in rows
-            ]
-            email_seadb_api.seadb_api.update_rows(
-                email_seadb_api.base_id, email_table, updated_records
-            )
-            if len(rows) < page_size:
-                break
 
-        # Backfill thread-level is_replied. Recomputing a thread can leave it
-        # false, so page through a stable result set instead of filtering by it.
+        # Recomputing a thread can leave it false, so page through a stable
+        # result set instead of filtering by its current reply status.
         thread_sql = f"""
             SELECT t._pk FROM `{thread_table}` AS t
             ORDER BY t._pk
