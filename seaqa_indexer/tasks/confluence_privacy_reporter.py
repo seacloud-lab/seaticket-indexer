@@ -99,17 +99,12 @@ class ConfluencePrivacyReporterTimer(Thread):
 
                     confluence_api = ConfluenceAPI(oauth.access_token, oauth.refresh_token, oauth.expires_at)
                     self._ensure_token_fresh(confluence_api, project_uuid)
-                    accessible_workspace_ids = {
-                        resource.get('id')
-                        for resource in confluence_api.get_accessible_resources()
-                        if resource.get('id')
-                    }
 
                     connection_id_to_workspace_id = {}
                     for connection in confluence_connections:
                         connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
                         workspace_id = connection_config.get('workspace_id')
-                        if workspace_id and workspace_id in accessible_workspace_ids:
+                        if workspace_id:
                             connection_id_to_workspace_id[str(connection.id)] = workspace_id
 
                     if not connection_id_to_workspace_id:

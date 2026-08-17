@@ -101,17 +101,12 @@ class JiraPrivacyReporterTimer(Thread):
                         expires_at=oauth.expires_at,
                     )
                     self._ensure_token_fresh(jira_api, project_uuid)
-                    accessible_site_ids = {
-                        resource.get('id')
-                        for resource in jira_api.get_accessible_resources()
-                        if resource.get('id')
-                    }
 
                     connection_id_to_site = {}
                     for connection in jira_connections:
                         connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
                         site_id = connection_config.get('site_id')
-                        if site_id and site_id in accessible_site_ids:
+                        if site_id:
                             connection_id_to_site[str(connection.id)] = site_id
 
                     if not connection_id_to_site:

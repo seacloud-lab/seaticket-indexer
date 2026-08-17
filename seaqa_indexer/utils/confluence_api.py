@@ -137,15 +137,6 @@ class ConfluenceAPI:
 
         return display_name
 
-    def get_accessible_resources(self):
-        response = self.session.get(
-            'https://api.atlassian.com/oauth/token/accessible-resources',
-            headers=self._gen_headers(),
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        return response.json() or []
-
     def report_accounts(self, accounts):
         """Report account IDs to Atlassian privacy API.
 

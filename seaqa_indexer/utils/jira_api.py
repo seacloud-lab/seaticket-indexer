@@ -97,15 +97,6 @@ class JiraAPI:
             return ''
         return data.get('displayName') or ''
 
-    def get_accessible_resources(self):
-        response = self.session.get(
-            'https://api.atlassian.com/oauth/token/accessible-resources',
-            headers=self._gen_headers(),
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        return response.json() or []
-
     def report_accounts(self, accounts):
         if not accounts:
             return {'accounts': [], 'cycle_period': DEFAULT_CYCLE_DAYS}
