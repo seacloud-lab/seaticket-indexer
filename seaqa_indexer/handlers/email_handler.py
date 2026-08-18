@@ -248,11 +248,6 @@ class EmailHandler(ConnectionHandler):
                 )
                 self._publish_thread_events(email_seadb_api, connection_id, changed_email_list, old_thread_rows_by_id)
 
-        if is_first_sync:
-            self._backfill_thread_reply_status(
-                email_seadb_api, connection_id,
-            )
-
         connection_status['last_sync_changes'] = {
             'added': added_count,
             'deleted': 0,
@@ -335,36 +330,3 @@ class EmailHandler(ConnectionHandler):
                 log_object_name='email thread',
             )
             published_thread_ids.add(thread_id)
-
-    def _backfill_thread_reply_status(self, email_seadb_api, connection_id):
-        """Backfill is_replied for existing threads on first sync.
-
-        A thread is replied only when its last non-deleted email was sent by
-        the connected mailbox and is a reply.
-        """
-        thread_table = self.gen_table_name(connection_id)
-
-        page_size = 100
-
-        # Recomputing a thread can leave it false, so page through a stable
-        # result set instead of filtering by its current reply status.
-        thread_sql = f"""
-            SELECT t._pk FROM `{thread_table}` AS t
-            ORDER BY t._pk
-        """
-        offset = 0
-        while True:
-            paged_sql = f"{thread_sql} LIMIT {page_size} OFFSET {offset}"
-            result = email_seadb_api.seadb_api.query_rows(
-                email_seadb_api.base_id, paged_sql
-            )
-            rows = result.get('results', [])
-            if not rows:
-                break
-            for row in rows:
-                email_seadb_api.recompute_thread_is_replied(
-                    connection_id, row['_pk'],
-                )
-            if len(rows) < page_size:
-                break
-            offset += len(rows)
