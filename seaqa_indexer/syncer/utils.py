@@ -51,13 +51,6 @@ def insert_and_update_thread_rows(
         offset += page_size
 
     message2thread = {email['message_id']: email['thread_id'] for email in email_rows}
-    # Existing emails can be re-synced without changing their thread assignment.
-    # Their thread summary still needs to be recalculated.
-    modified_thread_ids = {
-        message2thread[email['message_id']]
-        for email in email_list
-        if message2thread.get(email['message_id'])
-    }
     email_list = [email for email in email_list if not message2thread.get(email['message_id'])]
 
     # no_thread_reply_message_ids is the list of new emails' reply-ids who are not in last 30 days
@@ -76,6 +69,7 @@ def insert_and_update_thread_rows(
                 message2thread[email['message_id']] = email['thread_id']
 
     to_be_updated_thread_dict = {}
+    thread_is_replied = {}
     # update email thread id
     for email in email_list:
         reply_to_id = email['reply_to_message_id']
@@ -102,8 +96,6 @@ def insert_and_update_thread_rows(
                 update_thread['thread_id'] = thread_id
                 email_seadb_api.update_thread_to_db(connection_id, update_thread)
             email_seadb_api.update_email_thread_id(connection_id, message_id, thread_id)
-
-            modified_thread_ids.add(thread_id)
         else:
             insert_thread = {
                 'subject': email['subject'],
@@ -118,12 +110,13 @@ def insert_and_update_thread_rows(
             message2thread[message_id] = insert_thread_id
             email_seadb_api.update_email_thread_id(connection_id, message_id, insert_thread_id)
 
-            modified_thread_ids.add(insert_thread_id)
+        # email_list is sorted by email_date, so the last email assigned to a
+        # thread is its latest one and determines its is_replied status.
+        thread_is_replied[message2thread[message_id]] = bool(email.get('is_sender') and email.get('reply_to_message_id'))
 
-    # Recompute is_replied for all threads modified in this batch.
-    for thread_id in modified_thread_ids:
-        email_seadb_api.recompute_thread_is_replied(
-            connection_id, thread_id,
+    for thread_id, is_replied in thread_is_replied.items():
+        email_seadb_api.update_thread_is_replied(
+            connection_id, thread_id, is_replied,
         )
 
 

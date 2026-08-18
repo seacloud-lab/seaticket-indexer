@@ -210,6 +210,12 @@ class EmailSeaDBAPI:
             return result[0]
         return {}
 
+    def update_thread_is_replied(self, connection_id, thread_id, is_replied):
+        thread_table = SchemaTables.THREAD.table_name(connection_id=connection_id)
+        self.seadb_api.update_rows(self.base_id, thread_table, [
+            {"pk": thread_id, "row": {"is_replied": is_replied}}
+        ])
+
     def recompute_thread_is_replied(self, connection_id, thread_id):
         """Recompute is_replied from the last non-deleted email in a thread.
 
@@ -217,7 +223,6 @@ class EmailSeaDBAPI:
         mailbox and references another message as a reply.
         """
         email_table = SchemaTables.EMAIL.table_name(connection_id=connection_id)
-        thread_table = SchemaTables.THREAD.table_name(connection_id=connection_id)
         sql = f"""
             SELECT is_sender, reply_to_message_id FROM `{email_table}`
             WHERE thread_id = {thread_id}
@@ -227,6 +232,4 @@ class EmailSeaDBAPI:
         result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         last_email = result[0] if result else {}
         is_replied = bool(last_email.get('is_sender') and last_email.get('reply_to_message_id'))
-        self.seadb_api.update_rows(self.base_id, thread_table, [
-            {"pk": thread_id, "row": {"is_replied": is_replied}}
-        ])
+        self.update_thread_is_replied(connection_id, thread_id, is_replied)
