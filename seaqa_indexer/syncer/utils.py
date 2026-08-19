@@ -35,7 +35,8 @@ def upload_email_attachment(connection_id, project_uuid, storage, email, pk):
     email['html_content'] = html_content
 
 
-def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_list, is_first_sync=False):
+def insert_and_update_thread_rows(
+        email_seadb_api, connection_id, since, email_list, is_first_sync=False):
     email_list = sorted(email_list, key=lambda x: time_to_utc_time(x['email_date']))
     email_rows = []
     page_size = 100
@@ -68,6 +69,7 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
                 message2thread[email['message_id']] = email['thread_id']
 
     to_be_updated_thread_dict = {}
+    thread_is_replied = {}
     # update email thread id
     for email in email_list:
         reply_to_id = email['reply_to_message_id']
@@ -107,6 +109,15 @@ def insert_and_update_thread_rows(email_seadb_api, connection_id, since, email_l
             }
             message2thread[message_id] = insert_thread_id
             email_seadb_api.update_email_thread_id(connection_id, message_id, insert_thread_id)
+
+        # email_list is sorted by email_date, so the last email assigned to a
+        # thread is its latest one and determines its is_replied status.
+        thread_is_replied[message2thread[message_id]] = bool(email.get('is_sender') and email.get('reply_to_message_id'))
+
+    for thread_id, is_replied in thread_is_replied.items():
+        email_seadb_api.update_thread_is_replied(
+            connection_id, thread_id, is_replied,
+        )
 
 
 def send_connection_sync_result_msg(mq, project_uuid, connection_id, status):

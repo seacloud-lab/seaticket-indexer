@@ -100,6 +100,7 @@ class EmailSeaDBAPI:
             SchemaTables.THREAD.column.title.name: self._normalize_subject(thread.get('subject')),
             SchemaTables.THREAD.column.modified_time.name: time_to_utc_time(thread['last_updated_at']).isoformat(),
             SchemaTables.THREAD.column.unread.name: thread.get('unread'),
+            SchemaTables.THREAD.column.is_replied.name: False,
             SchemaTables.THREAD.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             SchemaTables.THREAD.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             SchemaTables.THREAD.column.deleted.name: False
@@ -208,3 +209,9 @@ class EmailSeaDBAPI:
         if result:
             return result[0]
         return {}
+
+    def update_thread_is_replied(self, connection_id, thread_id, is_replied):
+        thread_table = SchemaTables.THREAD.table_name(connection_id=connection_id)
+        self.seadb_api.update_rows(self.base_id, thread_table, [
+            {"pk": thread_id, "row": {"is_replied": is_replied}}
+        ])

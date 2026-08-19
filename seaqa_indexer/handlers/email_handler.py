@@ -174,7 +174,9 @@ class EmailHandler(ConnectionHandler):
 
         return total_deleted
 
-    def _sync_email(self, connection_id, project_uuid, connection_status, since, mail_viewer, seaqa_db, email_seadb_api, storage, is_first_sync):
+    def _sync_email(
+            self, connection_id, project_uuid, connection_status, since, mail_viewer,
+            seaqa_db, email_seadb_api, storage, is_first_sync):
         sync_count = 0
         added_count = 0
         updated_count = 0
@@ -241,7 +243,9 @@ class EmailHandler(ConnectionHandler):
                 old_thread_rows_by_id = self._get_old_thread_rows_by_id(
                     email_seadb_api, connection_id, changed_email_list
                 )
-                insert_and_update_thread_rows(email_seadb_api, connection_id, since, changed_email_list, is_first_sync)
+                insert_and_update_thread_rows(
+                    email_seadb_api, connection_id, since, changed_email_list, is_first_sync,
+                )
                 self._publish_thread_events(email_seadb_api, connection_id, changed_email_list, old_thread_rows_by_id)
 
         connection_status['last_sync_changes'] = {
