@@ -57,8 +57,9 @@ class ConfluencePageCleanerTimer(Thread):
                 if not confluence_api.expires_at or time_to_utc_time(str(confluence_api.expires_at)) <= now + datetime.timedelta(seconds=60):
                     logger.info('Confluence access token near expiry, refreshing during page fetch')
                     new_tokens = confluence_api.refresh_access_token()
-                    self.seaqa_db.update_project_confluence_oauth(
+                    self.seaqa_db.update_project_connection_oauth(
                         project_uuid,
+                        ConnectionType.CONFLUENCE.value,
                         new_tokens['access_token'],
                         new_tokens['expires_at'],
                         new_tokens['refresh_token'],
@@ -122,7 +123,7 @@ class ConfluencePageCleanerTimer(Thread):
 
                 space_keys = connection_config.get('space_keys') or None
 
-                oauth = self.seaqa_db.get_project_confluence_oauth(project_uuid)
+                oauth = self.seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.CONFLUENCE.value)
                 if not oauth:
                     logger.warning('Confluence OAuth missing for project %s', project_uuid)
                     continue

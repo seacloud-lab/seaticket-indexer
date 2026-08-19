@@ -108,7 +108,7 @@ class ConfluenceHandler(ConnectionHandler):
             sync_logger.log('Confluence workspace_id is required.')
             raise RuntimeError('Confluence workspace_id is required.')
 
-        oauth = seaqa_db.get_project_confluence_oauth(project_uuid)
+        oauth = seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.CONFLUENCE.value)
         if not oauth:
             sync_logger.log('Confluence OAuth not found.')
             raise RuntimeError('Confluence OAuth not found.')
@@ -124,7 +124,7 @@ class ConfluenceHandler(ConnectionHandler):
             access_token = new_tokens['access_token']
             refresh_token = new_tokens['refresh_token']
             expires_at = new_tokens['expires_at']
-            seaqa_db.update_project_confluence_oauth(project_uuid, access_token, expires_at, refresh_token)
+            seaqa_db.update_project_connection_oauth(project_uuid, ConnectionType.CONFLUENCE.value, access_token, expires_at, refresh_token)
 
         confluence_api = ConfluenceAPI(access_token, refresh_token)
         confluence_seadb_api = ConfluenceSeaDBAPI(project_uuid)

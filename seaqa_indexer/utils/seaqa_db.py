@@ -25,39 +25,6 @@ class SeaqaDB(object):
             ).fetchall()
             return connections
 
-    def get_project_linear_oauth(self, project_uuid):
-        project_uuid = uuid_str_to_32_chars(project_uuid)
-        with self.db_session_class() as session:
-            sql = """SELECT access_token, refresh_token, expires_at 
-                     FROM project_linear_oauth 
-                     WHERE project_uuid=:project_uuid 
-                     """
-            row = session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
-            return row
-
-    def get_project_deadline_linear_oauth(self, deadline_time):
-        with self.db_session_class() as session:
-            sql = """SELECT access_token, refresh_token, expires_at, project_uuid
-                     FROM project_linear_oauth 
-                     WHERE expires_at < :deadline_time
-                     """
-            rows = session.execute(text(sql), {'deadline_time': deadline_time}).fetchall()
-            return rows
-
-    def update_project_linear_oauth(self, project_uuid, access_token, expires_at, refresh_token):
-        project_uuid = uuid_str_to_32_chars(project_uuid)
-        with self.db_session_class() as session:
-            cmd = """UPDATE project_linear_oauth
-                        SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at
-                        WHERE project_uuid=:project_uuid"""
-            session.execute(text(cmd), {
-                'project_uuid': project_uuid,
-                'access_token': access_token,
-                'refresh_token': refresh_token,
-                'expires_at': expires_at,
-            })
-            session.commit()
-
     def get_project_connection_oauth(self, project_uuid, connection_type):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
@@ -98,6 +65,18 @@ class SeaqaDB(object):
                 'expires_at': expires_at,
             })
             session.commit()
+
+    def get_project_deadline_connection_oauth(self, connection_type, deadline_time):
+        with self.db_session_class() as session:
+            sql = """SELECT project_uuid, access_token, refresh_token, expires_at
+                     FROM project_connection_oauth
+                     WHERE type=:connection_type AND expires_at < :deadline_time
+                     """
+            rows = session.execute(text(sql), {
+                'connection_type': connection_type,
+                'deadline_time': deadline_time,
+            }).fetchall()
+            return rows
 
     def get_confluence_connection_by_workspace_id(self, workspace_id):
         with self.db_session_class() as session:
@@ -404,62 +383,6 @@ class SeaqaDB(object):
                      AND pc.deleted = false
                      AND pc.last_sync_time >= DATE_SUB(NOW(), INTERVAL :days DAY)"""
             return session.execute(text(sql), {'days': days}).fetchall()
-
-    def get_project_confluence_oauth(self, project_uuid):
-        project_uuid = uuid_str_to_32_chars(project_uuid)
-        with self.db_session_class() as session:
-            sql = """
-                SELECT project_uuid, access_token, refresh_token, expires_at
-                FROM project_confluence_oauth
-                WHERE project_uuid = :project_uuid
-            """
-            return session.execute(text(sql), {'project_uuid': project_uuid}).fetchone()
-
-    def get_confluence_oauth_page(self, offset=0, limit=100):
-        """Paginated query of project_confluence_oauth."""
-        with self.db_session_class() as session:
-            sql = """
-                SELECT project_uuid, access_token, refresh_token, expires_at
-                FROM project_confluence_oauth
-                ORDER BY project_uuid
-                LIMIT :limit OFFSET :offset
-            """
-            return session.execute(
-                text(sql), {'limit': limit, 'offset': offset}
-            ).fetchall()
-
-    def update_project_confluence_oauth(self, project_uuid, access_token, expires_at, refresh_token):
-        project_uuid = uuid_str_to_32_chars(project_uuid)
-        with self.db_session_class() as session:
-            exists_sql = """
-                SELECT 1
-                FROM project_confluence_oauth
-                WHERE project_uuid = :project_uuid
-            """
-            exists = session.execute(text(exists_sql), {'project_uuid': project_uuid}).fetchone()
-
-            if exists:
-                sql = """
-                    UPDATE project_confluence_oauth
-                    SET access_token = :access_token,
-                        refresh_token = :refresh_token,
-                        expires_at = :expires_at
-                    WHERE project_uuid = :project_uuid
-                """
-            else:
-                sql = """
-                    INSERT INTO project_confluence_oauth
-                    (project_uuid, access_token, refresh_token, expires_at)
-                    VALUES (:project_uuid, :access_token, :refresh_token, :expires_at)
-                """
-
-            session.execute(text(sql), {
-                'project_uuid': project_uuid,
-                'access_token': access_token,
-                'refresh_token': refresh_token,
-                'expires_at': expires_at,
-            })
-            session.commit()
 
     def get_recently_updated_projects(self, days=7):
         with self.db_session_class() as session:
