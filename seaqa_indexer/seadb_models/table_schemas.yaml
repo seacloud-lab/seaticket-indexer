@@ -743,8 +743,6 @@ tables:
         column_type: text
       suggestion_reason:
         column_type: text
-      suggestion_title:
-        column_type: text
       suggestion_content:
         column_type: text
       suggestion_payload:
