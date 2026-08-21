@@ -747,6 +747,8 @@ tables:
         column_type: text
       suggestion_content:
         column_type: text
+      suggestion_payload:
+        column_type: text
       target_source_type:
         column_type: text
       target_source_id:
