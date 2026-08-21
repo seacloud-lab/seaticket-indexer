@@ -55,7 +55,7 @@ class SyncManager(Thread):
         now_time = datetime.datetime.now(datetime.UTC)
         refresh_deadline = now_time + datetime.timedelta(hours=LINEAR_TOKEN_REFRESH_THRESHOLD)
 
-        project_linear_auth_records = self.seaqa_db.get_project_deadline_linear_oauth(refresh_deadline.isoformat())
+        project_linear_auth_records = self.seaqa_db.get_project_deadline_connection_oauth(ConnectionType.LINEAR.value, refresh_deadline.isoformat())
         for linear_oauth in project_linear_auth_records:
 
             linear_api = LinearAPI(
@@ -68,7 +68,7 @@ class SyncManager(Thread):
                 refresh_token = data.get("refresh_token")
                 expires_at = data.get("expires_at")
 
-                self.seaqa_db.update_project_linear_oauth(linear_oauth.project_uuid, access_token, expires_at, refresh_token)
+                self.seaqa_db.update_project_connection_oauth(linear_oauth.project_uuid, ConnectionType.LINEAR.value, access_token, expires_at, refresh_token)
             except Exception as e:
                 # This error may be caused by the user revoking authorization.
                 logger.warning('project_uuid: %s refresh linear access_token failed, error: %s', linear_oauth.project_uuid, e)

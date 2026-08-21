@@ -106,7 +106,7 @@ class LinearIssuesCleanerTimer(Thread):
                 team_id = connection_config.get('team_id')
                 include_archived = connection_config.get('include_archived', True)
 
-                oauth_info = self.seaqa_db.get_project_linear_oauth(project_uuid)
+                oauth_info = self.seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.LINEAR.value)
                 access_token = oauth_info.access_token
                 refresh_token = oauth_info.refresh_token
                 if not access_token:

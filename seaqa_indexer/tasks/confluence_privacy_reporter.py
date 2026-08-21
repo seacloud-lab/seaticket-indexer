@@ -65,8 +65,9 @@ class ConfluencePrivacyReporterTimer(Thread):
             return
         logger.info('Refreshing Confluence access token for project %s', project_uuid)
         new_token = confluence_api.refresh_access_token()
-        self.seaqa_db.update_project_confluence_oauth(
+        self.seaqa_db.update_project_connection_oauth(
             project_uuid,
+            ConnectionType.CONFLUENCE.value,
             new_token['access_token'],
             new_token['expires_at'],
             new_token['refresh_token'],
@@ -77,7 +78,7 @@ class ConfluencePrivacyReporterTimer(Thread):
         page_size = 500
 
         while True:
-            oauth_rows = self.seaqa_db.get_confluence_oauth_page(offset, page_size)
+            oauth_rows = self.seaqa_db.get_connection_oauth_page(ConnectionType.CONFLUENCE.value, offset, page_size)
             if not oauth_rows:
                 break
 

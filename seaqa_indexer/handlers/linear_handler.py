@@ -109,13 +109,13 @@ class LinearIssueHandler(ConnectionHandler):
 
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
-        oauth_info = seaqa_db.get_project_linear_oauth(project_uuid)
+        oauth_info = seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.LINEAR.value)
         access_token = oauth_info.access_token
         refresh_token = oauth_info.refresh_token
         team_id = config.get('team_id')
         include_archived = config.get('include_archived', True)
         if not access_token:
-            sync_logger.log("Linear access_token is missing in project_linear_oauth")
+            sync_logger.log("Linear access_token is missing in project_connection_oauth")
             return None, None, None, None
 
         linear_api = LinearAPI(
