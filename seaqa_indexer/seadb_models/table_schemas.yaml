@@ -1176,3 +1176,73 @@ tables:
     - - comment_id
     - - issue_key
     table_name: jira_issue_comments_{connection_id}
+  FirebaseCrashIssuesTable:
+    columns:
+      issue_id:
+        column_type: text
+      source_table:
+        column_type: text
+      app_id:
+        column_type: text
+      title:
+        column_type: text
+      subtitle:
+        column_type: text
+      content:
+        column_type: text
+        column_data:
+          compressed: true
+      error_type:
+        column_type: text
+      platform:
+        column_type: text
+      bundle_identifier:
+        column_type: text
+      app_version:
+        column_type: text
+      is_fatal:
+        column_type: bool
+      occurrence_count:
+        column_type: int64
+      affected_users:
+        column_type: int64
+      first_seen_time:
+        column_type: datetime
+      last_seen_time:
+        column_type: datetime
+      created_time:
+        column_type: datetime
+      modified_time:
+        column_type: datetime
+      sync_time:
+        column_type: datetime
+      record_modified_time:
+        column_type: datetime
+      deleted:
+        column_type: bool
+      outdated:
+        column_type: bool
+      ai_summary:
+        column_type: text
+      ai_processed_time:
+        column_type: datetime
+      ai_summary_vector:
+        column_type: list
+        column_data:
+          list_type: float32
+      linked_ticket:
+        column_type: int64
+    indexes:
+    - - issue_id
+    - - source_table
+    - - app_id
+    - - title
+    - - error_type
+    - - platform
+    - - bundle_identifier
+    - - modified_time
+    - - record_modified_time
+    - - deleted
+    - - linked_ticket
+    - - ai_processed_time
+    table_name: firebase_crash_issue_{connection_id}

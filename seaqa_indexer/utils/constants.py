@@ -34,6 +34,7 @@ class ConnectionType(Enum):
     LINEAR = 'linear'
     CONFLUENCE = 'confluence'
     DISCORD = 'discord'
+    FIREBASE_CRASH = 'firebase_crash'
 
     @classmethod
     def is_valid(cls, value):

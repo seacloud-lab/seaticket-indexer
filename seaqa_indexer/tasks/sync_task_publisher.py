@@ -25,6 +25,7 @@ SYNC_CONNECTION_TYPES = [
     ConnectionType.CONFLUENCE.value,
     ConnectionType.GENERAL_TASK.value,
     ConnectionType.DISCORD.value,
+    ConnectionType.FIREBASE_CRASH.value,
 ]
 
 
