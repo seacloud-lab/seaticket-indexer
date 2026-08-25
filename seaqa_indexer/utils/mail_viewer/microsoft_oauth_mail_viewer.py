@@ -1,11 +1,16 @@
 from datetime import datetime
+from urllib.parse import quote
 
 from .oauth_mail_viewer import OAuthMailViewer
 
 
 class MicrosoftOAuthMailViewer(OAuthMailViewer):
     provider_name = 'Microsoft'
-    base_url = 'https://graph.microsoft.com/v1.0/me'
+
+    @property
+    def base_url(self):
+        principal = f'users/{quote(self.sender_email, safe="")}' if self.account_type == 'shared' else 'me'
+        return f'https://graph.microsoft.com/v1.0/{principal}'
 
     @staticmethod
     def format_search_date(date_value):

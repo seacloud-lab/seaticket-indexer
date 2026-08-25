@@ -1,12 +1,17 @@
 import base64
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from .oauth_mail_viewer import OAuthMailViewer
 
 
 class GmailOAuthMailViewer(OAuthMailViewer):
     provider_name = 'Gmail'
-    list_url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages'
+
+    @property
+    def list_url(self):
+        principal = self.sender_email if self.account_type == 'shared' else 'me'
+        return f'https://gmail.googleapis.com/gmail/v1/users/{quote(principal, safe="")}/messages'
 
     @staticmethod
     def format_search_date(date_value):

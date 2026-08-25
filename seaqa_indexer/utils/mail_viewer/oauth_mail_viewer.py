@@ -18,19 +18,25 @@ def _check_and_raise_error(response):
 class OAuthMailViewer(BasicMailViewer):
     provider_name = None
 
-    def __init__(self, config):
+    def __init__(self, config, oauth_token=None, oauth_config=None):
         super().__init__(config)
-        self.client_id = config.get('client_id')
-        self.client_secret = config.get('client_secret')
-        self.refresh_token = config.get('refresh_token')
-        self.access_token = config.get('access_token')
-        self.expires_at = config.get('expires_at')
-        self.token_url = config.get('token_url')
-        self.scopes = config.get('scopes')
+        oauth_token = oauth_token or {}
+        oauth_config = oauth_config or config
+        self.client_id = oauth_config.get('client_id')
+        self.client_secret = oauth_config.get('client_secret')
+        self.refresh_token = oauth_token.get('refresh_token')
+        self.access_token = oauth_token.get('access_token')
+        self.expires_at = oauth_token.get('expires_at')
+        self.token_url = oauth_config.get('token_url')
+        self.scopes = oauth_config.get('scopes')
+        self.account_type = config.get('account_type', 'personal')
+        self.sender_email = config.get('sender_email')
 
         if not all([self.client_id, self.client_secret, self.refresh_token, self.token_url, self.scopes]):
             logger.error('OAuth mail viewer config is invalid. client_id: %s, token_url: %s', self.client_id, self.token_url)
             raise EmailConfigError('OAuth mail viewer configuration is incomplete')
+        if self.account_type == 'shared' and not self.sender_email:
+            raise EmailConfigError('Shared email sender address is required')
 
     def _request_access_token(self):
         if not self.access_token or self.expires_at is None or self.expires_at - time.time() < 300:
@@ -76,10 +82,12 @@ class OAuthMailViewer(BasicMailViewer):
         self.access_token = new_access_token
         self.expires_at = new_expires_at
         self.refresh_token = new_refresh_token
-        self.config['access_token'] = new_access_token
-        self.config['expires_at'] = new_expires_at
-        self.config['refresh_token'] = new_refresh_token
-        self.config_updated = True
+        self.oauth_token = {
+            'access_token': new_access_token,
+            'expires_at': new_expires_at,
+            'refresh_token': new_refresh_token,
+        }
+        self.oauth_updated = True
 
     def _get_headers(self, extra_headers=None):
         headers = {
