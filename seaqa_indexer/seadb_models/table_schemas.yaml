@@ -753,7 +753,7 @@ tables:
         column_type: text
       target_item_title:
         column_type: text
-      sources:
+      references:
         column_type: text
       statistics:
         column_type: text
