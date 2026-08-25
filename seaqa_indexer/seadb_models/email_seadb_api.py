@@ -1,4 +1,5 @@
 import datetime
+import re
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.utils.constants import SEADB_CONTENT_SIZE_LIMIT
 from seaqa_indexer.utils import time_to_utc_time
@@ -19,17 +20,94 @@ class EmailSeaDBAPI:
         normalized_subject = subject.strip() if isinstance(subject, str) else str(subject).strip()
         return normalized_subject or "(No Subject)"
 
+    @staticmethod
+    def _calendar_search_content(calendar_content):
+        """Extract searchable VEVENT fields while ignoring VALARM and extensions."""
+        lines = re.sub(r'\r?\n[ \t]', '', calendar_content or '').splitlines()
+        event_start = next((index for index, line in enumerate(lines) if line.upper() == 'BEGIN:VEVENT'), None)
+        event_end = next((index for index, line in enumerate(lines) if line.upper() == 'END:VEVENT'), None)
+        if event_start is None or event_end is None or event_end <= event_start:
+            return ''
+
+        def unescape(value):
+            return value.replace('\\n', '\n').replace('\\N', '\n').replace('\\,', ',').replace('\\;', ';').replace('\\\\', '\\')
+
+        def parse_property(line):
+            if ':' not in line:
+                return '', {}, ''
+            name, value = line.split(':', 1)
+            parts = name.split(';')
+            params = {}
+            for part in parts[1:]:
+                if '=' in part:
+                    key, param_value = part.split('=', 1)
+                    params[key.upper()] = param_value.strip('"')
+            return parts[0].upper(), params, unescape(value)
+
+        fields = {}
+        attendees = []
+        nested_depth = 0
+        for line in lines[event_start + 1:event_end]:
+            upper_line = line.upper()
+            if upper_line.startswith('BEGIN:'):
+                nested_depth += 1
+                continue
+            if upper_line.startswith('END:'):
+                nested_depth = max(0, nested_depth - 1)
+                continue
+            if nested_depth:
+                continue
+
+            key, params, value = parse_property(line)
+            if key in ('SUMMARY', 'DESCRIPTION', 'DTSTART', 'DTEND', 'LOCATION', 'ORGANIZER') and key not in fields:
+                fields[key] = (value, params)
+            elif key == 'ATTENDEE':
+                email = value.removeprefix('mailto:')
+                attendees.append(f"{params.get('CN', '')} <{email}>" if params.get('CN') else email)
+
+        description = fields.get('DESCRIPTION', ('', {}))[0]
+        description = '\n'.join(
+            line.strip()
+            for line in description.splitlines()
+            if line.strip() and not re.fullmatch(r'[_-]{5,}', line.strip())
+        )
+        result = []
+        labels = (
+            ('SUMMARY', 'Subject'),
+            ('DTSTART', 'Start'),
+            ('DTEND', 'End'),
+            ('LOCATION', 'Location'),
+            ('ORGANIZER', 'Organizer'),
+        )
+        for key, label in labels:
+            value, params = fields.get(key, ('', {}))
+            if not value:
+                continue
+            if key in ('ORGANIZER',) and value.lower().startswith('mailto:'):
+                value = value[7:]
+            timezone = params.get('TZID')
+            result.append(f'{label}: {value}' + (f' ({timezone})' if timezone else ''))
+        if attendees:
+            result.append(f"Attendees: {', '.join(attendees)}")
+        if description:
+            result.append(f'Description: {description}')
+        return '\n'.join(result)
+
     def save_or_update_email_to_db(self, connection_id, email, existed_email, is_first_sync):
-        if not email['content']:
-            h = html2text.HTML2Text()
-            h.ignore_links = False
-            h.ignore_images = False
-            h.body_width = 0
-            markdown_text = h.handle(email['html_content']).strip().strip('```')
+        calendar_content = email.get('calendar_content') or ''
+        if calendar_content:
+            cleaned_content = self._calendar_search_content(calendar_content)
         else:
-            markdown_text = email['content']
-        
-        cleaned_content = EmailMessage().parse_reply(markdown_text) if markdown_text else ''
+            if not email['content']:
+                h = html2text.HTML2Text()
+                h.ignore_links = False
+                h.ignore_images = False
+                h.body_width = 0
+                markdown_text = h.handle(email['html_content']).strip().strip('```')
+            else:
+                markdown_text = email['content']
+
+            cleaned_content = EmailMessage().parse_reply(markdown_text) if markdown_text else ''
 
         insert_row = {
             'email_from': email['email_from'],
@@ -42,6 +120,7 @@ class EmailSeaDBAPI:
             'is_sender': email['is_sender'],
             'email_id': email.get('email_id'),
             'origin_thread_id': email.get('origin_thread_id'),
+            'calendar_content': email.get('calendar_content') or '',
             'deleted': False,
             'text_content': email['content'][:SEADB_CONTENT_SIZE_LIMIT],
         }

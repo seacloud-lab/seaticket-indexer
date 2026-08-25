@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timezone
 from email.header import decode_header
 from email.parser import BytesParser, Parser
@@ -45,6 +46,7 @@ class BasicMailViewer:
     def get_content(self, msg):
         plain_content = ''
         html_content = ''
+        calendar_content = ''
         for part in msg.walk():
             if part.is_multipart():
                 continue
@@ -52,12 +54,15 @@ class BasicMailViewer:
                 continue
 
             content_type = part.get_content_type()
+            if content_type == 'text/calendar' and not calendar_content:
+                calendar_content = self.parse_content(part)
+                continue
             if content_type == 'text/plain' and not plain_content:
                 plain_content = self.parse_content(part)
             elif content_type == 'text/html' and not html_content:
                 html_content = '```' + self.parse_content(part) + '```'
 
-        return plain_content, html_content
+        return plain_content, html_content, calendar_content
 
     def get_attachments(self, msg):
         file_list = []
@@ -150,11 +155,12 @@ class BasicMailViewer:
             logger.warning('account: %s message: %s no sender!', self.config.get('username'), message_id)
         if not header_info['To']:
             logger.warning('account: %s message: %s no recipient!', self.config.get('username'), message_id)
-        plain_content, html_content = self.get_content(msg)
+        plain_content, html_content, calendar_content = self.get_content(msg)
         file_list, filename2content_id = self.get_attachments(msg)
         email_dict = {
             'content': plain_content,
             'html_content': html_content,
+            'calendar_content': calendar_content,
             'filename2content_id': filename2content_id,
             'attachments': file_list,
             'email_from': header_info.get('From'),

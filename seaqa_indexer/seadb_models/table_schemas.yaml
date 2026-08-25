@@ -461,6 +461,10 @@ tables:
         column_type: text
       origin_thread_id:
         column_type: text
+      calendar_content:
+        column_type: text
+        column_data:
+          compressed: true
     indexes:
     - - title
     - - email_from
