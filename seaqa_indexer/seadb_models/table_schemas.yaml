@@ -699,29 +699,31 @@ tables:
     columns:
       status:
         column_type: text
+      owner_source_type:
+        column_type: text
+      owner_source_id:
+        column_type: text
+      owner_source_title:
+        column_type: text
+      suggestions_status:
+        column_type: text
       started_at:
         column_type: datetime
       finished_at:
         column_type: datetime
-      items_processed:
-        column_type: int64
       error_message:
         column_type: text
-      events:
+      event:
         column_type: text
     indexes:
     - - started_at
+    - - owner_source_type
+      - owner_source_id
     table_name: agent_runs
   AgentActionsTable:
     columns:
       run_id:
         column_type: int64
-      source_type:
-        column_type: text
-      source_id:
-        column_type: text
-      source_title:
-        column_type: text
       phase:
         column_type: text
       prompt:
@@ -744,11 +746,17 @@ tables:
         column_type: text
       suggestion_reason:
         column_type: text
-      suggestion_text:
-        column_type: text
       suggestion_content:
         column_type: text
-      sources:
+      suggestion_payload:
+        column_type: text
+      target_item_type:
+        column_type: text
+      target_item_id:
+        column_type: text
+      target_item_title:
+        column_type: text
+      references:
         column_type: text
       statistics:
         column_type: text
