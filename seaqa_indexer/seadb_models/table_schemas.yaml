@@ -747,11 +747,11 @@ tables:
         column_type: text
       suggestion_payload:
         column_type: text
-      target_source_type:
+      target_item_type:
         column_type: text
-      target_source_id:
+      target_item_id:
         column_type: text
-      target_source_title:
+      target_item_title:
         column_type: text
       sources:
         column_type: text
