@@ -21,27 +21,33 @@ from seaqa_indexer.seadb_models.models import SchemaTables
 
 logger = logging.getLogger(__name__)
 
-
-def get_personal_email_oauth_config(provider):
-    if provider == 'Gmail':
-        return {
-            'client_id': indexer_config.GOOGLE_EMAIL_CLIENT_ID,
-            'client_secret': indexer_config.GOOGLE_EMAIL_CLIENT_SECRET,
-            'token_url': 'https://oauth2.googleapis.com/token',
-            'scopes': [
+EMAIL_OAUTH_CONFIGS = {
+    'Gmail': {
+        'client_id': indexer_config.GOOGLE_EMAIL_CLIENT_ID,
+        'client_secret': indexer_config.GOOGLE_EMAIL_CLIENT_SECRET,
+        'token_url': 'https://oauth2.googleapis.com/token',
+        'scopes': {
+            'personal': [
                 'https://www.googleapis.com/auth/gmail.readonly',
                 'https://www.googleapis.com/auth/gmail.send',
                 'https://www.googleapis.com/auth/gmail.settings.basic',
             ],
-        }
-    if provider == 'Microsoft':
-        return {
-            'client_id': indexer_config.MICROSOFT_EMAIL_CLIENT_ID,
-            'client_secret': indexer_config.MICROSOFT_EMAIL_CLIENT_SECRET,
-            'token_url': 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-            'scopes': ['openid', 'profile', 'email', 'offline_access', 'User.Read', 'Mail.Read', 'Mail.Send'],
-        }
-    return None
+            'shared': [
+                'https://www.googleapis.com/auth/gmail.readonly',
+                'https://www.googleapis.com/auth/gmail.send',
+            ],
+        },
+    },
+    'Microsoft': {
+        'client_id': indexer_config.MICROSOFT_EMAIL_CLIENT_ID,
+        'client_secret': indexer_config.MICROSOFT_EMAIL_CLIENT_SECRET,
+        'token_url': 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        'scopes': {
+            'personal': ['openid', 'profile', 'email', 'offline_access', 'User.Read', 'Mail.Read', 'Mail.Send'],
+            'shared': ['offline_access', 'Mail.Read.Shared', 'Mail.Send.Shared'],
+        },
+    },
+}
 
 
 class EmailHandler(ConnectionHandler):
@@ -154,8 +160,23 @@ class EmailHandler(ConnectionHandler):
                     'refresh_token': oauth.refresh_token,
                     'expires_at': oauth.expires_at.timestamp(),
                 }
-                oauth_config = (get_personal_email_oauth_config(config.get('server_provider'))
-                                if config.get('account_type', 'personal') == 'personal' else config)
+                provider = config.get('server_provider')
+                account_type = config.get('account_type', 'personal')
+                provider_config = EMAIL_OAUTH_CONFIGS.get(provider)
+                if not provider_config or account_type not in provider_config['scopes']:
+                    raise EmailConfigError('Email OAuth provider configuration is invalid')
+                if account_type == 'personal':
+                    oauth_config = {
+                        'client_id': provider_config['client_id'],
+                        'client_secret': provider_config['client_secret'],
+                        'token_url': provider_config['token_url'],
+                        'scopes': provider_config['scopes'][account_type],
+                    }
+                else:
+                    required_scopes = set(provider_config['scopes'][account_type])
+                    if not isinstance(config.get('scopes'), list) or not required_scopes.issubset(set(config['scopes'])):
+                        raise EmailConfigError('Shared email OAuth scopes are incomplete')
+                    oauth_config = config
             mail_viewer = get_mail_viewer_from_config(config, oauth_token, oauth_config)
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)
