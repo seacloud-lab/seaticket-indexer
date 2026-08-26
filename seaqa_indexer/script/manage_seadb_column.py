@@ -20,7 +20,7 @@ class TableType:
 
 COLUMN_TYPE_TO_DATA_MAPPING = {
     PropertyTypes.TEXT: {
-        'text_compresse': {'compressed': True}
+        'text_compressed': {'compressed': True}
     },
     PropertyTypes.LIST: {
         'list_vector': ListTypes.vector,
