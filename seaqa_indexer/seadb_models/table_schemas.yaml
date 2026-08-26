@@ -1180,10 +1180,6 @@ tables:
     columns:
       issue_id:
         column_type: text
-      source_table:
-        column_type: text
-      app_id:
-        column_type: text
       title:
         column_type: text
       subtitle:
@@ -1194,14 +1190,8 @@ tables:
           compressed: true
       error_type:
         column_type: text
-      platform:
-        column_type: text
-      bundle_identifier:
-        column_type: text
       app_version:
         column_type: text
-      is_fatal:
-        column_type: bool
       occurrence_count:
         column_type: int64
       affected_users:
@@ -1234,12 +1224,8 @@ tables:
         column_type: int64
     indexes:
     - - issue_id
-    - - source_table
-    - - app_id
     - - title
     - - error_type
-    - - platform
-    - - bundle_identifier
     - - modified_time
     - - record_modified_time
     - - deleted

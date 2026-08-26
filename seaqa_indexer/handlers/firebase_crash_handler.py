@@ -7,15 +7,14 @@ from seaqa_indexer.index.index_store.firebase_crash_index import FirebaseCrashIn
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.seadb_models.firebase_crash_seadb_api import (
     FirebaseCrashSeaDBAPI,
-    normalize_crash_content,
 )
 from seaqa_indexer.seadb_models.models import SchemaTables
-from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
+from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_iso, time_to_utc_time
 from seaqa_indexer.config import FIREBASE_CRASH_CLIENT_ID, FIREBASE_CRASH_CLIENT_SECRET
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.utils.firebase_crash_api import (
+    FIREBASE_CRASHLYTICS_DATASET_ID,
     FirebaseCrashAPI,
-    FirebaseCrashAppMappingError,
     FirebaseCrashTokenRevokedError,
     GOOGLE_TOKEN_URL,
     refresh_google_access_token,
@@ -30,43 +29,11 @@ class FirebaseCrashHandler(ConnectionHandler):
     # latest exported event falls within that backfill window.
     INCREMENTAL_LOOKBACK = datetime.timedelta(days=30)
 
-    @staticmethod
-    def _normalize_datetime(value):
-        if value is None:
-            return None
-        if isinstance(value, datetime.datetime):
-            parsed = value
-        else:
-            try:
-                parsed = datetime.datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-            except (TypeError, ValueError):
-                return str(value)
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
-        return parsed.astimezone(datetime.timezone.utc).isoformat()
-
-    @staticmethod
-    def _normalize_bool(value):
-        if isinstance(value, str):
-            return value.strip().lower() in ('1', 'true', 'yes', 'y')
-        return bool(value)
-
     @classmethod
     def _issue_changed(cls, existed, issue):
-        for field in (
-            'app_id',
-            'title',
-            'subtitle',
-            'error_type',
-            'platform',
-            'bundle_identifier',
-            'app_version',
-        ):
-            if (existed.get(field) or '') != (issue.get(field) or ''):
+        for field in ('first_seen_time', 'last_seen_time'):
+            if time_to_utc_iso(existed.get(field)) != time_to_utc_iso(issue.get(field)):
                 return True
-
-        if cls._normalize_bool(existed.get('is_fatal')) != cls._normalize_bool(issue.get('is_fatal')):
-            return True
 
         for field in ('occurrence_count', 'affected_users'):
             try:
@@ -80,11 +47,7 @@ class FirebaseCrashHandler(ConnectionHandler):
             if existed_value != issue_value:
                 return True
 
-        for field in ('first_seen_time', 'last_seen_time'):
-            if cls._normalize_datetime(existed.get(field)) != cls._normalize_datetime(issue.get(field)):
-                return True
-
-        return (existed.get('content') or '') != normalize_crash_content(issue.get('exceptions_json'))
+        return False
 
     def gen_table_name(self, connection_id):
         return SchemaTables.FIREBASE_CRASH_ISSUES.table_name(connection_id)
@@ -110,36 +73,14 @@ class FirebaseCrashHandler(ConnectionHandler):
             f'{quote(str(app_id), safe="")}/issues/{quote(str(issue_id), safe="")}'
         )
 
-    @staticmethod
-    def _map_issue_app_ids(issues, app_ids_by_table):
-        for issue in issues:
-            source_table = issue.get('source_table')
-            issue['app_id'] = app_ids_by_table.get(source_table, '')
-        return issues
-
-    @staticmethod
-    def _split_tables_for_sync(table_names, old_last_sync_time, connection_status):
-        current_tables = list(dict.fromkeys(table_names))
-        known_tables = connection_status.get('firebase_crash_known_tables')
-        if not old_last_sync_time or not isinstance(known_tables, list):
-            return current_tables, []
-
-        known_tables = {
-            table_name for table_name in known_tables if isinstance(table_name, str)
-        }
-        return (
-            [table_name for table_name in current_tables if table_name not in known_tables],
-            [table_name for table_name in current_tables if table_name in known_tables],
-        )
-
     def format_vector_search_result(self, record, connection, result):
         config = json.loads(connection.config)
         return {
             'title': record.get('title', ''),
             'error_type': record.get('error_type', ''),
-            'platform': record.get('platform', ''),
+            'platform': config.get('platform', ''),
             'url': self._issue_url(
-                config.get('project_id'), record.get('app_id'), record.get('issue_id')
+                config.get('project_id'), config.get('app_id'), record.get('issue_id')
             ),
         }
 
@@ -170,8 +111,10 @@ class FirebaseCrashHandler(ConnectionHandler):
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
         project_id = config.get('project_id')
-        dataset_id = config.get('dataset_id')
-        if not project_id or not dataset_id:
+        app_id = config.get('app_id')
+        bundle_identifier = config.get('bundle_identifier')
+        platform = config.get('platform')
+        if not project_id or not app_id or not bundle_identifier or not platform:
             sync_logger.log('Firebase Crashlytics configuration is invalid')
             return None, None, None, None
 
@@ -233,6 +176,20 @@ class FirebaseCrashHandler(ConnectionHandler):
                 super().__init__(*args, **kwargs)
                 self._refresh_callback = refresh_callback
 
+            @property
+            def expired(self):
+                # google-auth compares `self.expiry` against its internal
+                # `utcnow()`, which is offset-naive on some versions, so
+                # normalize both sides to aware UTC to avoid "can't compare
+                # offset-naive and offset-aware datetimes".
+                if not self.expiry:
+                    return False
+                expiry = self.expiry
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=datetime.timezone.utc)
+                skewed_expiry = expiry - datetime.timedelta(seconds=10)
+                return datetime.datetime.now(datetime.timezone.utc) >= skewed_expiry
+
             def refresh(self, request):
                 new_tokens = self._refresh_callback()
                 self.token = new_tokens['access_token']
@@ -253,7 +210,7 @@ class FirebaseCrashHandler(ConnectionHandler):
             firebase_api = FirebaseCrashAPI(
                 project_id,
                 credentials,
-                dataset_id,
+                FIREBASE_CRASHLYTICS_DATASET_ID,
                 refresh_access_token=refresh_credentials,
             )
             table_names = firebase_api.list_app_tables()
@@ -266,42 +223,25 @@ class FirebaseCrashHandler(ConnectionHandler):
                 'The selected BigQuery dataset does not contain Firebase Crashlytics export tables.'
             )
             return None, None, None, None
-        try:
-            app_ids_by_table = firebase_api.get_app_ids_by_table()
-        except FirebaseCrashAppMappingError as exc:
-            # Table exports remain usable when Firebase Management API access
-            # is unavailable. Only console deep links require this mapping.
-            sync_logger.log(f'{exc} Crashlytics console links will be unavailable.')
-            app_ids_by_table = {}
-        unmapped_tables = sorted(set(table_names) - set(app_ids_by_table))
-        if unmapped_tables:
-            sync_logger.log(
-                'Crashlytics tables without a current Firebase application ID '
-                'will sync without console links: '
-                + ', '.join(unmapped_tables)
-            )
+        table_id = FirebaseCrashAPI._table_id_for_app(bundle_identifier, platform)
+        if table_id and table_id in table_names:
+            table_names = [table_id]
+        else:
+            sync_logger.log('The selected Firebase application has no Crashlytics export table.')
+            return None, None, None, None
 
-        full_sync_tables, incremental_sync_tables = self._split_tables_for_sync(
-            table_names, old_last_sync_time, connection_status
+        known_tables = connection_status.get('firebase_crash_known_tables')
+        is_first_sync = (
+            not old_last_sync_time
+            or not isinstance(known_tables, list)
+            or table_id not in known_tables
         )
         since = None
-        if old_last_sync_time:
+        if not is_first_sync:
             since_time = time_to_utc_time(str(old_last_sync_time)) - self.INCREMENTAL_LOOKBACK
             since = since_time.isoformat()
         try:
-            issues = []
-            if full_sync_tables:
-                issues.extend(
-                    firebase_api.list_crash_issues(
-                        since=None, table_names=full_sync_tables
-                    )
-                )
-            if incremental_sync_tables:
-                issues.extend(
-                    firebase_api.list_crash_issues(
-                        since=since, table_names=incremental_sync_tables
-                    )
-                )
+            issues = firebase_api.list_crash_issues(since=since, table_names=table_names)
         except Exception as exc:
             sync_logger.log(f'Failed to query Firebase Crashlytics BigQuery export: {exc}')
             return None, None, None, None
@@ -313,9 +253,9 @@ class FirebaseCrashHandler(ConnectionHandler):
         updated_count = 0
         status_time = datetime.datetime.now()
         status_count = 0
-        for issue in self._map_issue_app_ids(issues, app_ids_by_table):
+        for issue in issues:
             existed = seadb_api.get_issue_by_identity(
-                issue.get('issue_id'), issue.get('source_table'), connection_id
+                issue.get('issue_id'), connection_id
             )
             if existed and not self._issue_changed(existed, issue):
                 continue

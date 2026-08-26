@@ -2,6 +2,7 @@ import datetime
 import json
 
 from seaqa_indexer.seadb_models.models import SchemaTables
+from seaqa_indexer.utils import time_to_utc_iso
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 
 
@@ -54,7 +55,7 @@ def normalize_crash_content(exceptions_json):
     def append_thread(thread):
         if not isinstance(thread, dict):
             return
-        thread_name = thread.get('queue_name') or 'Thread'
+        thread_name = thread.get('title') or 'Thread'
         if thread.get('crashed') is True:
             thread_name = f'{thread_name} (crashed)'
         lines.append(thread_name)
@@ -88,16 +89,6 @@ def normalize_crash_content(exceptions_json):
     return '\n'.join(lines)[:MAX_CONTENT_LENGTH]
 
 
-def _isoformat(value):
-    if value is None:
-        return None
-    if isinstance(value, datetime.datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=datetime.timezone.utc)
-        return value.astimezone(datetime.timezone.utc).isoformat()
-    return str(value)
-
-
 class FirebaseCrashSeaDBAPI:
     def __init__(self, base_id):
         self.base_id = base_id
@@ -111,17 +102,16 @@ class FirebaseCrashSeaDBAPI:
         rows = response.get('results', []) if response else []
         return rows[0].get('count', 0) if rows else 0
 
-    def get_issue_by_identity(self, issue_id, source_table, connection_id):
+    def get_issue_by_identity(self, issue_id, connection_id):
         table_name = SchemaTables.FIREBASE_CRASH_ISSUES.table_name(connection_id)
         escaped_issue_id = str(issue_id).replace("'", "''")
-        escaped_source_table = str(source_table).replace("'", "''")
         sql = f"""
-            SELECT `_pk`, `issue_id`, `source_table`, `app_id`, `title`, `subtitle`, `content`, `error_type`, `platform`,
-                   `bundle_identifier`, `app_version`, `is_fatal`,
+            SELECT `_pk`, `issue_id`, `title`, `subtitle`, `content`, `error_type`,
+                   `app_version`,
                    `occurrence_count`, `affected_users`, `first_seen_time`, `last_seen_time`,
                    `created_time`
             FROM `{table_name}`
-            WHERE `issue_id` = '{escaped_issue_id}' AND `source_table` = '{escaped_source_table}'
+            WHERE `issue_id` = '{escaped_issue_id}'
             LIMIT 1
         """
         rows = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
@@ -130,22 +120,17 @@ class FirebaseCrashSeaDBAPI:
     def save_or_update_issue_to_db(self, connection_id, issue, existed_issue):
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         table_name = SchemaTables.FIREBASE_CRASH_ISSUES.table_name(connection_id)
-        last_seen = _isoformat(issue.get('last_seen_time'))
-        first_seen = _isoformat(issue.get('first_seen_time'))
+        last_seen = time_to_utc_iso(issue.get('last_seen_time'))
+        first_seen = time_to_utc_iso(issue.get('first_seen_time'))
         sync_row = {
             SchemaTables.FIREBASE_CRASH_ISSUES.column.issue_id.name: str(issue.get('issue_id') or ''),
-            SchemaTables.FIREBASE_CRASH_ISSUES.column.source_table.name: str(issue.get('source_table') or ''),
-            SchemaTables.FIREBASE_CRASH_ISSUES.column.app_id.name: str(issue.get('app_id') or ''),
             SchemaTables.FIREBASE_CRASH_ISSUES.column.title.name: issue.get('title') or '',
             SchemaTables.FIREBASE_CRASH_ISSUES.column.subtitle.name: issue.get('subtitle') or '',
             SchemaTables.FIREBASE_CRASH_ISSUES.column.content.name: normalize_crash_content(
                 issue.get('exceptions_json')
             ),
             SchemaTables.FIREBASE_CRASH_ISSUES.column.error_type.name: issue.get('error_type'),
-            SchemaTables.FIREBASE_CRASH_ISSUES.column.platform.name: issue.get('platform'),
-            SchemaTables.FIREBASE_CRASH_ISSUES.column.bundle_identifier.name: issue.get('bundle_identifier'),
             SchemaTables.FIREBASE_CRASH_ISSUES.column.app_version.name: issue.get('app_version'),
-            SchemaTables.FIREBASE_CRASH_ISSUES.column.is_fatal.name: issue.get('is_fatal'),
             SchemaTables.FIREBASE_CRASH_ISSUES.column.occurrence_count.name: int(
                 issue.get('occurrence_count') or 0
             ),
@@ -174,7 +159,7 @@ class FirebaseCrashSeaDBAPI:
             where = f"WHERE `record_modified_time` >= '{last_indexed_at}'"
         sql = f"""
             SELECT `_pk`, `deleted`, `outdated`, `content`, `title`, `modified_time`,
-                   `issue_id`, `source_table`, `app_id`, `subtitle`, `error_type`, `platform`
+                   `issue_id`, `subtitle`, `error_type`
             FROM `{table_name}` {where}
             ORDER BY `_pk` ASC
             LIMIT {page_size} OFFSET {offset}

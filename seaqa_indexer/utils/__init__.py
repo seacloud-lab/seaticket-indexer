@@ -117,6 +117,14 @@ def time_to_utc_time(time_data):
     return dt.astimezone(datetime.timezone.utc)
 
 
+def time_to_utc_iso(value):
+    if isinstance(value, datetime.datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=datetime.timezone.utc)
+        return value.astimezone(datetime.timezone.utc).isoformat()
+    return value
+
+
 def decrypt_config(config):
     config_clone = deepcopy(config)
     cryptor = AESPasswordHasher()
