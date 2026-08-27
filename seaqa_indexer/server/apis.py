@@ -138,7 +138,6 @@ def project_storage_usage():
 
     return jsonify({
         'success': True,
-        'project_uuid': project_uuid,
         'usage': {
             'file_size': usage['file_size'],
             'file_object_count': usage['file_object_count'],

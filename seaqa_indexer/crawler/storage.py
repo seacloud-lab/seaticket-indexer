@@ -160,7 +160,7 @@ class S3Storage(BaseStorage):
             error_codes = sorted({error.get('Code', 'Unknown') for error in errors})
             raise RuntimeError('Failed to delete %s S3 objects, error codes: %s' % (len(errors), ', '.join(error_codes)))
 
-    def _sum_prefix(self, bucket, prefix):
+    def _get_s3_prefix_storage_usage(self, bucket, prefix):
         total_size = 0
         object_count = 0
         continuation_token = None
@@ -190,8 +190,12 @@ class S3Storage(BaseStorage):
     def get_project_storage_usage(self, project_uuid):
         project_uuid_36 = uuid_str_to_36_chars(project_uuid)
 
-        file_size, file_object_count = self._sum_prefix(self.file_bucket, f'/projects/{project_uuid_36}/')
-        crawl_size, crawl_object_count = self._sum_prefix(self.bucket, f'{project_uuid}/')
+        file_size, file_object_count = self._get_s3_prefix_storage_usage(
+            self.file_bucket, f'/projects/{project_uuid_36}/'
+        )
+        crawl_size, crawl_object_count = self._get_s3_prefix_storage_usage(
+            self.bucket, f'{project_uuid}/'
+        )
         return {
             'file_size': file_size,
             'file_object_count': file_object_count,
