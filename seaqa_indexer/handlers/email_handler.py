@@ -174,8 +174,7 @@ class EmailHandler(ConnectionHandler):
 
         return total_deleted
 
-    def _sync_email(
-            self, connection_id, project_uuid, connection_status, since, mail_viewer,
+    def _sync_email(self, connection_id, project_uuid, connection_status, since, mail_viewer,
             seaqa_db, email_seadb_api, storage, is_first_sync):
         sync_count = 0
         added_count = 0
