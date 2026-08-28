@@ -10,13 +10,11 @@ from seaqa_indexer.seadb_models.firebase_crash_seadb_api import (
 )
 from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_iso, time_to_utc_time
-from seaqa_indexer.config import FIREBASE_CRASH_CLIENT_ID, FIREBASE_CRASH_CLIENT_SECRET
 from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
 from seaqa_indexer.utils.firebase_crash_api import (
     FIREBASE_CRASHLYTICS_DATASET_ID,
     FirebaseCrashAPI,
     FirebaseCrashTokenRevokedError,
-    GOOGLE_TOKEN_URL,
     refresh_google_access_token,
 )
 
@@ -148,54 +146,12 @@ class FirebaseCrashHandler(ConnectionHandler):
             sync_logger.log('google-cloud-bigquery is required for Firebase Crashlytics connections')
             return None, None, None, None
 
-        def refresh_credentials():
-            nonlocal access_token, refresh_token, expires_at
-            new_tokens = refresh_google_access_token(refresh_token)
-            access_token = new_tokens['access_token']
-            refresh_token = new_tokens['refresh_token']
-            expires_at = new_tokens['expires_at']
-            seaqa_db.update_project_connection_oauth(
-                project_uuid,
-                ConnectionType.FIREBASE_CRASH.value,
-                access_token,
-                expires_at,
-                refresh_token,
-            )
-            return new_tokens
-
-        class PersistentFirebaseCrashCredentials(Credentials):
-            def __init__(self, *args, refresh_callback=None, **kwargs):
-                super().__init__(*args, **kwargs)
-                self._refresh_callback = refresh_callback
-
-            @property
-            def expired(self):
-                # google-auth compares `self.expiry` against its internal
-                # `utcnow()`, which is offset-naive on some versions, so
-                # normalize both sides to aware UTC to avoid "can't compare
-                # offset-naive and offset-aware datetimes".
-                if not self.expiry:
-                    return False
-                expiry = self.expiry
-                if expiry.tzinfo is None:
-                    expiry = expiry.replace(tzinfo=datetime.timezone.utc)
-                skewed_expiry = expiry - datetime.timedelta(seconds=10)
-                return datetime.datetime.now(datetime.timezone.utc) >= skewed_expiry
-
-            def refresh(self, request):
-                new_tokens = self._refresh_callback()
-                self.token = new_tokens['access_token']
-                self.refresh_token = new_tokens['refresh_token']
-                self.expiry = new_tokens['expires_at']
-
-        credentials = PersistentFirebaseCrashCredentials(
+        # google-auth 的 Credentials.expired 用 offset-naive 的 utcnow() 和 expiry
+        # 比较，aware expiry 会触发 "can't compare offset-naive and offset-aware
+        # datetimes"。这里把 expiry 转成 naive UTC 以匹配。
+        credentials = Credentials(
             token=access_token,
-            refresh_token=refresh_token,
-            token_uri=GOOGLE_TOKEN_URL,
-            client_id=FIREBASE_CRASH_CLIENT_ID,
-            client_secret=FIREBASE_CRASH_CLIENT_SECRET,
-            expiry=expires_at,
-            refresh_callback=refresh_credentials,
+            expiry=expires_at.replace(tzinfo=None),
         )
 
         try:
@@ -203,7 +159,6 @@ class FirebaseCrashHandler(ConnectionHandler):
                 project_id,
                 credentials,
                 FIREBASE_CRASHLYTICS_DATASET_ID,
-                refresh_access_token=refresh_credentials,
             )
             table_names = firebase_api.list_app_tables()
         except Exception as exc:

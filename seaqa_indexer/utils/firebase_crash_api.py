@@ -64,7 +64,7 @@ class FirebaseCrashAPI:
 
     def __init__(self, project_id, credentials, dataset_id,
                  timeout=60, client=None, bigquery_module=None, maximum_bytes_billed=None,
-                 refresh_access_token=None, query_timeout=None):
+                 query_timeout=None):
         self.project_id = project_id
         self.dataset_id = dataset_id
         self.timeout = timeout
@@ -72,7 +72,6 @@ class FirebaseCrashAPI:
             FIREBASE_CRASH_QUERY_TIMEOUT if query_timeout is None else query_timeout
         )
         self.credentials = credentials
-        self.refresh_access_token = refresh_access_token
         self.maximum_bytes_billed = int(
             (FIREBASE_CRASH_MAXIMUM_BYTES_BILLED if maximum_bytes_billed is None
              else maximum_bytes_billed) or 0
