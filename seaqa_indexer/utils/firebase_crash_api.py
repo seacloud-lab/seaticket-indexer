@@ -130,7 +130,7 @@ class FirebaseCrashAPI:
         )
         return table_ids
 
-    def _source_select(self, table_id):
+    def _source_select(self, table_id, since=None):
         if not APP_TABLE_PATTERN.fullmatch(table_id or ''):
             raise ValueError(f'Invalid Crashlytics BigQuery table name: {table_id}')
         table_ref = f'{self.project_id}.{self.dataset_id}.{table_id}'
@@ -236,6 +236,14 @@ class FirebaseCrashAPI:
         event_id_expression = self._sql_string(event_id)
         issue_id_expression = self._sql_string(issue_id)
         event_timestamp_expression = f'CAST({timestamp} AS TIMESTAMP)'
+        where_clause = [
+            f"NULLIF(TRIM({event_id_expression}), '') IS NOT NULL",
+            f"NULLIF(TRIM({issue_id_expression}), '') IS NOT NULL",
+            f"{event_timestamp_expression} IS NOT NULL",
+        ]
+        if since:
+            where_clause.append(f"{event_timestamp_expression} >= @since")
+        where = '\n              AND '.join(where_clause)
         return f"""
             SELECT
               {event_id_expression} AS event_id,
@@ -248,17 +256,14 @@ class FirebaseCrashAPI:
               {event_timestamp_expression} AS event_timestamp,
               {affected_user_id} AS affected_user_id
             FROM `{table_ref}`
-            WHERE NULLIF(TRIM({event_id_expression}), '') IS NOT NULL
-              AND NULLIF(TRIM({issue_id_expression}), '') IS NOT NULL
-              AND {event_timestamp_expression} IS NOT NULL
+            WHERE {where}
         """
 
     def build_issues_query(self, table_names, since=None):
         if not table_names:
             return None
-        source_queries = [self._source_select(table_name) for table_name in table_names]
+        source_queries = [self._source_select(table_name, since) for table_name in table_names]
         source_events = '\nUNION ALL\n'.join(source_queries)
-        having_clause = 'HAVING MAX(event_timestamp) >= @since' if since else ''
 
         return f"""
             WITH source_events AS (
@@ -280,7 +285,6 @@ class FirebaseCrashAPI:
               COUNT(DISTINCT affected_user_id) AS affected_users
             FROM source_events
             GROUP BY issue_id
-            {having_clause}
             ORDER BY last_seen_time DESC, issue_id ASC
         """
 

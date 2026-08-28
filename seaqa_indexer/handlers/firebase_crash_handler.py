@@ -31,21 +31,13 @@ class FirebaseCrashHandler(ConnectionHandler):
 
     @classmethod
     def _issue_changed(cls, existed, issue):
-        for field in ('first_seen_time', 'last_seen_time'):
-            if time_to_utc_iso(existed.get(field)) != time_to_utc_iso(issue.get(field)):
-                return True
+        if time_to_utc_iso(issue.get('last_seen_time')) != time_to_utc_iso(existed.get('last_seen_time')):
+            return True
 
-        for field in ('occurrence_count', 'affected_users'):
-            try:
-                existed_value = int(existed.get(field) or 0)
-            except (TypeError, ValueError):
-                existed_value = 0
-            try:
-                issue_value = int(issue.get(field) or 0)
-            except (TypeError, ValueError):
-                issue_value = 0
-            if existed_value != issue_value:
-                return True
+        issue_first = time_to_utc_iso(issue.get('first_seen_time'))
+        existed_first = time_to_utc_iso(existed.get('first_seen_time'))
+        if issue_first and existed_first and issue_first < existed_first:
+            return True
 
         return False
 

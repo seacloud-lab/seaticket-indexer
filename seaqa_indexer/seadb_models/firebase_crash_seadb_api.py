@@ -122,6 +122,14 @@ class FirebaseCrashSeaDBAPI:
         table_name = SchemaTables.FIREBASE_CRASH_ISSUES.table_name(connection_id)
         last_seen = time_to_utc_iso(issue.get('last_seen_time'))
         first_seen = time_to_utc_iso(issue.get('first_seen_time'))
+        occurrence_count = int(issue.get('occurrence_count') or 0)
+        affected_users = int(issue.get('affected_users') or 0)
+        if existed_issue:
+            existed_first_seen = existed_issue.get('first_seen_time')
+            if existed_first_seen and (not first_seen or existed_first_seen < first_seen):
+                first_seen = existed_first_seen
+            occurrence_count += int(existed_issue.get('occurrence_count') or 0)
+            affected_users = max(affected_users, int(existed_issue.get('affected_users') or 0))
         sync_row = {
             SchemaTables.FIREBASE_CRASH_ISSUES.column.issue_id.name: str(issue.get('issue_id') or ''),
             SchemaTables.FIREBASE_CRASH_ISSUES.column.title.name: issue.get('title') or '',
@@ -131,12 +139,8 @@ class FirebaseCrashSeaDBAPI:
             ),
             SchemaTables.FIREBASE_CRASH_ISSUES.column.error_type.name: issue.get('error_type'),
             SchemaTables.FIREBASE_CRASH_ISSUES.column.app_version.name: issue.get('app_version'),
-            SchemaTables.FIREBASE_CRASH_ISSUES.column.occurrence_count.name: int(
-                issue.get('occurrence_count') or 0
-            ),
-            SchemaTables.FIREBASE_CRASH_ISSUES.column.affected_users.name: int(
-                issue.get('affected_users') or 0
-            ),
+            SchemaTables.FIREBASE_CRASH_ISSUES.column.occurrence_count.name: occurrence_count,
+            SchemaTables.FIREBASE_CRASH_ISSUES.column.affected_users.name: affected_users,
             SchemaTables.FIREBASE_CRASH_ISSUES.column.first_seen_time.name: first_seen,
             SchemaTables.FIREBASE_CRASH_ISSUES.column.last_seen_time.name: last_seen,
             SchemaTables.FIREBASE_CRASH_ISSUES.column.modified_time.name: last_seen,
