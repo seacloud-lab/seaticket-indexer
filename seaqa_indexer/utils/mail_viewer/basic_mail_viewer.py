@@ -31,7 +31,12 @@ class BasicMailViewer:
                 continue
             if charset.lower() in ['gb2312', 'gbk', 'gb18030']:
                 charset = 'gb18030'
-            result_str += part.decode(charset, errors='replace')
+            try:
+                result_str += part.decode(charset, errors='replace')
+            except LookupError:
+                logger.warning('Unknown email header charset: %s, falling back to detected encoding', charset)
+                guess = from_bytes(part).best()
+                result_str += str(guess) if guess else part.decode('utf-8', errors='replace')
         return result_str
 
     @staticmethod

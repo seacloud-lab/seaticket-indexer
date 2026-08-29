@@ -13,6 +13,10 @@ class EmailSeaDBAPI:
         self.seadb_api = SeaDBAPI()
 
     @staticmethod
+    def _escape_sql_value(value):
+        return str(value).replace("'", "''")
+
+    @staticmethod
     def _normalize_subject(subject):
         if subject is None:
             return "(No Subject)"
@@ -42,7 +46,6 @@ class EmailSeaDBAPI:
             'is_sender': email['is_sender'],
             'email_id': email.get('email_id'),
             'origin_thread_id': email.get('origin_thread_id'),
-            'deleted': False,
             'text_content': email['content'][:SEADB_CONTENT_SIZE_LIMIT],
         }
 
@@ -50,7 +53,6 @@ class EmailSeaDBAPI:
 
         if existed_email:
             _pk = existed_email.get('_pk')
-            insert_row['unread'] = not is_first_sync
             update_row = [
                 {
                     "pk": _pk,
@@ -60,7 +62,8 @@ class EmailSeaDBAPI:
             self.seadb_api.update_rows(self.base_id, table_name, update_row)
             return _pk
         else:
-            insert_row['unread'] = not is_first_sync
+            insert_row['deleted'] = False
+            insert_row['unread'] = not is_first_sync and not email['is_sender']
             resp = self.seadb_api.insert_rows(self.base_id, table_name, [insert_row])
             return resp.get('pks')[0]
 
@@ -82,8 +85,9 @@ class EmailSeaDBAPI:
 
     def update_email_thread_id(self, connection_id, message_id, thread_id):
         table_name = SchemaTables.EMAIL.table_name(connection_id=connection_id)
+        safe_message_id = self._escape_sql_value(message_id)
 
-        sql = f"SELECT _pk FROM `{table_name}` WHERE `message_id`='{message_id}'"
+        sql = f"SELECT _pk FROM `{table_name}` WHERE `message_id`='{safe_message_id}'"
         results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if results:
             _pk = results[0].get('_pk')
@@ -145,15 +149,23 @@ class EmailSeaDBAPI:
 
     def get_threaded_emails_by_page(self, connection_id, since, page_size, offset):
         table_name = SchemaTables.EMAIL.table_name(connection_id=connection_id)
-        sql = f"SELECT message_id, thread_id FROM `{table_name}` WHERE sync_time >= '{since}' and thread_id is not null LIMIT {page_size} OFFSET {offset}"
+        sql = (
+            f"SELECT message_id, origin_thread_id, thread_id FROM `{table_name}` "
+            f"WHERE sync_time >= '{since}' and thread_id is not null LIMIT {page_size} OFFSET {offset}"
+        )
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results
 
     def get_thread_emails_by_message_ids(self, connection_id, message_ids):
-        message_ids_str = ', '.join([f"'{message_id}'" for message_id in message_ids])
+        message_ids_str = ', '.join([
+            f"'{self._escape_sql_value(message_id)}'" for message_id in message_ids
+        ])
         table_name = SchemaTables.EMAIL.table_name(connection_id=connection_id)
-        sql = f"SELECT message_id, thread_id FROM `{table_name}` WHERE `message_id`in ({message_ids_str}) and thread_id is not null"
+        sql = (
+            f"SELECT message_id, thread_id FROM `{table_name}` "
+            f"WHERE `message_id` in ({message_ids_str}) and thread_id is not null"
+        )
         res = self.seadb_api.query_rows(self.base_id, sql)
         results = res.get('results', [])
         return results
@@ -169,7 +181,37 @@ class EmailSeaDBAPI:
 
     def get_email_by_message_id(self, connection_id, message_id):
         table_name = SchemaTables.EMAIL.table_name(connection_id=connection_id)
-        sql = f"SELECT _pk, modified_time, thread_id FROM `{table_name}` WHERE message_id='{message_id}'"
+        safe_message_id = self._escape_sql_value(message_id)
+        sql = (
+            f"SELECT _pk, modified_time, thread_id, message_id, email_id, origin_thread_id "
+            f"FROM `{table_name}` WHERE message_id='{safe_message_id}'"
+        )
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        result = res.get('results', [])
+        return result[0] if result else {}
+
+    def get_email_by_email_id(self, connection_id, email_id):
+        if not email_id:
+            return {}
+        table_name = SchemaTables.EMAIL.table_name(connection_id=connection_id)
+        safe_email_id = self._escape_sql_value(email_id)
+        sql = (
+            f"SELECT _pk, modified_time, thread_id, message_id, email_id, origin_thread_id "
+            f"FROM `{table_name}` WHERE email_id='{safe_email_id}'"
+        )
+        res = self.seadb_api.query_rows(self.base_id, sql)
+        result = res.get('results', [])
+        return result[0] if result else {}
+
+    def get_email_by_origin_thread_id(self, connection_id, origin_thread_id):
+        if not origin_thread_id:
+            return {}
+        table_name = SchemaTables.EMAIL.table_name(connection_id=connection_id)
+        safe_origin_thread_id = self._escape_sql_value(origin_thread_id)
+        sql = (
+            f"SELECT _pk, thread_id FROM `{table_name}` "
+            f"WHERE origin_thread_id='{safe_origin_thread_id}' and thread_id is not null LIMIT 1"
+        )
         res = self.seadb_api.query_rows(self.base_id, sql)
         result = res.get('results', [])
         return result[0] if result else {}
