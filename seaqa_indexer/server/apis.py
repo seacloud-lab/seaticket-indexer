@@ -118,6 +118,34 @@ def cleanup_deleted_connection():
 
     return jsonify({'success': True}), 200
 
+
+@application.route('/storage-usage/project', methods=['POST'])
+@auth_required
+def project_storage_usage():
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return jsonify({'success': False, 'error_msg': 'Bad request'}), 400
+    project_uuid = data.get('project_uuid')
+    if not project_uuid:
+        return jsonify({'success': False, 'error_msg': 'Missing project_uuid parameter'}), 400
+
+    try:
+        usage = get_storage().get_project_storage_usage(project_uuid)
+    except Exception:
+        logger.exception('Project storage usage failed for project %s', project_uuid)
+        return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
+
+    return jsonify({
+        'success': True,
+        'usage': {
+            'file_size': usage['file_size'],
+            'file_object_count': usage['file_object_count'],
+            'crawl_data_size': usage['crawl_data_size'],
+            'crawl_object_count': usage['crawl_object_count'],
+        },
+    }), 200
+
 @application.route('/manual-sync-connection', methods=['POST'])
 @auth_required
 def manual_sync_connection():
