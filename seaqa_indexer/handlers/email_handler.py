@@ -327,6 +327,10 @@ class EmailHandler(ConnectionHandler):
                 state_event_type=state_event_type,
                 additional_items=new_emails_by_thread_id.get(thread_id),
                 additional_event_type=DataEventType.EMAIL_MESSAGE_ADDED.value,
+                state_event_extra_new_value=(
+                    email_seadb_api.get_first_email(connection_id, thread_id)
+                    if state_event_type == DataEventType.EMAIL_THREAD_ADDED.value else None
+                ),
                 state_event_ignored_fields=('modified_time', 'unread', 'record_modified_time', 'sync_time'),
                 log_object_name='email thread',
             )

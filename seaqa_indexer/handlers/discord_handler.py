@@ -265,15 +265,16 @@ class DiscordHandler(ConnectionHandler):
                 if int(last_message_id) <= int(after_snowflake):
                     continue
 
-            thread_messages = self._fetch_all_messages(
-                discord_api, thread_id, after=after_snowflake
-            )
-
-
             existing_thread = discord_seadb_api.get_thread_by_thread_id(
                 connection_id, thread_id
             )
             is_new_record = not existing_thread
+
+            # A newly discovered thread needs its opening message even when it
+            # was created before the last connection sync.
+            thread_messages = self._fetch_all_messages(
+                discord_api, thread_id, after=None if is_new_record else after_snowflake
+            )
 
             discord_seadb_api.save_or_update_thread_to_db(
                 connection_id, thread, existing_thread
@@ -309,6 +310,10 @@ class DiscordHandler(ConnectionHandler):
                 state_event_type=event_type,
                 additional_items=message_result.get('added_messages', []),
                 additional_event_type=DataEventType.DISCORD_THREAD_MESSAGE_ADDED.value,
+                state_event_extra_new_value=(
+                    discord_seadb_api.get_thread_opening_message(connection_id, thread_id)
+                    if is_new_record else None
+                ),
                 state_event_ignored_fields=(
                     'modified_time', 'record_modified_time', 'sync_time'
                 ),

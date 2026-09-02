@@ -191,6 +191,63 @@ class TestPublishSyncedRecordEvents:
             'content': 'New message body',
         }
 
+    def test_publish_state_event_merges_opening_content(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {
+                '_pk': 20,
+                'title': 'New thread',
+                'modified_time': '2026-05-22T10:00:00+00:00',
+            },
+            project_uuid='project-2',
+            connection_id=10,
+            item_id='item-10',
+            old_row=None,
+            state_event_type='dummy_added',
+            state_event_extra_new_value={
+                'message_id': 'message-1',
+                'content': 'Opening message body',
+            },
+        )
+
+        payload = json.loads(handler.mq.publish.call_args[0][1])
+        assert payload['event']['new_value'] == {
+            '_pk': 20,
+            'title': 'New thread',
+            'modified_time': '2026-05-22T10:00:00+00:00',
+            'message_id': 'message-1',
+            'content': 'Opening message body',
+        }
+
+    def test_publish_state_event_without_opening_identity_keeps_thread_payload(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {
+                '_pk': 21,
+                'title': 'New thread',
+                'modified_time': '2026-05-22T10:00:00+00:00',
+            },
+            project_uuid='project-2',
+            connection_id=10,
+            item_id='item-11',
+            old_row=None,
+            state_event_type='dummy_added',
+            state_event_extra_new_value=None,
+        )
+
+        payload = json.loads(handler.mq.publish.call_args[0][1])
+        assert payload['event']['new_value'] == {
+            '_pk': 21,
+            'title': 'New thread',
+            'modified_time': '2026-05-22T10:00:00+00:00',
+        }
+        assert 'message_id' not in payload['event']['new_value']
+        assert 'post_number' not in payload['event']['new_value']
+
     def test_publish_skip_additional_event_when_old_row_is_none(self):
         handler = DummyHandler()
         handler.mq = Mock()

@@ -246,6 +246,14 @@ class DiscordSeaDBAPI:
             return result[0]
         return {}
 
+    def get_thread_opening_message(self, connection_id, thread_id):
+        table_name = SchemaTables.DISCORD_THREAD_MESSAGES.table_name(connection_id=connection_id)
+        sql = f"""SELECT message_id, author, content, created_time, modified_time
+                FROM `{table_name}` WHERE thread_id = '{thread_id}'
+                ORDER BY created_time ASC, message_id ASC LIMIT 1"""
+        result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+        return result[0] if result else {}
+
     def get_thread_messages_by_page(self, connection_id, thread_id, page_size, offset):
         table_name = SchemaTables.DISCORD_THREAD_MESSAGES.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `message_id`, `author`, `content`, `modified_time` FROM `{table_name}`
