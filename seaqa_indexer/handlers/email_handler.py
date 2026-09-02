@@ -217,6 +217,7 @@ class EmailHandler(ConnectionHandler):
                     'subject': email.get('subject'),
                     'is_sender': email.get('is_sender'),
                     'email_from': email.get('email_from'),
+                    'content': email.get('content'),
                     '_is_new_email': not bool(existed_email),
                 }
                 changed_email_list.append(email_info)
