@@ -14,6 +14,7 @@ from seaqa_indexer.handlers.seafile_handler import SeafileHandler
 from seaqa_indexer.handlers.email_handler import EmailHandler
 from seaqa_indexer.handlers.general_task_handler import GeneralTaskHandler
 from seaqa_indexer.handlers.discord_handler import DiscordHandler
+from seaqa_indexer.handlers.slack_handler import SlackHandler
 
 ConnectionHandlerRegistry.register(SiteHandler)
 ConnectionHandlerRegistry.register(DiscourseHandler)
@@ -26,6 +27,7 @@ ConnectionHandlerRegistry.register(NotionHandler)
 ConnectionHandlerRegistry.register(ConfluenceHandler)
 ConnectionHandlerRegistry.register(GeneralTaskHandler)
 ConnectionHandlerRegistry.register(DiscordHandler)
+ConnectionHandlerRegistry.register(SlackHandler)
 
 
 __all__ = [
@@ -43,4 +45,5 @@ __all__ = [
     'ConfluenceHandler',
     'GeneralTaskHandler',
     'DiscordHandler',
+    'SlackHandler',
 ]

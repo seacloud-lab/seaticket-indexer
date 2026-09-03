@@ -28,8 +28,8 @@ COLUMN_TYPE_TO_DATA_MAPPING = {
     }
 }
 
-TABLE_CONTAINING_SUB_TABLE_NAMES = ['email', 'github_issue', 'discourse_forum', 'linear_issue', 'discord_thread', 'jira_issue']
-SUB_TABLE_NAMES = ['email_thread', 'github_issue_comments', 'discourse_forum_replies', 'linear_issue_comments', 'discord_thread_messages', 'jira_issue_comments']
+TABLE_CONTAINING_SUB_TABLE_NAMES = ['email', 'github_issue', 'discourse_forum', 'linear_issue', 'discord_thread', 'jira_issue', 'slack_message']
+SUB_TABLE_NAMES = ['email_thread', 'github_issue_comments', 'discourse_forum_replies', 'linear_issue_comments', 'discord_thread_messages', 'jira_issue_comments', 'slack_message_replies']
 
 class ColumnManager:
 

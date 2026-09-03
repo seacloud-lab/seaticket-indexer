@@ -57,7 +57,7 @@ def add_connection_sync_task():
     elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
                        ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value, ConnectionType.NOTION.value,
                        ConnectionType.GENERAL_TASK.value, ConnectionType.LINEAR.value, ConnectionType.CONFLUENCE.value,
-                             ConnectionType.DISCORD.value, ConnectionType.JIRA_ISSUE.value):
+                             ConnectionType.DISCORD.value, ConnectionType.SLACK.value, ConnectionType.JIRA_ISSUE.value):
         application.app.sync_manager.check_and_sync(connection_id)
     else:
         return jsonify({'success': False, 'error_msg': f'Unsupported type: {connection_type}'}), 400
@@ -163,7 +163,7 @@ def manual_sync_connection():
         elif connection_type in (ConnectionType.GITHUB_ISSUE.value, ConnectionType.DISCOURSE_FORUM.value,
                                  ConnectionType.SEAFILE.value, ConnectionType.EMAIL.value, ConnectionType.NOTION.value,
                                  ConnectionType.GENERAL_TASK.value, ConnectionType.LINEAR.value, ConnectionType.CONFLUENCE.value,
-                                 ConnectionType.DISCORD.value, ConnectionType.JIRA_ISSUE.value):
+                                 ConnectionType.DISCORD.value, ConnectionType.SLACK.value, ConnectionType.JIRA_ISSUE.value):
             application.app.sync_manager.check_and_sync(connection_id)
         else:
             return jsonify({'success': False, 'error_msg': 'Unsupported connection type'}), 400
