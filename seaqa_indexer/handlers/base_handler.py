@@ -176,7 +176,6 @@ class ConnectionHandler(ABC):
         state_event_type,
         additional_items=None,
         additional_event_type=None,
-        state_event_extra_new_value=None,
         state_event_ignored_fields=None,
         state_event_date_fields=None,
         log_object_name='record',
@@ -219,8 +218,6 @@ class ConnectionHandler(ABC):
                 ignored_fields=state_event_ignored_fields,
                 date_fields=state_event_date_fields,
             )
-            if state_event_extra_new_value and state_event.get('new_value') is not None:
-                state_event['new_value'].update(state_event_extra_new_value)
             if self.should_publish_state_event(state_event):
                 self.mq.publish('data_events', json.dumps({
                     **base_event,

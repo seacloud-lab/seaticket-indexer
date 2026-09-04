@@ -258,15 +258,6 @@ class DiscourseHandler(ConnectionHandler):
                     _status_last_update_count = new_count
                 time.sleep(1)
 
-                state_event_extra_new_value = None
-                if not existing_topic:
-                    opening_reply = discourse_seadb_api.get_reply_by_id(connection_id, topic_id, 1)
-                    if opening_reply.get('post_number') is not None:
-                        state_event_extra_new_value = {
-                            key: opening_reply.get(key)
-                            for key in ('post_number', 'author', 'content', 'modified_time')
-                        }
-
                 self.publish_synced_record_events(
                     get_latest_row=lambda: discourse_seadb_api.get_topic_by_topic_id(connection_id, topic_id),
                     project_uuid=discourse_seadb_api.base_id,
@@ -276,7 +267,6 @@ class DiscourseHandler(ConnectionHandler):
                     state_event_type=topic_state_event_type,
                     additional_items=added_replies,
                     additional_event_type=DataEventType.DISCOURSE_TOPIC_COMMENT_ADDED.value,
-                    state_event_extra_new_value=state_event_extra_new_value,
                     state_event_ignored_fields=('views', 'modified_time', 'record_modified_time', 'sync_time'),
                     log_object_name='topic',
                 )

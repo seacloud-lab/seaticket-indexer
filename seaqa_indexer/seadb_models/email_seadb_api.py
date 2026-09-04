@@ -204,9 +204,7 @@ class EmailSeaDBAPI:
         if not thread_id:
             return {}
 
-        sql = f"""SELECT message_id, email_from, title, content, modified_time, is_sender
-                FROM `{table_name}` WHERE thread_id = {thread_id}
-                ORDER BY modified_time ASC, message_id ASC LIMIT 1"""
+        sql = f"SELECT content FROM `{table_name}` WHERE thread_id = {thread_id} ORDER BY modified_time ASC LIMIT 1"
         result = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         if result:
             return result[0]
