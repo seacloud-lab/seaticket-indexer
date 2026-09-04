@@ -170,6 +170,27 @@ class TestPublishSyncedRecordEvents:
         assert second_payload['event']['old_value'] == {'summary': 'old'}
         assert second_payload['event']['new_value'] == {'summary': 'updated'}
 
+    def test_publish_additional_event_preserves_message_content(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {'_pk': 20, 'modified_time': '2026-05-22T10:00:00+00:00'},
+            project_uuid='project-2',
+            connection_id=10,
+            item_id='item-10',
+            old_row={'_pk': 20},
+            state_event_type='dummy_updated',
+            additional_items=[{'message_id': 'message-1', 'content': 'New message body'}],
+            additional_event_type='dummy_message_added',
+        )
+
+        payload = json.loads(handler.mq.publish.call_args_list[0][0][1])
+        assert payload['event']['new_value'] == {
+            'message_id': 'message-1',
+            'content': 'New message body',
+        }
+
     def test_publish_skip_additional_event_when_old_row_is_none(self):
         handler = DummyHandler()
         handler.mq = Mock()

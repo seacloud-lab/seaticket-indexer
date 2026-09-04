@@ -269,7 +269,6 @@ class DiscordHandler(ConnectionHandler):
                 discord_api, thread_id, after=after_snowflake
             )
 
-
             existing_thread = discord_seadb_api.get_thread_by_thread_id(
                 connection_id, thread_id
             )
