@@ -1192,6 +1192,8 @@ tables:
           compressed: true
       reply_count:
         column_type: int64
+      latest_reply:
+        column_type: text
       created_time:
         column_type: datetime
       modified_time:
@@ -1226,7 +1228,7 @@ tables:
     columns:
       message_id:
         column_type: text
-      reply_ts:
+      reply_id:
         column_type: text
       author:
         column_type: text
@@ -1240,5 +1242,5 @@ tables:
         column_type: datetime
     indexes:
     - - message_id
-    - - reply_ts
+    - - reply_id
     table_name: slack_message_replies_{connection_id}

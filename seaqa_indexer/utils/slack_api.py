@@ -107,18 +107,21 @@ class SlackAPI(object):
         return self._parse(response, 'conversations.history')
 
     @retry_with_exponential_backoff()
-    def fetch_replies(self, channel_id, thread_ts, cursor=None, limit=200):
+    def fetch_replies(self, channel_id, thread_ts, oldest=None, cursor=None, limit=200):
         """Fetch a thread's replies (including the parent message).
 
         Args:
             channel_id: Slack channel ID.
             thread_ts: The parent message ts (the thread root).
+            oldest: Only replies after this unix timestamp (decimal seconds).
             cursor: Pagination cursor.
 
         Returns:
             dict: raw Slack response with 'messages', 'has_more', 'response_metadata'.
         """
         params = {'channel': channel_id, 'ts': thread_ts, 'limit': limit}
+        if oldest:
+            params['oldest'] = oldest
         if cursor:
             params['cursor'] = cursor
         response = self._get('conversations.replies', params)

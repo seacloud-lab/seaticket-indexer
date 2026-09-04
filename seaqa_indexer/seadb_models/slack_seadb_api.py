@@ -61,6 +61,7 @@ class SlackSeaDBAPI:
             SchemaTables.SLACK_MESSAGES.column.author.name: author,
             SchemaTables.SLACK_MESSAGES.column.content.name: self.make_content(text),
             SchemaTables.SLACK_MESSAGES.column.reply_count.name: int(message.get('reply_count', 0) or 0),
+            SchemaTables.SLACK_MESSAGES.column.latest_reply.name: message.get('latest_reply', '') or '',
             SchemaTables.SLACK_MESSAGES.column.modified_time.name: modified_time.isoformat(),
             SchemaTables.SLACK_MESSAGES.column.sync_time.name: now,
             SchemaTables.SLACK_MESSAGES.column.record_modified_time.name: now,
@@ -82,7 +83,7 @@ class SlackSeaDBAPI:
     def get_message_by_ts(self, connection_id, message_ts):
         table_name = SchemaTables.SLACK_MESSAGES.table_name(connection_id=connection_id)
         sql = f"""SELECT `_pk`, `message_id`, `channel_id`, `title`, `author`, `content`,
-                `reply_count`, `created_time`, `modified_time`, `deleted`, `outdated`,
+                `reply_count`, `latest_reply`, `created_time`, `modified_time`, `deleted`, `outdated`,
                 `record_modified_time`, `sync_time`, `ai_processed_time`
                 FROM `{table_name}` WHERE `message_id` = '{message_ts}'"""
         response = self.seadb_api.query_rows(self.base_id, sql)
@@ -99,6 +100,27 @@ class SlackSeaDBAPI:
                 record_modified_time = '{now}'
                 WHERE message_id = '{message_ts}' AND (deleted = false OR deleted IS NULL)"""
         return self.seadb_api.query_rows(self.base_id, sql)
+
+    def get_all_message_ids(self, connection_id, page_size=1000):
+        """Get all non-deleted message_ids (used for deletion detection)."""
+        table_name = SchemaTables.SLACK_MESSAGES.table_name(connection_id=connection_id)
+        message_ids = set()
+        offset = 0
+        while True:
+            sql = f"""SELECT message_id FROM `{table_name}`
+                    WHERE (deleted IS NULL OR deleted = false)
+                    LIMIT {page_size} OFFSET {offset}"""
+            results = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
+            if not results:
+                break
+            for row in results:
+                mid = row.get('message_id')
+                if mid:
+                    message_ids.add(mid)
+            if len(results) < page_size:
+                break
+            offset += page_size
+        return message_ids
 
     def get_message_count(self, connection_id):
         table_name = SchemaTables.SLACK_MESSAGES.table_name(connection_id=connection_id)
@@ -136,38 +158,38 @@ class SlackSeaDBAPI:
         table_name = SchemaTables.SLACK_MESSAGE_REPLIES.table_name(connection_id=connection_id)
         offset = 0
         page_size = 1000
-        reply_ts_to_pk = {}
+        reply_id_to_pk = {}
         added_replies = []
 
         # Collect existing reply PKs for change detection
         while True:
             existing = self.get_replies_by_page(connection_id, message_ts, page_size, offset)
             for reply in existing:
-                reply_ts_to_pk[reply.get('reply_ts')] = reply
+                reply_id_to_pk[reply.get('reply_id')] = reply
             if not existing or len(existing) < page_size:
                 break
             offset += page_size
 
         for reply in replies:
-            reply_ts = reply.get('ts')
-            if not reply_ts or reply_ts == message_ts:
+            reply_id = reply.get('ts')
+            if not reply_id or reply_id == message_ts:
                 continue
 
             text = reply.get('text', '') or ''
             author = reply.get('author', '')
-            created_time = self.ts_to_datetime(reply_ts)
+            created_time = self.ts_to_datetime(reply_id)
             edited_ts = (reply.get('edited') or {}).get('ts')
             modified_time = self.ts_to_datetime(edited_ts) or created_time
 
             row = {
                 SchemaTables.SLACK_MESSAGE_REPLIES.column.message_id.name: str(message_ts),
-                SchemaTables.SLACK_MESSAGE_REPLIES.column.reply_ts.name: str(reply_ts),
+                SchemaTables.SLACK_MESSAGE_REPLIES.column.reply_id.name: str(reply_id),
                 SchemaTables.SLACK_MESSAGE_REPLIES.column.author.name: author,
                 SchemaTables.SLACK_MESSAGE_REPLIES.column.content.name: self.make_content(text),
                 SchemaTables.SLACK_MESSAGE_REPLIES.column.modified_time.name: modified_time.isoformat(),
             }
 
-            existing_reply = reply_ts_to_pk.get(reply_ts)
+            existing_reply = reply_id_to_pk.get(reply_id)
             if existing_reply:
                 if self._reply_has_changed(existing_reply, reply):
                     self.seadb_api.update_rows(self.base_id, table_name, [{
@@ -178,7 +200,7 @@ class SlackSeaDBAPI:
                 row[SchemaTables.SLACK_MESSAGE_REPLIES.column.created_time.name] = created_time.isoformat()
                 self.seadb_api.insert_rows(self.base_id, table_name, [row])
                 added_replies.append({
-                    'reply_ts': reply_ts,
+                    'reply_id': reply_id,
                     'author': author,
                     'content': self.make_content(text),
                     'modified_time': modified_time.isoformat(),
@@ -191,7 +213,7 @@ class SlackSeaDBAPI:
 
     def get_replies_by_page(self, connection_id, message_ts, page_size, offset):
         table_name = SchemaTables.SLACK_MESSAGE_REPLIES.table_name(connection_id=connection_id)
-        sql = f"""SELECT `_pk`, `reply_ts`, `author`, `content`, `modified_time` FROM `{table_name}`
+        sql = f"""SELECT `_pk`, `reply_id`, `author`, `content`, `modified_time` FROM `{table_name}`
                 WHERE message_id = '{message_ts}' LIMIT {page_size} OFFSET {offset}"""
         return self.seadb_api.query_rows(self.base_id, sql).get('results', [])
 

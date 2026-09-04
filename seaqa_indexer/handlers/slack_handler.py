@@ -23,6 +23,10 @@ SKIP_SUBTYPES = {
     'channel_convert_to_private', 'message_deleted', 'message_changed',
 }
 
+# Incremental sync look-back window: re-index this many days of top-level
+# messages so that new replies to existing threads are picked up.
+SLACK_SYNC_LOOKBACK_DAYS = 28
+
 
 class SlackHandler(ConnectionHandler):
     """Handler for SLACK connection type."""
@@ -166,11 +170,11 @@ class SlackHandler(ConnectionHandler):
         return name
 
     @staticmethod
-    def _fetch_all_replies(slack_api, channel_id, thread_ts):
+    def _fetch_all_replies(slack_api, channel_id, thread_ts, oldest=None):
         all_replies = []
         cursor = None
         while True:
-            data = slack_api.fetch_replies(channel_id, thread_ts, cursor=cursor, limit=200)
+            data = slack_api.fetch_replies(channel_id, thread_ts, oldest=oldest, cursor=cursor, limit=200)
             all_replies.extend(data.get('messages', []))
             has_more = bool(data.get('has_more'))
             next_cursor = (data.get('response_metadata') or {}).get('next_cursor')
@@ -190,10 +194,10 @@ class SlackHandler(ConnectionHandler):
 
         oldest_ts = None
         if old_last_sync_time:
-            try:
-                oldest_ts = str(time_to_utc_time(str(old_last_sync_time)).timestamp())
-            except (TypeError, ValueError):
-                oldest_ts = None
+            # Incremental sync: look back a fixed window so that new replies to
+            # existing (older) thread parents are re-fetched.
+            lookback_start = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=SLACK_SYNC_LOOKBACK_DAYS)
+            oldest_ts = str(lookback_start.timestamp())
 
         cursor = None
         while True:
@@ -222,16 +226,18 @@ class SlackHandler(ConnectionHandler):
                 existing_message = slack_seadb_api.get_message_by_ts(connection_id, ts)
                 is_new_record = not existing_message
 
-                # Skip unchanged messages (same modified_time and reply_count).
+                # Skip unchanged messages (same edited time and same latest_reply watermark).
+                reply_changed = False
                 if existing_message:
                     edited_ts = (msg.get('edited') or {}).get('ts')
                     new_modified = SlackSeaDBAPI.ts_to_datetime(edited_ts or ts)
                     existing_modified = existing_message.get('modified_time')
-                    new_reply_count = int(msg.get('reply_count', 0) or 0)
-                    existing_reply_count = int(existing_message.get('reply_count') or 0)
-                    if (existing_modified and new_modified
-                            and new_modified <= time_to_utc_time(str(existing_modified))
-                            and existing_reply_count == new_reply_count):
+                    message_unchanged = (
+                        existing_modified and new_modified
+                        and new_modified <= time_to_utc_time(str(existing_modified))
+                    )
+                    reply_changed = (msg.get('latest_reply') or '') != (existing_message.get('latest_reply') or '')
+                    if message_unchanged and not reply_changed:
                         continue
 
                 slack_seadb_api.save_or_update_message(connection_id, channel_id, msg, author, existing_message)
@@ -242,12 +248,15 @@ class SlackHandler(ConnectionHandler):
 
                 added_replies = []
                 reply_count = int(msg.get('reply_count', 0) or 0)
-                if reply_count > 0:
-                    replies = self._fetch_all_replies(slack_api, channel_id, ts)
+                if reply_count > 0 and (is_new_record or reply_changed):
+                    replies = self._fetch_all_replies(
+                        slack_api, channel_id, ts,
+                        oldest=(existing_message.get('latest_reply') or None)
+                    )
                     resolved_replies = []
                     for reply in replies:
-                        reply_ts = reply.get('ts')
-                        if not reply_ts or reply_ts == ts:
+                        reply_id = reply.get('ts')
+                        if not reply_id or reply_id == ts:
                             continue
                         enriched = dict(reply)
                         enriched['author'] = self._resolve_user(

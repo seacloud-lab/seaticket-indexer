@@ -452,6 +452,13 @@ class SeaqaDB(object):
             session.execute(text(sql), {'cleaned_at': cleaned_at, 'connection_id': connection_id})
             session.commit()
 
+    def reset_last_sync_time(self, connection_id):
+        """Clear last_sync_time so the next sync is treated as a full sync."""
+        with self.db_session_class() as session:
+            cmd = "UPDATE project_connection SET last_sync_time = NULL WHERE id = :connection_id"
+            session.execute(text(cmd), {'connection_id': connection_id})
+            session.commit()
+
     def uninstall_github_app(self, project_uuid, installation_id):
         project_uuid = uuid_str_to_36_chars(project_uuid)
         with self.db_session_class() as session:
