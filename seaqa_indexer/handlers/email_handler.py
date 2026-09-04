@@ -165,18 +165,17 @@ class EmailHandler(ConnectionHandler):
                 provider_config = EMAIL_OAUTH_CONFIGS.get(provider)
                 if not provider_config or account_type not in provider_config['scopes']:
                     raise EmailConfigError('Email OAuth provider configuration is invalid')
-                if account_type == 'personal':
-                    oauth_config = {
-                        'client_id': provider_config['client_id'],
-                        'client_secret': provider_config['client_secret'],
-                        'token_url': provider_config['token_url'],
-                        'scopes': provider_config['scopes'][account_type],
-                    }
-                else:
-                    required_scopes = set(provider_config['scopes'][account_type])
-                    if not isinstance(config.get('scopes'), list) or not required_scopes.issubset(set(config['scopes'])):
-                        raise EmailConfigError('Shared email OAuth scopes are incomplete')
-                    oauth_config = config
+                oauth_config = {
+                    'client_id': provider_config['client_id'],
+                    'client_secret': provider_config['client_secret'],
+                    'token_url': provider_config['token_url'],
+                    'scopes': provider_config['scopes'][account_type],
+                }
+                if account_type == 'shared':
+                    oauth_config['client_id'] = config.get('client_id')
+                    oauth_config['client_secret'] = config.get('client_secret')
+                    if provider == 'Microsoft' and config.get('token_url'):
+                        oauth_config['token_url'] = config['token_url']
             mail_viewer = get_mail_viewer_from_config(config, oauth_token, oauth_config)
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)
