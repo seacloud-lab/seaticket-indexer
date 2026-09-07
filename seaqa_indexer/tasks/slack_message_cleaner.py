@@ -90,7 +90,7 @@ class SlackMessageCleanerTimer(Thread):
                     logger.warning('Slack channel_id missing for connection %s', connection_id)
                     continue
 
-                oauth = self.seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.SLACK.value)
+                oauth = self.seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.SLACK.value, connection_id)
                 if not oauth:
                     logger.warning('Slack OAuth not found for connection %s', connection_id)
                     continue

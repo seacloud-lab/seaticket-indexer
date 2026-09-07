@@ -22,6 +22,7 @@ SKIP_SUBTYPES = {
     'group_leave', 'group_archive', 'group_unarchive', 'group_topic',
     'group_purpose', 'group_name', 'pinned_item', 'unpinned_item',
     'channel_convert_to_private', 'message_deleted', 'message_changed',
+    'tabbed_canvas_updated',
 }
 
 # Incremental sync look-back window: re-index this many days of top-level
@@ -133,7 +134,7 @@ class SlackHandler(ConnectionHandler):
             sync_logger.log('Slack channel_id is missing')
             return None, None, None, None
 
-        oauth = seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.SLACK.value)
+        oauth = seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.SLACK.value, connection_id)
         if not oauth:
             logger.error('Slack OAuth not found for connection %s', connection_id)
             sync_logger.log('Slack OAuth not found')
@@ -151,7 +152,7 @@ class SlackHandler(ConnectionHandler):
             refresh_token = new_tokens['refresh_token']
             expires_at = new_tokens['expires_at']
             seaqa_db.update_project_connection_oauth(
-                project_uuid, ConnectionType.SLACK.value, access_token, expires_at, refresh_token
+                project_uuid, ConnectionType.SLACK.value, access_token, expires_at, refresh_token, connection_id
             )
 
         slack_api = SlackAPI(access_token, client_id=SLACK_CLIENT_ID, client_secret=SLACK_CLIENT_SECRET)

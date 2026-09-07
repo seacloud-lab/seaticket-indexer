@@ -25,16 +25,17 @@ class SeaqaDB(object):
             ).fetchall()
             return connections
 
-    def get_project_connection_oauth(self, project_uuid, connection_type):
+    def get_project_connection_oauth(self, project_uuid, connection_type, connection_id=0):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
             sql = """SELECT access_token, refresh_token, expires_at
                      FROM project_connection_oauth
-                     WHERE project_uuid=:project_uuid AND type=:connection_type
+                     WHERE project_uuid=:project_uuid AND type=:connection_type AND connection_id=:connection_id
                      """
             row = session.execute(text(sql), {
                 'project_uuid': project_uuid,
                 'connection_type': connection_type,
+                'connection_id': connection_id,
             }).fetchone()
             return row
 
@@ -51,15 +52,16 @@ class SeaqaDB(object):
                 text(sql), {'connection_type': connection_type, 'limit': limit, 'offset': offset}
             ).fetchall()
 
-    def update_project_connection_oauth(self, project_uuid, connection_type, access_token, expires_at, refresh_token):
+    def update_project_connection_oauth(self, project_uuid, connection_type, access_token, expires_at, refresh_token, connection_id=0):
         project_uuid = uuid_str_to_32_chars(project_uuid)
         with self.db_session_class() as session:
             cmd = """UPDATE project_connection_oauth
                         SET access_token=:access_token, refresh_token=:refresh_token, expires_at=:expires_at
-                        WHERE project_uuid=:project_uuid AND type=:connection_type"""
+                        WHERE project_uuid=:project_uuid AND type=:connection_type AND connection_id=:connection_id"""
             session.execute(text(cmd), {
                 'project_uuid': project_uuid,
                 'connection_type': connection_type,
+                'connection_id': connection_id,
                 'access_token': access_token,
                 'refresh_token': refresh_token,
                 'expires_at': expires_at,
