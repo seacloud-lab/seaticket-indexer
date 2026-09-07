@@ -158,6 +158,8 @@ SEADB_PASSWORD = configs.get('SEADB_PASSWORD', '')
 
 JIRA_CLIENT_ID = configs.get('JIRA_CLIENT_ID', '')
 JIRA_CLIENT_SECRET = configs.get('JIRA_CLIENT_SECRET', '')
+SLACK_CLIENT_ID = configs.get('SLACK_CLIENT_ID', '')
+SLACK_CLIENT_SECRET = configs.get('SLACK_CLIENT_SECRET', '')
 
 try:
     with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:

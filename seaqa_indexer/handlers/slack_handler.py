@@ -10,6 +10,7 @@ from seaqa_indexer.index.index_store.slack_index import SlackIndex
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
 from seaqa_indexer.utils.slack_api import SlackAPI
+from seaqa_indexer.config import SLACK_CLIENT_ID, SLACK_CLIENT_SECRET
 
 
 logger = logging.getLogger(__name__)
@@ -57,9 +58,7 @@ class SlackHandler(ConnectionHandler):
         team_domain = connection_config.get('team_domain', '')
         channel_id = connection_config.get('channel_id', '')
         message_id = record.get('message_id', '')
-        message_url = ''
-        if team_domain and channel_id and message_id:
-            message_url = f'https://{team_domain}.slack.com/archives/{channel_id}/p{message_id.replace(".", "")}'
+        message_url = f'https://{team_domain}.slack.com/archives/{channel_id}/p{message_id.replace(".", "")}'
 
         return {
             'title': record.get('title', ''),
@@ -128,9 +127,6 @@ class SlackHandler(ConnectionHandler):
              connection_status, seaqa_db, sync_logger):
         team_id = config.get('team_id', '')
         channel_id = config.get('channel_id', '')
-        # SYNC_SELECT fields store the full option object; extract the raw value
-        if isinstance(channel_id, dict):
-            channel_id = channel_id.get('value', '')
 
         if not channel_id:
             logger.error('Slack channel_id is missing for connection %s', connection_id)
@@ -143,7 +139,22 @@ class SlackHandler(ConnectionHandler):
             sync_logger.log('Slack OAuth not found')
             return None, None, None, None
 
-        slack_api = SlackAPI(oauth.access_token)
+        access_token = oauth.access_token
+        refresh_token = oauth.refresh_token
+        expires_at = oauth.expires_at
+
+        # Refresh proactively if token rotation is enabled and the token has expired.
+        if refresh_token and expires_at and time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.UTC):
+            refresh_api = SlackAPI(access_token, client_id=SLACK_CLIENT_ID, client_secret=SLACK_CLIENT_SECRET)
+            new_tokens = refresh_api.refresh_access_token(refresh_token)
+            access_token = new_tokens['access_token']
+            refresh_token = new_tokens['refresh_token']
+            expires_at = new_tokens['expires_at']
+            seaqa_db.update_project_connection_oauth(
+                project_uuid, ConnectionType.SLACK.value, access_token, expires_at, refresh_token
+            )
+
+        slack_api = SlackAPI(access_token, client_id=SLACK_CLIENT_ID, client_secret=SLACK_CLIENT_SECRET)
         slack_seadb_api = SlackSeaDBAPI(project_uuid)
 
         sync_count, total_count = self._sync_slack(

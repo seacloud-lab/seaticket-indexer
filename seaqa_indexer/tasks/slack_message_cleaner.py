@@ -86,8 +86,6 @@ class SlackMessageCleanerTimer(Thread):
             try:
                 connection_config = decrypt_config(json.loads(connection.config)) if connection.config else {}
                 channel_id = connection_config.get('channel_id')
-                if isinstance(channel_id, dict):
-                    channel_id = channel_id.get('value', '')
                 if not channel_id:
                     logger.warning('Slack channel_id missing for connection %s', connection_id)
                     continue

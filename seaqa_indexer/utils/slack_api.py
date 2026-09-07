@@ -2,6 +2,7 @@
 import logging
 import time
 import random
+import datetime
 from functools import wraps
 
 import requests
@@ -55,8 +56,10 @@ def retry_with_exponential_backoff(max_retries=5, base_delay=3, max_delay=60):
 class SlackAPI(object):
     """Slack Web API client for syncing channel messages and thread replies."""
 
-    def __init__(self, bot_token, timeout=60):
+    def __init__(self, bot_token, client_id='', client_secret='', timeout=60):
         self.bot_token = bot_token
+        self.client_id = client_id
+        self.client_secret = client_secret
         self.timeout = timeout
         self.headers = {
             'Authorization': f'Bearer {bot_token}',
@@ -138,3 +141,40 @@ class SlackAPI(object):
         """Fetch the current team info (includes 'team.domain')."""
         response = self._get('team.info', {})
         return self._parse(response, 'team.info')
+
+    def refresh_access_token(self, refresh_token):
+        """Refresh the Slack bot token via oauth.v2.access (token rotation).
+
+        Returns a dict with 'access_token', 'refresh_token' and 'expires_at'
+        (a timezone-aware datetime).
+        """
+        if not all([self.client_id, self.client_secret, refresh_token]):
+            raise SlackAPIError('Slack OAuth settings are invalid for token refresh')
+
+        payload = {
+            'grant_type': 'refresh_token',
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'refresh_token': refresh_token,
+        }
+        response = requests.post(
+            f'{SLACK_API_BASE_URL}/oauth.v2.access',
+            data=payload,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not data.get('ok'):
+            raise SlackAPIError(data.get('error', 'unknown_error'))
+
+        access_token = data.get('access_token')
+        new_refresh_token = data.get('refresh_token') or refresh_token
+        expires_in = data.get('expires_in') or 3600
+        expires_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=max(int(expires_in) - 60, 0))
+
+        return {
+            'access_token': access_token,
+            'refresh_token': new_refresh_token,
+            'expires_at': expires_at,
+        }
