@@ -103,6 +103,7 @@ class SlackMessageCleanerTimer(Thread):
                 need_deleted_ids = local_ids - remote_ids
                 for mid in need_deleted_ids:
                     slack_seadb_api.mark_message_deleted(connection_id, mid)
+                    slack_seadb_api.delete_replies_from_db(connection_id, mid)
 
                 # Clear last_sync_time so the next sync is a full sync, picking up
                 # any new messages/replies outside the 28-day incremental window.

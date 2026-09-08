@@ -101,6 +101,21 @@ class SlackSeaDBAPI:
                 WHERE message_id = '{message_ts}' AND (deleted = false OR deleted IS NULL)"""
         return self.seadb_api.query_rows(self.base_id, sql)
 
+    def update_message_sync_and_record_time(self, connection_id, message_ts):
+        """Bump sync_time and record_modified_time so index/AI re-process the message."""
+        table_name = SchemaTables.SLACK_MESSAGES.table_name(connection_id=connection_id)
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        sql = f"""UPDATE `{table_name}` SET sync_time = '{now}',
+                record_modified_time = '{now}'
+                WHERE message_id = '{message_ts}'"""
+        return self.seadb_api.query_rows(self.base_id, sql)
+
+    def delete_replies_from_db(self, connection_id, message_ts):
+        """Physically delete all replies of a parent message."""
+        table_name = SchemaTables.SLACK_MESSAGE_REPLIES.table_name(connection_id=connection_id)
+        sql = f"DELETE FROM `{table_name}` WHERE message_id = '{message_ts}'"
+        return self.seadb_api.query_rows(self.base_id, sql)
+
     def get_all_message_ids(self, connection_id, page_size=1000):
         """Get all non-deleted message_ids (used for deletion detection)."""
         table_name = SchemaTables.SLACK_MESSAGES.table_name(connection_id=connection_id)
@@ -160,6 +175,7 @@ class SlackSeaDBAPI:
         page_size = 1000
         reply_id_to_pk = {}
         added_replies = []
+        updated_count = 0
 
         # Collect existing reply PKs for change detection
         while True:
@@ -196,6 +212,7 @@ class SlackSeaDBAPI:
                         "pk": existing_reply.get('_pk'),
                         "row": row,
                     }])
+                    updated_count += 1
             else:
                 row[SchemaTables.SLACK_MESSAGE_REPLIES.column.created_time.name] = created_time.isoformat()
                 self.seadb_api.insert_rows(self.base_id, table_name, [row])
@@ -208,6 +225,7 @@ class SlackSeaDBAPI:
 
         return {
             'added': len(added_replies),
+            'updated': updated_count,
             'added_replies': added_replies,
         }
 

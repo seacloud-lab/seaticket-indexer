@@ -205,6 +205,7 @@ class SlackHandler(ConnectionHandler):
         user_cache = {}
 
         oldest_ts = None
+        is_first_sync = not old_last_sync_time
         if old_last_sync_time:
             # Incremental sync: look back a fixed window so that new replies to
             # existing (older) thread parents are re-fetched.
@@ -238,32 +239,35 @@ class SlackHandler(ConnectionHandler):
                 existing_message = slack_seadb_api.get_message_by_ts(connection_id, ts)
                 is_new_record = not existing_message
 
-                # Skip unchanged messages (same edited time and same latest_reply watermark).
                 reply_changed = False
+                message_unchanged = False
                 if existing_message:
                     edited_ts = (msg.get('edited') or {}).get('ts')
                     new_modified = SlackSeaDBAPI.ts_to_datetime(edited_ts or ts)
                     existing_modified = existing_message.get('modified_time')
-                    message_unchanged = (
+                    message_unchanged = bool(
                         existing_modified and new_modified
                         and new_modified <= time_to_utc_time(str(existing_modified))
                     )
                     reply_changed = (msg.get('latest_reply') or '') != (existing_message.get('latest_reply') or '')
-                    if message_unchanged and not reply_changed:
-                        continue
 
-                slack_seadb_api.save_or_update_message(connection_id, channel_id, msg, author, existing_message)
-                if is_new_record:
-                    added_count += 1
-                else:
-                    updated_count += 1
+                has_replies = int(msg.get('reply_count', 0) or 0) > 0
+                if message_unchanged and not reply_changed and not (is_first_sync and has_replies):
+                    continue
+
+                if is_new_record or not message_unchanged or reply_changed:
+                    slack_seadb_api.save_or_update_message(connection_id, channel_id, msg, author, existing_message)
+                    if is_new_record:
+                        added_count += 1
+                    else:
+                        updated_count += 1
 
                 added_replies = []
                 reply_count = int(msg.get('reply_count', 0) or 0)
-                if reply_count > 0 and (is_new_record or reply_changed):
+                if reply_count > 0 and (is_new_record or reply_changed or is_first_sync):
                     replies = self._fetch_all_replies(
                         slack_api, channel_id, ts,
-                        oldest=(existing_message.get('latest_reply') or None)
+                        oldest=(None if is_first_sync else (existing_message.get('latest_reply') or None))
                     )
                     resolved_replies = []
                     for reply in replies:
@@ -277,6 +281,8 @@ class SlackHandler(ConnectionHandler):
                         resolved_replies.append(enriched)
                     result = slack_seadb_api.add_or_update_replies(connection_id, ts, resolved_replies)
                     added_replies = result.get('added_replies', [])
+                    if result.get('updated'):
+                        slack_seadb_api.update_message_sync_and_record_time(connection_id, ts)
 
                 event_type = (
                     DataEventType.SLACK_MESSAGE_UPDATED.value
