@@ -29,6 +29,8 @@ class SchemaTables:
     DISCORD_THREAD_MESSAGES = SCHEMA.DiscordThreadMessagesTable
     JIRA_ISSUES = SCHEMA.JiraIssuesTable
     JIRA_ISSUE_COMMENTS = SCHEMA.JiraIssueCommentsTable
+    SLACK_MESSAGES = SCHEMA.SlackMessagesTable
+    SLACK_MESSAGE_REPLIES = SCHEMA.SlackMessageRepliesTable
 
 
 class PropertyTypes:

@@ -34,6 +34,7 @@ class ConnectionType(Enum):
     LINEAR = 'linear'
     CONFLUENCE = 'confluence'
     DISCORD = 'discord'
+    SLACK = 'slack'
 
     @classmethod
     def is_valid(cls, value):
@@ -81,6 +82,9 @@ class DataEventType(Enum):
     DISCORD_THREAD_ADDED = 'discord_thread_added'
     DISCORD_THREAD_UPDATED = 'discord_thread_updated'
     DISCORD_THREAD_MESSAGE_ADDED = 'discord_thread_message_added'
+    SLACK_MESSAGE_ADDED = 'slack_message_added'
+    SLACK_MESSAGE_UPDATED = 'slack_message_updated'
+    SLACK_MESSAGE_REPLY_ADDED = 'slack_message_reply_added'
 
     @classmethod
     def is_valid(cls, value):

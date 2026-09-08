@@ -12,6 +12,7 @@ from seaqa_indexer.tasks.notion_page_cleaner import NotionPageCleaner
 from seaqa_indexer.tasks.seafile_file_cleaner import SeafileFileCleaner
 from seaqa_indexer.tasks.confluence_page_cleaner import ConfluencePageCleaner
 from seaqa_indexer.tasks.discord_message_cleaner import DiscordMessageCleaner
+from seaqa_indexer.tasks.slack_message_cleaner import SlackMessageCleaner
 from seaqa_indexer.tasks.confluence_privacy_reporter import ConfluencePrivacyReporter
 from seaqa_indexer.tasks.jira_privacy_reporter import JiraPrivacyReporter
 from seaqa_indexer.tasks.deleted_records_cleaner import DeletedRecordsCleaner
@@ -46,6 +47,7 @@ class SeaqaIndexerApp(object):
         self.confluence_page_cleaner = ConfluencePageCleaner()
         self.github_options_syncer = GithubOptionsSyncer()
         self.discord_message_cleaner = DiscordMessageCleaner()
+        self.slack_message_cleaner = SlackMessageCleaner(self.sync_manager)
         self.confluence_privacy_reporter = ConfluencePrivacyReporter()
         self.jira_privacy_reporter = JiraPrivacyReporter()
 
@@ -76,6 +78,7 @@ class SeaqaIndexerApp(object):
         self.confluence_page_cleaner.start()
         self.github_options_syncer.start()
         self.discord_message_cleaner.start()
+        self.slack_message_cleaner.start()
         self.confluence_privacy_reporter.start()
         self.jira_privacy_reporter.start()
         self.http_server.start()
