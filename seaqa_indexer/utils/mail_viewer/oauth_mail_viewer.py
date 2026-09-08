@@ -38,7 +38,7 @@ class OAuthMailViewer(BasicMailViewer):
         if self.account_type == 'shared' and not self.sender_email:
             raise EmailConfigError('Shared email sender address is required')
 
-    def _request_access_token(self):
+    def refresh_access_token_if_needed(self):
         if not self.access_token or self.expires_at is None or self.expires_at - time.time() < 300:
             params = {
                 'grant_type': 'refresh_token',
@@ -72,7 +72,7 @@ class OAuthMailViewer(BasicMailViewer):
             elif response.get('expires_in'):
                 expires_at = response.get('expires_in') + time.time()
 
-            self._update_access_token(
+            return self._update_access_token(
                 response.get('access_token'),
                 expires_at,
                 response.get('refresh_token') or self.refresh_token,
@@ -82,12 +82,11 @@ class OAuthMailViewer(BasicMailViewer):
         self.access_token = new_access_token
         self.expires_at = new_expires_at
         self.refresh_token = new_refresh_token
-        self.oauth_token = {
+        return {
             'access_token': new_access_token,
             'expires_at': new_expires_at,
             'refresh_token': new_refresh_token,
         }
-        self.oauth_updated = True
 
     def _get_headers(self, extra_headers=None):
         headers = {
@@ -125,7 +124,6 @@ class OAuthMailViewer(BasicMailViewer):
         return {}
 
     def search_emails(self, start_date, end_date):
-        self._request_access_token()
         for message_ref in self.iter_message_refs(start_date, end_date):
             mail_body = self.fetch_raw_message(message_ref)
             email_dict = self.gen_email_dict(

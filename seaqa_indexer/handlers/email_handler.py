@@ -28,12 +28,12 @@ EMAIL_OAUTH_CONFIGS = {
         'token_url': 'https://oauth2.googleapis.com/token',
         'scopes': {
             'personal': [
-                'https://www.googleapis.com/auth/gmail.readonly',
+                'https://www.googleapis.com/auth/gmail.modify',
                 'https://www.googleapis.com/auth/gmail.send',
                 'https://www.googleapis.com/auth/gmail.settings.basic',
             ],
             'shared': [
-                'https://www.googleapis.com/auth/gmail.readonly',
+                'https://www.googleapis.com/auth/gmail.modify',
                 'https://www.googleapis.com/auth/gmail.send',
             ],
         },
@@ -43,8 +43,8 @@ EMAIL_OAUTH_CONFIGS = {
         'client_secret': indexer_config.MICROSOFT_EMAIL_CLIENT_SECRET,
         'token_url': 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
         'scopes': {
-            'personal': ['openid', 'profile', 'email', 'offline_access', 'User.Read', 'Mail.Read', 'Mail.Send'],
-            'shared': ['offline_access', 'Mail.Read.Shared', 'Mail.Send.Shared'],
+            'personal': ['openid', 'profile', 'email', 'offline_access', 'User.Read', 'Mail.ReadWrite', 'Mail.Send'],
+            'shared': ['offline_access', 'Mail.ReadWrite.Shared', 'Mail.Send.Shared'],
         },
     },
 }
@@ -177,6 +177,16 @@ class EmailHandler(ConnectionHandler):
                     if provider == 'Microsoft' and config.get('token_url'):
                         oauth_config['token_url'] = config['token_url']
             mail_viewer = get_mail_viewer_from_config(config, oauth_token, oauth_config)
+            if oauth_token:
+                refreshed_oauth_token = mail_viewer.refresh_access_token_if_needed()
+                if refreshed_oauth_token:
+                    expires_at = datetime.datetime.fromtimestamp(
+                        refreshed_oauth_token['expires_at'], tz=datetime.timezone.utc
+                    )
+                    seaqa_db.update_connection_oauth(
+                        project_uuid, connection_id, refreshed_oauth_token['access_token'],
+                        expires_at, refreshed_oauth_token['refresh_token']
+                    )
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)
             sync_logger.log('email account is invalid')
@@ -192,13 +202,6 @@ class EmailHandler(ConnectionHandler):
         finally:
             mail_viewer.close()
 
-        if getattr(mail_viewer, 'oauth_updated', False):
-            oauth_token = mail_viewer.oauth_token
-            expires_at = datetime.datetime.fromtimestamp(oauth_token['expires_at'], tz=datetime.timezone.utc)
-            seaqa_db.update_connection_oauth(
-                project_uuid, connection_id, oauth_token['access_token'], expires_at,
-                oauth_token['refresh_token']
-            )
         return sync_count, total_count, False, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
