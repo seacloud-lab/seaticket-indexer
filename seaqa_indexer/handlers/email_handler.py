@@ -194,8 +194,9 @@ class EmailHandler(ConnectionHandler):
 
         if getattr(mail_viewer, 'oauth_updated', False):
             oauth_token = mail_viewer.oauth_token
+            expires_at = datetime.datetime.fromtimestamp(oauth_token['expires_at'], tz=datetime.timezone.utc)
             seaqa_db.update_connection_oauth(
-                project_uuid, connection_id, oauth_token['access_token'], oauth_token['expires_at'],
+                project_uuid, connection_id, oauth_token['access_token'], expires_at,
                 oauth_token['refresh_token']
             )
         return sync_count, total_count, False, config
