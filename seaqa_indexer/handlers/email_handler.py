@@ -13,12 +13,26 @@ from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus, DataEventType
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
+from seaqa_indexer import config as indexer_config
 from seaqa_indexer.index.index_store.email_index import EmailIndex
 
 from seaqa_indexer.seadb_models.models import SchemaTables
 
 
 logger = logging.getLogger(__name__)
+
+EMAIL_OAUTH_CONFIGS = {
+    'Gmail': {
+        'client_id': indexer_config.GOOGLE_EMAIL_CLIENT_ID,
+        'client_secret': indexer_config.GOOGLE_EMAIL_CLIENT_SECRET,
+        'token_url': 'https://oauth2.googleapis.com/token'
+    },
+    'Microsoft': {
+        'client_id': indexer_config.MICROSOFT_EMAIL_CLIENT_ID,
+        'client_secret': indexer_config.MICROSOFT_EMAIL_CLIENT_SECRET,
+        'token_url': 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+    },
+}
 
 
 class EmailHandler(ConnectionHandler):
@@ -120,7 +134,33 @@ class EmailHandler(ConnectionHandler):
         storage = get_storage()
 
         try:
-            mail_viewer = get_mail_viewer_from_config(config)
+            oauth_token = None
+            oauth_config = None
+            if config.get('server_provider') in ('Gmail', 'Microsoft'):
+                oauth = seaqa_db.get_connection_oauth(project_uuid, connection_id)
+                if not oauth:
+                    raise EmailConfigError('Email OAuth authorization is required')
+                oauth_token = {
+                    'access_token': oauth.access_token,
+                    'refresh_token': oauth.refresh_token,
+                    'expires_at': oauth.expires_at.timestamp(),
+                }
+                provider = config.get('server_provider')
+                account_type = config.get('account_type', 'personal')
+                provider_config = EMAIL_OAUTH_CONFIGS.get(provider)
+                if not provider_config:
+                    raise EmailConfigError('Email OAuth provider configuration is invalid')
+                oauth_config = {
+                    'client_id': provider_config['client_id'],
+                    'client_secret': provider_config['client_secret'],
+                    'token_url': provider_config['token_url']
+                }
+                if account_type == 'shared':
+                    oauth_config['client_id'] = config.get('client_id')
+                    oauth_config['client_secret'] = config.get('client_secret')
+                    if provider == 'Microsoft' and config.get('token_url'):
+                        oauth_config['token_url'] = config['token_url']
+            mail_viewer = get_mail_viewer_from_config(config, oauth_token, oauth_config)
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)
             sync_logger.log('email account is invalid')
@@ -128,7 +168,7 @@ class EmailHandler(ConnectionHandler):
 
         try:
             sync_count, total_count = self._sync_email(connection_id, project_uuid, connection_status, since,
-                             mail_viewer, seaqa_db, email_seadb_api, storage, is_first_update)
+                        mail_viewer, seaqa_db, email_seadb_api, storage, is_first_update, is_oauth=(oauth_token is not None))
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s email sync failed: %s', connection_id, e)
             sync_logger.log(str(e))
@@ -136,8 +176,7 @@ class EmailHandler(ConnectionHandler):
         finally:
             mail_viewer.close()
 
-        is_update_config = getattr(mail_viewer, 'config_updated', False)
-        return sync_count, total_count, is_update_config, config
+        return sync_count, total_count, False, config
 
     def clean_deleted_records(self, seadb_api, project_uuid, connection_id, cutoff_time):
         """Clean deleted email thread records and their emails."""
@@ -176,7 +215,7 @@ class EmailHandler(ConnectionHandler):
 
     def _sync_email(
             self, connection_id, project_uuid, connection_status, since, mail_viewer,
-            seaqa_db, email_seadb_api, storage, is_first_sync):
+            seaqa_db, email_seadb_api, storage, is_first_sync, is_oauth):
         sync_count = 0
         added_count = 0
         updated_count = 0
@@ -194,6 +233,16 @@ class EmailHandler(ConnectionHandler):
             since_date = before_date
             before_date += datetime.timedelta(days=EMAIL_SYNC_INTERVAL_DAYS)
 
+            if is_oauth:
+                refreshed_oauth_token = mail_viewer.refresh_access_token_if_needed()
+                if refreshed_oauth_token:
+                    expires_at = datetime.datetime.fromtimestamp(
+                        refreshed_oauth_token['expires_at'], tz=datetime.timezone.utc
+                    )
+                    seaqa_db.update_connection_oauth(
+                        project_uuid, connection_id, refreshed_oauth_token['access_token'],
+                        expires_at, refreshed_oauth_token['refresh_token']
+                    )
             email_list = mail_viewer.search_emails(since_date, before_date)
             changed_email_list = []
             for email in email_list:

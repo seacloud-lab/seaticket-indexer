@@ -18,28 +18,32 @@ def _check_and_raise_error(response):
 class OAuthMailViewer(BasicMailViewer):
     provider_name = None
 
-    def __init__(self, config):
+    def __init__(self, config, oauth_token=None, oauth_config=None):
         super().__init__(config)
-        self.client_id = config.get('client_id')
-        self.client_secret = config.get('client_secret')
-        self.refresh_token = config.get('refresh_token')
-        self.access_token = config.get('access_token')
-        self.expires_at = config.get('expires_at')
-        self.token_url = config.get('token_url')
-        self.scopes = config.get('scopes')
+        oauth_token = oauth_token or {}
+        oauth_config = oauth_config or config
+        self.client_id = oauth_config.get('client_id')
+        self.client_secret = oauth_config.get('client_secret')
+        self.refresh_token = oauth_token.get('refresh_token')
+        self.access_token = oauth_token.get('access_token')
+        self.expires_at = oauth_token.get('expires_at')
+        self.token_url = oauth_config.get('token_url')
+        self.account_type = config.get('account_type', 'personal')
+        self.sender_email = config.get('sender_email')
 
-        if not all([self.client_id, self.client_secret, self.refresh_token, self.token_url, self.scopes]):
+        if not all([self.client_id, self.client_secret, self.refresh_token, self.token_url]):
             logger.error('OAuth mail viewer config is invalid. client_id: %s, token_url: %s', self.client_id, self.token_url)
             raise EmailConfigError('OAuth mail viewer configuration is incomplete')
+        if self.account_type == 'shared' and not self.sender_email:
+            raise EmailConfigError('Shared email sender address is required')
 
-    def _request_access_token(self):
+    def refresh_access_token_if_needed(self):
         if not self.access_token or self.expires_at is None or self.expires_at - time.time() < 300:
             params = {
                 'grant_type': 'refresh_token',
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
-                'refresh_token': self.refresh_token,
-                'scope': ' '.join(self.scopes),
+                'refresh_token': self.refresh_token
             }
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -66,7 +70,7 @@ class OAuthMailViewer(BasicMailViewer):
             elif response.get('expires_in'):
                 expires_at = response.get('expires_in') + time.time()
 
-            self._update_access_token(
+            return self._update_access_token(
                 response.get('access_token'),
                 expires_at,
                 response.get('refresh_token') or self.refresh_token,
@@ -76,10 +80,11 @@ class OAuthMailViewer(BasicMailViewer):
         self.access_token = new_access_token
         self.expires_at = new_expires_at
         self.refresh_token = new_refresh_token
-        self.config['access_token'] = new_access_token
-        self.config['expires_at'] = new_expires_at
-        self.config['refresh_token'] = new_refresh_token
-        self.config_updated = True
+        return {
+            'access_token': new_access_token,
+            'expires_at': new_expires_at,
+            'refresh_token': new_refresh_token,
+        }
 
     def _get_headers(self, extra_headers=None):
         headers = {
@@ -117,7 +122,6 @@ class OAuthMailViewer(BasicMailViewer):
         return {}
 
     def search_emails(self, start_date, end_date):
-        self._request_access_token()
         for message_ref in self.iter_message_refs(start_date, end_date):
             mail_body = self.fetch_raw_message(message_ref)
             email_dict = self.gen_email_dict(
