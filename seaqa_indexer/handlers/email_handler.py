@@ -177,16 +177,6 @@ class EmailHandler(ConnectionHandler):
                     if provider == 'Microsoft' and config.get('token_url'):
                         oauth_config['token_url'] = config['token_url']
             mail_viewer = get_mail_viewer_from_config(config, oauth_token, oauth_config)
-            if oauth_token:
-                refreshed_oauth_token = mail_viewer.refresh_access_token_if_needed()
-                if refreshed_oauth_token:
-                    expires_at = datetime.datetime.fromtimestamp(
-                        refreshed_oauth_token['expires_at'], tz=datetime.timezone.utc
-                    )
-                    seaqa_db.update_connection_oauth(
-                        project_uuid, connection_id, refreshed_oauth_token['access_token'],
-                        expires_at, refreshed_oauth_token['refresh_token']
-                    )
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)
             sync_logger.log('email account is invalid')
@@ -194,7 +184,7 @@ class EmailHandler(ConnectionHandler):
 
         try:
             sync_count, total_count = self._sync_email(connection_id, project_uuid, connection_status, since,
-                             mail_viewer, seaqa_db, email_seadb_api, storage, is_first_update)
+                        mail_viewer, seaqa_db, email_seadb_api, storage, is_first_update, is_oauth=(oauth_token is not None))
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s email sync failed: %s', connection_id, e)
             sync_logger.log(str(e))
@@ -241,7 +231,7 @@ class EmailHandler(ConnectionHandler):
 
     def _sync_email(
             self, connection_id, project_uuid, connection_status, since, mail_viewer,
-            seaqa_db, email_seadb_api, storage, is_first_sync):
+            seaqa_db, email_seadb_api, storage, is_first_sync, is_oauth):
         sync_count = 0
         added_count = 0
         updated_count = 0
@@ -259,6 +249,16 @@ class EmailHandler(ConnectionHandler):
             since_date = before_date
             before_date += datetime.timedelta(days=EMAIL_SYNC_INTERVAL_DAYS)
 
+            if is_oauth:
+                refreshed_oauth_token = mail_viewer.refresh_access_token_if_needed()
+                if refreshed_oauth_token:
+                    expires_at = datetime.datetime.fromtimestamp(
+                        refreshed_oauth_token['expires_at'], tz=datetime.timezone.utc
+                    )
+                    seaqa_db.update_connection_oauth(
+                        project_uuid, connection_id, refreshed_oauth_token['access_token'],
+                        expires_at, refreshed_oauth_token['refresh_token']
+                    )
             email_list = mail_viewer.search_emails(since_date, before_date)
             changed_email_list = []
             for email in email_list:
