@@ -25,27 +25,12 @@ EMAIL_OAUTH_CONFIGS = {
     'Gmail': {
         'client_id': indexer_config.GOOGLE_EMAIL_CLIENT_ID,
         'client_secret': indexer_config.GOOGLE_EMAIL_CLIENT_SECRET,
-        'token_url': 'https://oauth2.googleapis.com/token',
-        'scopes': {
-            'personal': [
-                'https://www.googleapis.com/auth/gmail.modify',
-                'https://www.googleapis.com/auth/gmail.send',
-                'https://www.googleapis.com/auth/gmail.settings.basic',
-            ],
-            'shared': [
-                'https://www.googleapis.com/auth/gmail.modify',
-                'https://www.googleapis.com/auth/gmail.send',
-            ],
-        },
+        'token_url': 'https://oauth2.googleapis.com/token'
     },
     'Microsoft': {
         'client_id': indexer_config.MICROSOFT_EMAIL_CLIENT_ID,
         'client_secret': indexer_config.MICROSOFT_EMAIL_CLIENT_SECRET,
-        'token_url': 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-        'scopes': {
-            'personal': ['openid', 'profile', 'email', 'offline_access', 'User.Read', 'Mail.ReadWrite', 'Mail.Send'],
-            'shared': ['offline_access', 'Mail.ReadWrite.Shared', 'Mail.Send.Shared'],
-        },
+        'token_url': 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
     },
 }
 
@@ -163,13 +148,12 @@ class EmailHandler(ConnectionHandler):
                 provider = config.get('server_provider')
                 account_type = config.get('account_type', 'personal')
                 provider_config = EMAIL_OAUTH_CONFIGS.get(provider)
-                if not provider_config or account_type not in provider_config['scopes']:
+                if not provider_config:
                     raise EmailConfigError('Email OAuth provider configuration is invalid')
                 oauth_config = {
                     'client_id': provider_config['client_id'],
                     'client_secret': provider_config['client_secret'],
-                    'token_url': provider_config['token_url'],
-                    'scopes': provider_config['scopes'][account_type],
+                    'token_url': provider_config['token_url']
                 }
                 if account_type == 'shared':
                     oauth_config['client_id'] = config.get('client_id')

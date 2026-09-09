@@ -2,19 +2,18 @@ import datetime
 from unittest.mock import Mock, patch
 
 from seaqa_indexer.handlers.email_handler import EMAIL_OAUTH_CONFIGS, EmailHandler
-from seaqa_indexer.utils.mail_viewer import EmailViewError
+from seaqa_indexer.utils.mail_viewer import EmailViewError, OAuthMailViewer
 
 
 class TestEmailHandlerOAuthConfig:
-    def test_oauth_scopes_include_mailbox_write_permissions(self):
-        assert EMAIL_OAUTH_CONFIGS['Gmail']['scopes']['personal'][0] == \
-            'https://www.googleapis.com/auth/gmail.modify'
-        assert EMAIL_OAUTH_CONFIGS['Gmail']['scopes']['shared'][0] == \
-            'https://www.googleapis.com/auth/gmail.modify'
-        assert 'Mail.ReadWrite' in EMAIL_OAUTH_CONFIGS['Microsoft']['scopes']['personal']
-        assert 'Mail.ReadWrite.Shared' in EMAIL_OAUTH_CONFIGS['Microsoft']['scopes']['shared']
+    def test_oauth_configs_contain_credentials_and_token_url_only(self):
+        assert set(EMAIL_OAUTH_CONFIGS['Gmail']) == {'client_id', 'client_secret', 'token_url'}
+        assert EMAIL_OAUTH_CONFIGS['Gmail']['token_url'] == 'https://oauth2.googleapis.com/token'
+        assert set(EMAIL_OAUTH_CONFIGS['Microsoft']) == {'client_id', 'client_secret', 'token_url'}
+        assert EMAIL_OAUTH_CONFIGS['Microsoft']['token_url'] == \
+            'https://login.microsoftonline.com/common/oauth2/v2.0/token'
 
-    def test_shared_microsoft_uses_trusted_scopes_and_tenant_token_url(self):
+    def test_shared_microsoft_uses_connection_credentials_and_tenant_token_url(self):
         connection_id = 1
         config = {
             'server_provider': 'Microsoft',
@@ -42,10 +41,9 @@ class TestEmailHandlerOAuthConfig:
             'client_id': 'shared-client-id',
             'client_secret': 'shared-client-secret',
             'token_url': 'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
-            'scopes': EMAIL_OAUTH_CONFIGS['Microsoft']['scopes']['shared'],
         }
 
-    def test_shared_gmail_uses_trusted_scopes_without_config_scopes(self):
+    def test_shared_gmail_uses_connection_credentials_and_default_token_url(self):
         connection_id = 1
         config = {
             'server_provider': 'Gmail',
@@ -72,8 +70,39 @@ class TestEmailHandlerOAuthConfig:
             'client_id': 'shared-client-id',
             'client_secret': 'shared-client-secret',
             'token_url': EMAIL_OAUTH_CONFIGS['Gmail']['token_url'],
-            'scopes': EMAIL_OAUTH_CONFIGS['Gmail']['scopes']['shared'],
         }
+
+
+class TestOAuthMailViewerRefresh:
+    def test_refresh_request_does_not_include_scope(self):
+        viewer = OAuthMailViewer(
+            {'server_provider': 'Gmail'},
+            {
+                'access_token': 'expired-access-token',
+                'refresh_token': 'refresh-token',
+                'expires_at': 0,
+            },
+            {
+                'client_id': 'client-id',
+                'client_secret': 'client-secret',
+                'token_url': 'https://oauth.example.com/token',
+            },
+        )
+        response = Mock(status_code=200)
+        response.json.return_value = {
+            'access_token': 'new-access-token',
+            'expires_in': 3600,
+        }
+
+        with patch('seaqa_indexer.utils.mail_viewer.oauth_mail_viewer.requests.post', return_value=response) as post_mock:
+            refreshed_token = viewer.refresh_access_token_if_needed()
+
+        assert refreshed_token['access_token'] == 'new-access-token'
+        request_data = post_mock.call_args.kwargs['data']
+        assert request_data == (
+            'grant_type=refresh_token&client_id=client-id&client_secret=client-secret&refresh_token=refresh-token'
+        )
+        assert 'scope=' not in request_data
 
 
 class TestEmailHandlerOAuthRefresh:

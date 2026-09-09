@@ -28,11 +28,10 @@ class OAuthMailViewer(BasicMailViewer):
         self.access_token = oauth_token.get('access_token')
         self.expires_at = oauth_token.get('expires_at')
         self.token_url = oauth_config.get('token_url')
-        self.scopes = oauth_config.get('scopes')
         self.account_type = config.get('account_type', 'personal')
         self.sender_email = config.get('sender_email')
 
-        if not all([self.client_id, self.client_secret, self.refresh_token, self.token_url, self.scopes]):
+        if not all([self.client_id, self.client_secret, self.refresh_token, self.token_url]):
             logger.error('OAuth mail viewer config is invalid. client_id: %s, token_url: %s', self.client_id, self.token_url)
             raise EmailConfigError('OAuth mail viewer configuration is incomplete')
         if self.account_type == 'shared' and not self.sender_email:
@@ -44,8 +43,7 @@ class OAuthMailViewer(BasicMailViewer):
                 'grant_type': 'refresh_token',
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
-                'refresh_token': self.refresh_token,
-                'scope': ' '.join(self.scopes),
+                'refresh_token': self.refresh_token
             }
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
