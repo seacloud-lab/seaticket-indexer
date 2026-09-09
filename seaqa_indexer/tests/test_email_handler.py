@@ -92,10 +92,10 @@ class TestEmailHandlerOAuthRefresh:
             'refresh_token': 'new-refresh',
             'expires_at': 999999,
         }
+        mail_viewer.search_emails.side_effect = EmailViewError('sync failed')
 
         with patch('seaqa_indexer.handlers.email_handler.get_storage'), \
-                patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer), \
-                patch.object(handler, '_sync_email', side_effect=EmailViewError('sync failed')):
+                patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer):
             result = handler.sync(connection_id, project_uuid, config, None, {}, seaqa_db, sync_logger)
 
         assert result == (None, None, None, None)
