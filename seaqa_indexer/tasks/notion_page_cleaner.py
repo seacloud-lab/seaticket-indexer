@@ -108,7 +108,7 @@ class NotionPageCleanerTimer(Thread):
                 refresh_token = oauth.refresh_token
                 expires_at = oauth.expires_at
 
-                if refresh_token and (not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc)):
+                if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
                     try:
                         api = NotionAPI(access_token)
                         new_tokens = api.refresh_access_token(refresh_token)
