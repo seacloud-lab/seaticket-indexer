@@ -328,6 +328,16 @@ class EmailHandler(ConnectionHandler):
                 additional_items=new_emails_by_thread_id.get(thread_id),
                 additional_event_type=DataEventType.EMAIL_MESSAGE_ADDED.value,
                 state_event_ignored_fields=('modified_time', 'unread', 'record_modified_time', 'sync_time'),
+                state_event_extra_new_value=self._build_reply_from_extra(new_emails_by_thread_id.get(thread_id)),
                 log_object_name='email thread',
             )
             published_thread_ids.add(thread_id)
+
+    @staticmethod
+    def _build_reply_from_extra(new_emails):
+        """Expose the latest new inbound sender as email_from on the thread state event."""
+        if not new_emails:
+            return None
+        latest_email = max(new_emails, key=lambda item: str(item.get('email_date') or ''))
+        email_from = latest_email.get('email_from')
+        return {'email_from': email_from} if email_from else None
