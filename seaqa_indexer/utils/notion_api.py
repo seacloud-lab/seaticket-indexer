@@ -1,5 +1,9 @@
 import time
+import base64
+import datetime
 import requests
+
+from seaqa_indexer.config import NOTION_CLIENT_ID, NOTION_CLIENT_SECRET
 
 NOTION_VERSION = "2026-03-11"
 
@@ -25,6 +29,33 @@ class NotionAPI:
         if self.token:
             headers['Authorization'] = f'Bearer {self.token}'
         return headers
+
+    def refresh_access_token(self, refresh_token):
+        auth = base64.b64encode(f'{NOTION_CLIENT_ID}:{NOTION_CLIENT_SECRET}'.encode()).decode()
+        headers = {
+            'Authorization': f'Basic {auth}',
+            'Content-Type': 'application/json',
+            'Notion-Version': NOTION_VERSION,
+        }
+        payload = {
+            'grant_type': 'refresh_token',
+            'refresh_token': refresh_token,
+        }
+        response = self.session.post(
+            f'{self.base_url}/oauth/token',
+            headers=headers,
+            json=payload,
+            timeout=self.timeout,
+        )
+        if response.status_code == 400 and response.text:
+            raise Exception(response.text)
+        response.raise_for_status()
+        data = response.json() or {}
+        access_token = data.get('access_token')
+        refresh_token = data.get('refresh_token') or refresh_token
+        expires_in = data.get('expires_in') or 3600
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(int(expires_in) - 60, 0))
+        return {'access_token': access_token, 'refresh_token': refresh_token, 'expires_at': expires_at}
 
     def search_pages(self, per_page, start_cursor=None):
         pages = []

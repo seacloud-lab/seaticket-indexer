@@ -108,8 +108,29 @@ class NotionHandler(ConnectionHandler):
 
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
-        token = config.get('integration_secret')
-        notion_api = NotionAPI(token)
+        oauth = seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.NOTION.value, connection_id)
+        if not oauth:
+            sync_logger.log('Notion OAuth not found.')
+            raise RuntimeError('Notion OAuth not found.')
+
+        access_token = oauth.access_token
+        refresh_token = oauth.refresh_token
+        expires_at = oauth.expires_at
+
+        # Refresh proactively only when a refresh token exists and the token has expired.
+        # Notion OAuth tokens may be long-lived (no refresh token), in which case we never refresh.
+        if refresh_token and (not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc)):
+            try:
+                api = NotionAPI(access_token)
+                new_tokens = api.refresh_access_token(refresh_token)
+                access_token = new_tokens['access_token']
+                refresh_token = new_tokens['refresh_token']
+                expires_at = new_tokens['expires_at']
+                seaqa_db.update_project_connection_oauth(project_uuid, ConnectionType.NOTION.value, access_token, expires_at, refresh_token, connection_id)
+            except Exception as e:
+                logger.warning('refresh Notion access_token failed: %s', e)
+
+        notion_api = NotionAPI(access_token)
         notion_seadb_api = NotionSeaDBAPI(project_uuid)
         sync_count, total_count = self._sync_notion(
             connection_id,
