@@ -190,3 +190,5 @@ GENERAL_TASK_CONNECTION_SPEC = {
         "description": "Version of the task."
     }
 }
+
+SYNC_LOOKBACK_HOURS = 1
