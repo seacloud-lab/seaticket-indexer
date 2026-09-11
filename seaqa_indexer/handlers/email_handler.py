@@ -210,6 +210,9 @@ class EmailHandler(ConnectionHandler):
                         if time_to_utc_time(modified_time) <= existed_date and email_thread_id:
                             logger.debug(f'connection_id %s message_id %s is up to date, skipping sync.', connection_id, message_id)
                             continue
+                # The event carries the same body as the stored record: what this
+                # sender wrote, without the quoted history.
+                cleaned_content = email_seadb_api.gen_email_content(email)
                 email_info = {
                     'message_id': email.get('message_id'),
                     'reply_to_message_id': email.get('reply_to_message_id'),
@@ -217,12 +220,12 @@ class EmailHandler(ConnectionHandler):
                     'subject': email.get('subject'),
                     'is_sender': email.get('is_sender'),
                     'email_from': email.get('email_from'),
-                    'content': email.get('content'),
+                    'content': cleaned_content,
                     '_is_new_email': not bool(existed_email),
                 }
                 changed_email_list.append(email_info)
 
-                pk = email_seadb_api.save_or_update_email_to_db(connection_id, email, existed_email, is_first_sync)
+                pk = email_seadb_api.save_or_update_email_to_db(connection_id, email, cleaned_content, existed_email, is_first_sync)
                 upload_email_attachment(connection_id, project_uuid, storage, email, pk)
                 email_seadb_api.update_html_content_and_attachments(connection_id, pk, email)
                 if existed_email:

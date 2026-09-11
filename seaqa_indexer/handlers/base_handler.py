@@ -5,7 +5,7 @@ import datetime
 from abc import ABC, abstractmethod
 from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.index.index_store.summary_vector_index import SummaryVectorIndex
-from seaqa_indexer.utils.constants import IndexStatus
+from seaqa_indexer.utils.constants import IndexStatus, EVENT_CONTENT_SIZE_LIMIT, EVENT_CONTENT_TRUNCATED_NOTICE
 from seaqa_indexer.index.utils import gen_conn_summary_index_name, fix_summary
 from seaqa_indexer.utils import time_to_utc_time
 from redis import Redis
@@ -206,10 +206,7 @@ class ConnectionHandler(ABC):
                         'old_value': None,
                         'new_value': dict(item),
                     }
-                    self.mq.publish('data_events', json.dumps({
-                        **base_event,
-                        'event': related_event,
-                    }))
+                    self._publish_data_event(base_event, related_event)
 
             state_event = self.build_event(
                 state_event_type,
@@ -219,9 +216,28 @@ class ConnectionHandler(ABC):
                 date_fields=state_event_date_fields,
             )
             if self.should_publish_state_event(state_event):
-                self.mq.publish('data_events', json.dumps({
-                    **base_event,
-                    'event': state_event,
-                }))
+                self._publish_data_event(base_event, state_event)
         except Exception as e:
             logger.warning('Failed to publish data_events for synced %s %s: %s', log_object_name, item_id, e)
+
+    def _publish_data_event(self, base_event, event):
+        event = {
+            **event,
+            'old_value': self._limit_event_content(event.get('old_value')),
+            'new_value': self._limit_event_content(event.get('new_value')),
+        }
+        self.mq.publish('data_events', json.dumps({**base_event, 'event': event}))
+
+    @staticmethod
+    def _limit_event_content(values):
+        """Cap the body an event carries, since it is prompted to an LLM as is."""
+        if not values:
+            return values
+
+        content = values.get('content')
+        if not isinstance(content, str) or len(content) <= EVENT_CONTENT_SIZE_LIMIT:
+            return values
+        return {
+            **values,
+            'content': content[:EVENT_CONTENT_SIZE_LIMIT] + EVENT_CONTENT_TRUNCATED_NOTICE,
+        }
