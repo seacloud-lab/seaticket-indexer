@@ -2,7 +2,7 @@ import logging
 import json
 import datetime
 
-from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES
+from seaqa_indexer.utils.constants import ConnectionType, CrawlStatus, SUPPORT_VECTOR_RETRIEVAL_TYPES, SYNC_LOOKBACK_HOURS
 from seaqa_indexer.utils import decrypt_config, encrypt_config
 from seaqa_indexer.utils.sync_logger import SyncLogger
 from seaqa_indexer.handlers import get_handler
@@ -66,6 +66,8 @@ def sync_connection(connection_id, seaqa_db, mq, db_session_class):
             is_sync_success = False
 
         conn_handler.mq = mq
+        if old_last_sync_time:
+            old_last_sync_time = old_last_sync_time - datetime.timedelta(hours=SYNC_LOOKBACK_HOURS)
         sync_result = conn_handler.sync(
             connection_id, project_uuid, config, old_last_sync_time,
             connection_status, seaqa_db, sync_logger

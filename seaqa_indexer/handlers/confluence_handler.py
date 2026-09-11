@@ -137,21 +137,26 @@ class ConfluenceHandler(ConnectionHandler):
             seaqa_db,
             confluence_seadb_api,
             workspace_id,
+            old_last_sync_time,
             space_keys,
         )
 
         return sync_count, total_count, False, config
 
     def _sync_confluence(self, connection_id, project_uuid, connection_status, confluence_api, seaqa_db,
-                         confluence_seadb_api, workspace_id, space_keys=None):
+                         confluence_seadb_api, workspace_id, old_last_sync_time, space_keys=None):
         sync_count = 0
         page_size = 100
         status_last_update_time = datetime.datetime.now()
         status_last_update_count = 0
         user_cache = {}
 
-        # CQL server-side filter: only fetch pages modified since the latest local record.
-        since = confluence_seadb_api.get_latest_modified_time(connection_id)
+        if old_last_sync_time:
+            since = time_to_utc_time(str(old_last_sync_time))
+        else:
+            # CQL server-side filter: only fetch pages modified since the latest local record. 
+            # Since_time use latest modified time because the expiration time for the access_token is one hour.
+            since = confluence_seadb_api.get_latest_modified_time(connection_id)
 
         def _upsert_user(account_id):
             """Resolve account ID → display name and store in user table.

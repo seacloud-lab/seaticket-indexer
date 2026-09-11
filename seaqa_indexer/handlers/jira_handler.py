@@ -148,9 +148,11 @@ class JiraIssueHandler(ConnectionHandler):
 
         if is_first_sync:
             self._sync_jira_options(connection_id, jira_api, site_id, project_key, jira_seadb_api)
-        
-        # JQL server-side filter: only fetch pages modified since the latest local record.
-        since = jira_seadb_api.get_latest_modified_time(connection_id)
+            # JQL server-side filter: only fetch pages modified since the latest local record. 
+            # Since_time use latest modified time because the expiration time for the access_token is one hour.
+            since = jira_seadb_api.get_latest_modified_time(connection_id)
+        else:
+            since = time_to_utc_time(str(old_last_sync_time))
 
         def _upsert_user(user):
             user = user or {}
