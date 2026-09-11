@@ -191,6 +191,49 @@ class TestPublishSyncedRecordEvents:
             'content': 'New message body',
         }
 
+    def test_publish_truncates_oversized_additional_event_content(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        oversized_content = 'x' * 300_000
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {'_pk': 20, 'modified_time': '2026-05-22T10:00:00+00:00'},
+            project_uuid='project-2',
+            connection_id=10,
+            item_id='item-10',
+            old_row={'_pk': 20},
+            state_event_type='dummy_updated',
+            additional_items=[{'message_id': 'message-1', 'content': oversized_content}],
+            additional_event_type='dummy_message_added',
+        )
+
+        payload = json.loads(handler.mq.publish.call_args_list[0][0][1])
+        content = payload['event']['new_value']['content']
+        assert content.startswith(oversized_content[:100])
+        assert content.endswith('[content truncated]')
+        assert len(content) < 20_000
+
+    def test_publish_truncates_oversized_state_event_content(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        oversized_content = 'y' * 300_000
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {'_pk': 21, 'content': oversized_content, 'modified_time': '2026-05-22T10:00:00+00:00'},
+            project_uuid='project-2',
+            connection_id=10,
+            item_id='item-10',
+            old_row={'_pk': 21, 'content': 'small', 'modified_time': '2026-05-22T09:00:00+00:00'},
+            state_event_type='dummy_updated',
+            state_event_ignored_fields=('modified_time',),
+        )
+
+        payload = json.loads(handler.mq.publish.call_args[0][1])
+        assert payload['event']['new_value']['content'].endswith('[content truncated]')
+        assert payload['event']['old_value'] == {'content': 'small'}
+
     def test_publish_skip_additional_event_when_old_row_is_none(self):
         handler = DummyHandler()
         handler.mq = Mock()

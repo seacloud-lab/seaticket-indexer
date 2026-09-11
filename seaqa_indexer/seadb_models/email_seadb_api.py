@@ -19,7 +19,9 @@ class EmailSeaDBAPI:
         normalized_subject = subject.strip() if isinstance(subject, str) else str(subject).strip()
         return normalized_subject or "(No Subject)"
 
-    def save_or_update_email_to_db(self, connection_id, email, existed_email, is_first_sync):
+    @staticmethod
+    def gen_email_content(email):
+        """The message this sender wrote, with quoted history stripped."""
         if not email['content']:
             h = html2text.HTML2Text()
             h.ignore_links = False
@@ -28,9 +30,10 @@ class EmailSeaDBAPI:
             markdown_text = h.handle(email['html_content']).strip().strip('```')
         else:
             markdown_text = email['content']
-        
-        cleaned_content = EmailMessage().parse_reply(markdown_text) if markdown_text else ''
 
+        return EmailMessage().parse_reply(markdown_text) if markdown_text else ''
+
+    def save_or_update_email_to_db(self, connection_id, email, cleaned_content, existed_email, is_first_sync):
         insert_row = {
             'email_from': email['email_from'],
             'email_to': email['email_to'],
