@@ -69,8 +69,8 @@ class LinearAPI:
               title
               description
               state { name }
-              creator { name }
-              assignee { name }
+              creator { id name }
+              assignee { id name }
               labels { nodes { name color } }
               priority
               dueDate
@@ -121,7 +121,7 @@ class LinearAPI:
                 body
                 createdAt
                 updatedAt
-                user { name }
+                user { id name }
               }
               pageInfo { hasNextPage endCursor }
             }

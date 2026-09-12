@@ -187,8 +187,18 @@ class LinearIssueHandler(ConnectionHandler):
         sync_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
+        user_cache = set()
         if is_first_sync:
             self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
+
+        def _upsert_user(user):
+            user = user or {}
+            user_id = user.get('id')
+            name = user.get('name')
+            if not user_id or not name or user_id in user_cache:
+                return
+            user_cache.add(user_id)
+            linear_seadb_api.upsert_user(connection_id, user_id, name)
 
         while True:
             issues, page_info = linear_api.list_issues(
@@ -220,6 +230,9 @@ class LinearIssueHandler(ConnectionHandler):
                     self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
                     linear_seadb_api.save_or_update_issue_to_db(connection_id, issue, existed_issue)
 
+                _upsert_user(issue.get('creator'))
+                _upsert_user(issue.get('assignee'))
+
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count
                 )
@@ -244,6 +257,8 @@ class LinearIssueHandler(ConnectionHandler):
                     comments_cursor = comments_page_info.get('endCursor')
 
                 linear_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
+                for comment in all_comments:
+                    _upsert_user(comment.get('user'))
 
             if not page_info.get('hasNextPage'):
                 break
