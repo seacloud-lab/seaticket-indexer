@@ -19,3 +19,4 @@ imapclient==2.3.*
 pycryptodome==3.20.0
 pyyaml==6.0.*
 charset-normalizer==3.4.*
+google-cloud-bigquery==3.38.*

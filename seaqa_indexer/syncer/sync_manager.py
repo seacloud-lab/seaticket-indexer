@@ -35,6 +35,7 @@ NEED_RECOVER_SYNC_TYPES = [
     ConnectionType.LINEAR.value,
     ConnectionType.CONFLUENCE.value,
     ConnectionType.DISCORD.value,
+    ConnectionType.FIREBASE_CRASH.value,
 ]
 
 LINEAR_TOKEN_REFRESH_THRESHOLD = 2 # hour
