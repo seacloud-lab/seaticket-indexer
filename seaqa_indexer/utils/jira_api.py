@@ -1,12 +1,10 @@
-import datetime
 import time
 import requests
 
-from seaqa_indexer.utils import time_to_utc_time
+from seaqa_indexer.utils import calc_oauth_expires_at, time_to_utc_time
 from seaqa_indexer.config import JIRA_CLIENT_ID, JIRA_CLIENT_SECRET
 
 
-OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 60
 DEFAULT_CYCLE_DAYS = 7
 
 
@@ -67,8 +65,7 @@ class JiraAPI:
         if new_refresh_token:
             self.refresh_token = new_refresh_token
 
-        expires_in = data.get('expires_in', 3600) or 3600
-        self.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(int(expires_in) - OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS, 0))
+        self.expires_at = calc_oauth_expires_at(data.get('expires_in'))
 
         return {
             'access_token': self.access_token,

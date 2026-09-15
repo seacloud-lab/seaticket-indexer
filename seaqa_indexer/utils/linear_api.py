@@ -1,7 +1,7 @@
-import datetime
 import requests
 
 from seaqa_indexer.config import LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET
+from seaqa_indexer.utils import calc_oauth_expires_at
 
 
 class LinearAPI:
@@ -46,7 +46,7 @@ class LinearAPI:
         self.access_token = access_token
         self.refresh_token = data.get("refresh_token")
 
-        expires_at = self.calc_expires_at(data.get("expires_in"))
+        expires_at = calc_oauth_expires_at(data.get("expires_in"))
         access_token = data.get("access_token")
         refresh_token = data.get("refresh_token")
 
@@ -219,14 +219,3 @@ class LinearAPI:
                 break
             cursor = page_info.get("endCursor")
         return labels
-
-    @staticmethod
-    def calc_expires_at(expires_in):
-        """Calculate absolute expiry datetime from expires_in seconds.
-        Returns an aware datetime or None."""
-        if not expires_in:
-            return None
-        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-            seconds=int(expires_in)
-        )
-        return expires_at

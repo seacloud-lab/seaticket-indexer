@@ -117,6 +117,17 @@ def time_to_utc_time(time_data):
     return dt.astimezone(datetime.timezone.utc)
 
 
+def calc_oauth_expires_at(expires_in):
+    """Turn an OAuth token response's `expires_in` (seconds) into an absolute
+    expiry datetime (UTC aware). Callers apply their own refresh threshold.
+    """
+    try:
+        expires_in = int(expires_in or 3600)
+    except (TypeError, ValueError):
+        expires_in = 3600
+    return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)
+
+
 def decrypt_config(config):
     config_clone = deepcopy(config)
     cryptor = AESPasswordHasher()

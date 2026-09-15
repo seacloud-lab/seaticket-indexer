@@ -137,7 +137,7 @@ class EmailHandler(ConnectionHandler):
             oauth_token = None
             oauth_config = None
             if config.get('server_provider') in ('Gmail', 'Microsoft'):
-                oauth = seaqa_db.get_connection_oauth(project_uuid, connection_id)
+                oauth = seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.EMAIL.value, connection_id)
                 if not oauth:
                     raise EmailConfigError('Email OAuth authorization is required')
                 oauth_token = {
@@ -239,9 +239,9 @@ class EmailHandler(ConnectionHandler):
                     expires_at = datetime.datetime.fromtimestamp(
                         refreshed_oauth_token['expires_at'], tz=datetime.timezone.utc
                     )
-                    seaqa_db.update_connection_oauth(
-                        project_uuid, connection_id, refreshed_oauth_token['access_token'],
-                        expires_at, refreshed_oauth_token['refresh_token']
+                    seaqa_db.update_project_connection_oauth(
+                        project_uuid, ConnectionType.EMAIL.value, refreshed_oauth_token['access_token'],
+                        expires_at, refreshed_oauth_token['refresh_token'], connection_id
                     )
             email_list = mail_viewer.search_emails(since_date, before_date)
             changed_email_list = []

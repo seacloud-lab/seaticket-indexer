@@ -4,7 +4,7 @@ import logging
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import SchemaTables
-from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
+from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus, OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 from seaqa_indexer.seadb_models.jira_seadb_api import JiraSeaDBAPI
 from seaqa_indexer.index.index_store.jira_issues_index import JiraIssuesIndex
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
@@ -98,7 +98,7 @@ class JiraIssueHandler(ConnectionHandler):
         expires_at = oauth.expires_at
 
         # Refresh proactively if the token has expired
-        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
+        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
             jira_api = JiraAPI(access_token, refresh_token, expires_at=expires_at)
             new_tokens = jira_api.refresh_access_token()
             access_token = new_tokens['access_token']

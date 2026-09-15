@@ -1,9 +1,9 @@
 import time
 import base64
-import datetime
 import requests
 
 from seaqa_indexer.config import NOTION_CLIENT_ID, NOTION_CLIENT_SECRET
+from seaqa_indexer.utils import calc_oauth_expires_at
 
 NOTION_VERSION = "2026-03-11"
 
@@ -53,8 +53,7 @@ class NotionAPI:
         data = response.json() or {}
         access_token = data.get('access_token')
         refresh_token = data.get('refresh_token') or refresh_token
-        expires_in = data.get('expires_in') or 3600
-        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(int(expires_in) - 60, 0))
+        expires_at = calc_oauth_expires_at(data.get('expires_in'))
         return {'access_token': access_token, 'refresh_token': refresh_token, 'expires_at': expires_at}
 
     def search_pages(self, per_page, start_cursor=None):

@@ -9,7 +9,7 @@ from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.notion_api import NotionAPI
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ class NotionPageCleanerTimer(Thread):
                 refresh_token = oauth.refresh_token
                 expires_at = oauth.expires_at
 
-                if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
+                if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
                     api = NotionAPI(access_token)
                     new_tokens = api.refresh_access_token(refresh_token)
                     access_token = new_tokens['access_token']

@@ -5,7 +5,7 @@ import logging
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.index.index_store.notion_index import NotionIndex
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
@@ -118,7 +118,7 @@ class NotionHandler(ConnectionHandler):
         expires_at = oauth.expires_at
 
         # Refresh proactively when the token has expired.
-        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
+        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
             api = NotionAPI(access_token)
             new_tokens = api.refresh_access_token(refresh_token)
             access_token = new_tokens['access_token']

@@ -2,6 +2,7 @@ import datetime
 from unittest.mock import Mock, patch
 
 from seaqa_indexer.handlers.email_handler import EMAIL_OAUTH_CONFIGS, EmailHandler
+from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.mail_viewer import EmailViewError, OAuthMailViewer
 
 
@@ -25,7 +26,7 @@ class TestEmailHandlerOAuthConfig:
         }
         oauth = Mock(access_token='access-token', refresh_token='refresh-token', expires_at=Mock(timestamp=lambda: 1))
         seaqa_db = Mock()
-        seaqa_db.get_connection_oauth.return_value = oauth
+        seaqa_db.get_project_connection_oauth.return_value = oauth
         sync_logger = Mock()
         handler = EmailHandler()
         mail_viewer = Mock()
@@ -54,7 +55,7 @@ class TestEmailHandlerOAuthConfig:
         }
         oauth = Mock(access_token='access-token', refresh_token='refresh-token', expires_at=Mock(timestamp=lambda: 1))
         seaqa_db = Mock()
-        seaqa_db.get_connection_oauth.return_value = oauth
+        seaqa_db.get_project_connection_oauth.return_value = oauth
         sync_logger = Mock()
         handler = EmailHandler()
         mail_viewer = Mock()
@@ -112,7 +113,7 @@ class TestEmailHandlerOAuthRefresh:
         config = {'server_provider': 'Gmail'}
         oauth = Mock(access_token='old-access', refresh_token='old-refresh', expires_at=Mock(timestamp=lambda: 1))
         seaqa_db = Mock()
-        seaqa_db.get_connection_oauth.return_value = oauth
+        seaqa_db.get_project_connection_oauth.return_value = oauth
         sync_logger = Mock()
         handler = EmailHandler()
         mail_viewer = Mock()
@@ -128,9 +129,9 @@ class TestEmailHandlerOAuthRefresh:
             result = handler.sync(connection_id, project_uuid, config, None, {}, seaqa_db, sync_logger)
 
         assert result == (None, None, None, None)
-        seaqa_db.update_connection_oauth.assert_called_once_with(
-            project_uuid, connection_id, 'new-access',
-            datetime.datetime.fromtimestamp(999999, tz=datetime.timezone.utc), 'new-refresh'
+        seaqa_db.update_project_connection_oauth.assert_called_once_with(
+            project_uuid, ConnectionType.EMAIL.value, 'new-access',
+            datetime.datetime.fromtimestamp(999999, tz=datetime.timezone.utc), 'new-refresh', connection_id
         )
 
     def test_does_not_persist_oauth_when_token_is_still_valid(self):
@@ -138,7 +139,7 @@ class TestEmailHandlerOAuthRefresh:
         config = {'server_provider': 'Gmail'}
         oauth = Mock(access_token='access-token', refresh_token='refresh-token', expires_at=Mock(timestamp=lambda: 1))
         seaqa_db = Mock()
-        seaqa_db.get_connection_oauth.return_value = oauth
+        seaqa_db.get_project_connection_oauth.return_value = oauth
         handler = EmailHandler()
         mail_viewer = Mock()
         mail_viewer.refresh_access_token_if_needed.return_value = None
@@ -148,4 +149,4 @@ class TestEmailHandlerOAuthRefresh:
                 patch.object(handler, '_sync_email', return_value=(0, 0)):
             handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, Mock())
 
-        seaqa_db.update_connection_oauth.assert_not_called()
+        seaqa_db.update_project_connection_oauth.assert_not_called()

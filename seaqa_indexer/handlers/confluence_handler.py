@@ -7,7 +7,8 @@ from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.seadb_models.models import SchemaTables
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
-from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
+from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus, \
+    OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 from seaqa_indexer.utils.confluence_api import ConfluenceAPI, ConfluenceUserNotFoundException
 
 
@@ -118,7 +119,7 @@ class ConfluenceHandler(ConnectionHandler):
         expires_at = oauth.expires_at
 
         # Refresh proactively if the token has expired
-        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc):
+        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
             api = ConfluenceAPI(access_token, refresh_token)
             new_tokens = api.refresh_access_token()
             access_token = new_tokens['access_token']
