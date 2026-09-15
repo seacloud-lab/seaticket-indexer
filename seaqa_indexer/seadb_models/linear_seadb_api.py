@@ -2,6 +2,7 @@ import datetime
 import json
 
 from seaqa_indexer.utils import time_to_utc_time
+from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -358,6 +359,45 @@ class LinearSeaDBAPI:
         sql = f"SELECT `_pk`, `comment_id`, `content` FROM `{comments_table_name}` WHERE issue_id = '{issue_id}' LIMIT {page_size} OFFSET {offset}"
         comments = self.seadb_api.query_rows(self.base_id, sql).get('results', [])
         return comments
+
+    def upsert_user(self, connection_id, user_id, display_name):
+        if not user_id or not display_name:
+            return
+
+        table_name = SchemaTables.CONNECTION_USER.table_name()
+        now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+        escaped_user_id = str(user_id).replace("'", "''")
+        connection_type = ConnectionType.LINEAR.value
+        sql = (
+            f"SELECT `_pk`, `connection_ids` FROM `{table_name}` "
+            f"WHERE user_id='{escaped_user_id}' "
+            f"AND connection_type='{connection_type}'"
+        )
+        response = self.seadb_api.query_rows(self.base_id, sql)
+        existing_users = response.get('results', [])
+
+        if existing_users:
+            existing_user = existing_users[0]
+            connection_ids = existing_user.get('connection_ids') or []
+            row = {
+                SchemaTables.CONNECTION_USER.column.name.name: display_name,
+                SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+            }
+            if connection_id not in connection_ids:
+                row[SchemaTables.CONNECTION_USER.column.connection_ids.name] = connection_ids + [connection_id]
+            self.seadb_api.update_rows(self.base_id, table_name, [{
+                'pk': existing_user['_pk'],
+                'row': row,
+            }])
+            return
+
+        self.seadb_api.insert_rows(self.base_id, table_name, [{
+            SchemaTables.CONNECTION_USER.column.user_id.name: user_id,
+            SchemaTables.CONNECTION_USER.column.name.name: display_name,
+            SchemaTables.CONNECTION_USER.column.connection_ids.name: [connection_id],
+            SchemaTables.CONNECTION_USER.column.connection_type.name: connection_type,
+            SchemaTables.CONNECTION_USER.column.record_modified_time.name: now_iso,
+        }])
 
     def get_need_ai_issues_by_page(self, connection_id, page_size):
         issues_table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
