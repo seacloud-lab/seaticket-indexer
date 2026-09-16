@@ -13,24 +13,24 @@ class UserNotFoundException(Exception):
 
 
 class NotionAPI:
-    def __init__(self, token, timeout=60):
-        self.token = token
+    def __init__(self, access_token, refresh_token, timeout=60):
+        self.access_token = access_token
+        self.refresh_token = refresh_token
         self.timeout = timeout
-        self.headers = self._gen_headers()
         self.base_url = 'https://api.notion.com/v1'
         self._user_cache = {}
         self.session = requests.Session()
 
-    def _gen_headers(self):
+    def _headers(self):
         headers = {
             "Notion-Version": NOTION_VERSION,
             "Content-Type": "application/json",
         }
-        if self.token:
-            headers['Authorization'] = f'Bearer {self.token}'
+        if self.access_token:
+            headers['Authorization'] = f'Bearer {self.access_token}'
         return headers
 
-    def refresh_access_token(self, refresh_token):
+    def refresh_access_token(self):
         auth = base64.b64encode(f'{NOTION_CLIENT_ID}:{NOTION_CLIENT_SECRET}'.encode()).decode()
         headers = {
             'Authorization': f'Basic {auth}',
@@ -39,7 +39,7 @@ class NotionAPI:
         }
         payload = {
             'grant_type': 'refresh_token',
-            'refresh_token': refresh_token,
+            'refresh_token': self.refresh_token,
         }
         response = self.session.post(
             f'{self.base_url}/oauth/token',
@@ -51,10 +51,18 @@ class NotionAPI:
             raise Exception(response.text)
         response.raise_for_status()
         data = response.json() or {}
-        access_token = data.get('access_token')
-        refresh_token = data.get('refresh_token') or refresh_token
-        expires_at = calc_oauth_expires_at(data.get('expires_in'))
-        return {'access_token': access_token, 'refresh_token': refresh_token, 'expires_at': expires_at}
+
+        self.access_token = data.get('access_token')
+        new_refresh_token = data.get('refresh_token')
+        if new_refresh_token:
+            self.refresh_token = new_refresh_token
+        self.expires_at = calc_oauth_expires_at(data.get('expires_in'))
+
+        return {
+            'access_token': self.access_token,
+            'refresh_token': self.refresh_token,
+            'expires_at': self.expires_at,
+        }
 
     def search_pages(self, per_page, start_cursor=None):
         pages = []
@@ -68,7 +76,7 @@ class NotionAPI:
         if start_cursor:
             payload["start_cursor"] = start_cursor
 
-        resp = self.session.post(url, headers=self.headers, json=payload, timeout=self.timeout)
+        resp = self.session.post(url, headers=self._headers(), json=payload, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.json()
         results = data.get('results') or []
@@ -86,7 +94,7 @@ class NotionAPI:
             if cursor:
                 params["start_cursor"] = cursor
 
-            resp = self.session.get(url, headers=self.headers, params=params, timeout=self.timeout)
+            resp = self.session.get(url, headers=self._headers(), params=params, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
 
@@ -147,7 +155,7 @@ class NotionAPI:
 
     def get_user_info(self, user_id):
         url = f"{self.base_url}/users/{user_id}"
-        resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
+        resp = self.session.get(url, headers=self._headers(), timeout=self.timeout)
         if resp.status_code == 404:
             raise UserNotFoundException()
         resp.raise_for_status()

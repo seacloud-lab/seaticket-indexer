@@ -117,16 +117,18 @@ class NotionHandler(ConnectionHandler):
         refresh_token = oauth.refresh_token
         expires_at = oauth.expires_at
 
+        notion_api = NotionAPI(access_token, refresh_token)
+
         # Refresh proactively when the token has expired.
         if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
-            api = NotionAPI(access_token)
-            new_tokens = api.refresh_access_token(refresh_token)
+            new_tokens = notion_api.refresh_access_token()
             access_token = new_tokens['access_token']
             refresh_token = new_tokens['refresh_token']
             expires_at = new_tokens['expires_at']
-            seaqa_db.update_project_connection_oauth(project_uuid, ConnectionType.NOTION.value, access_token, expires_at, refresh_token, connection_id)
+            seaqa_db.update_project_connection_oauth(
+                project_uuid, ConnectionType.NOTION.value,
+                access_token, expires_at, refresh_token, connection_id)
 
-        notion_api = NotionAPI(access_token)
         notion_seadb_api = NotionSeaDBAPI(project_uuid)
         sync_count, total_count = self._sync_notion(
             connection_id,

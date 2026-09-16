@@ -22,7 +22,7 @@ class ConfluenceTokenRevokedError(Exception):
 DEFAULT_CYCLE_DAYS = 7
 
 class ConfluenceAPI:
-    def __init__(self, access_token, refresh_token=None, expires_at=None, timeout=60):
+    def __init__(self, access_token, refresh_token, expires_at=None, timeout=60):
         self.access_token = access_token
         self.refresh_token = refresh_token
         self.expires_at = expires_at
