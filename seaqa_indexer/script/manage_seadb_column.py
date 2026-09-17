@@ -1,6 +1,8 @@
 import sys
 import logging
 import argparse
+import requests
+import base64
 
 from sqlalchemy import text
 
@@ -8,14 +10,11 @@ from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.index.utils import init_logging
 
-from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.seadb_models.models import PropertyTypes, ListTypes
+from seaqa_indexer.config import TEMPLATE_BASE_NAME, TEMPLATE_BASE_ID, SEADB_SERVER_URL, SEADB_USER, SEADB_PASSWORD
+
 
 logger = logging.getLogger(__name__)
-
-class TableType:
-    PROJECT = 'project'
-    CONNECTION = 'connection'
 
 
 COLUMN_TYPE_TO_DATA_MAPPING = {
@@ -28,8 +27,82 @@ COLUMN_TYPE_TO_DATA_MAPPING = {
     }
 }
 
-TABLE_CONTAINING_SUB_TABLE_NAMES = ['email', 'github_issue', 'discourse_forum', 'linear_issue', 'discord_thread', 'jira_issue']
-SUB_TABLE_NAMES = ['email_thread', 'github_issue_comments', 'discourse_forum_replies', 'linear_issue_comments', 'discord_thread_messages', 'jira_issue_comments']
+
+def parse_response(response):
+    if response.status_code >= 400 or response.status_code < 200:
+        raise ConnectionError(response.status_code, response.text)
+    else:
+        try:
+            return response.json()
+        except:
+            return {}
+
+class SeaDBAPI:
+    def __init__(self, timeout=30):
+        self.timeout = timeout
+        self.server_url = SEADB_SERVER_URL
+        self.headers = None
+        self.gen_headers()
+
+    def gen_headers(self):
+        auth_str = f"{SEADB_USER}:{SEADB_PASSWORD}"
+        b64 = base64.b64encode(auth_str.encode("utf-8")).decode()
+        self.headers = {
+            "Authorization": f"Basic {b64}"
+        }
+
+    # template
+    def get_template_info(self, template_name):
+        url = f'{self.server_url}//api/v1/templates/info'
+        params = {
+            'name': template_name
+        }
+        response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+        return parse_response(response)
+
+    # columns
+    def add_column(self, template_base_id, table_id, column):
+        url = f'{self.server_url}/api/v1/{template_base_id}/columns'
+        data = {
+            'table_id': table_id,
+            'column_name': column['column_name'],
+            'column_type': column['column_type'],
+        }
+        if column.get('column_data'):
+            data['column_data'] = column['column_data']
+        response = requests.post(url, json=data, headers=self.headers, timeout=self.timeout)
+        return parse_response(response)
+
+    def delete_column(self, template_base_id, table_id, column_key):
+        url = f'{self.server_url}/api/v1/{template_base_id}/columns'
+        data = {
+            'table_id': table_id,
+            'column_key': column_key,
+        }
+        response = requests.delete(url, json=data, headers=self.headers, timeout=self.timeout)
+        return parse_response(response)
+
+    def update_column(self, template_base_id, table_id, column_key, new_column_name=None, update_column_data=None):
+        url = f'{self.server_url}/api/v1/{template_base_id}/columns'
+        data = {
+            'table_id': table_id,
+            'column_key': column_key
+        }
+        if new_column_name:
+            data['new_column_name'] = new_column_name
+        if update_column_data:
+            data['update_column_data'] = update_column_data
+        response = requests.put(url, json=data, headers=self.headers, timeout=self.timeout)
+        return parse_response(response)
+
+    def create_column_index(self, template_base_id, table_id, columns):
+        url = f'{self.server_url}/api/v1/{template_base_id}/index'
+        data = {
+            'table_id': table_id,
+            'columns': columns,
+        }
+        response = requests.post(url, json=data, headers=self.headers, timeout=self.timeout)
+        return parse_response(response)
 
 class ColumnManager:
 
@@ -53,162 +126,110 @@ class ColumnManager:
             raise Exception('column_data_name %s is unavailable' % column_data_name)
         return column_data
     
-    def is_this_table(self, seadb_table_name, table_name, table_type):
-        # Check if the table is the target table
-        if table_type == TableType.PROJECT and seadb_table_name == table_name:
-            return True
-        if table_type == TableType.CONNECTION and table_name in seadb_table_name:
-            if table_name in TABLE_CONTAINING_SUB_TABLE_NAMES and \
-                any(keyword in seadb_table_name for keyword in SUB_TABLE_NAMES):
-                # only add column for main table
-                return False
-            else:
-                return True
+    def is_this_table(self, seadb_table_name, table_name):
+        return seadb_table_name == table_name
     
-    def add_seadb_column(self, table_name, table_type, column_name, column_type, column_data_name, need_add_index=False):
+    def add_seadb_column(self, table_name, column_name, column_type, column_data_name, need_add_index=False):
         column_data = self.get_column_data(column_data_name, column_type)
-        limit = 1000
-        start = 0
-        while True:
-            projects = self.get_projects_by_page(limit, start)
 
-            for project in projects:
-                project_uuid = project.uuid
-                logger.info('start add column for project %s', project_uuid)
-                try:
-                    base_info = self.seadb_api.get_base_metadata(project_uuid)
+        template_info = self.seadb_api.get_template_info(TEMPLATE_BASE_NAME)
+
+        tables = template_info.get('tables')
+        try:
+            for table in tables: # type: ignore
+                seadb_table_name = table['name']
+                table_id = table.get('id')
+                if self.is_this_table(seadb_table_name, table_name):
+                    mapped_column = {
+                        'column_name': column_name,
+                        'column_type': column_type
+                    }
+                    if column_data:
+                        mapped_column['column_data'] = column_data
+                    self.seadb_api.add_column(TEMPLATE_BASE_ID, table_id, mapped_column)
+                    if need_add_index:
+                        self.seadb_api.create_column_index(
+                            TEMPLATE_BASE_ID,
+                            table_id,
+                            [
+                                column_name,
+                            ]
+                        )
                     
-                    tables = base_info['tables']
-                    for table in tables:
-                        seadb_table_name = table['name']
-                        table_id = table.get('id')
-                        if self.is_this_table(seadb_table_name, table_name, table_type):
-                            mapped_column = {
-                                'column_name': column_name,
-                                'column_type': column_type
-                            }
-                            if column_data:
-                                mapped_column['column_data'] = column_data
-                            self.seadb_api.add_column(project_uuid, table_id, mapped_column)
-                            if need_add_index:
-                                self.seadb_api.create_column_index(
-                                    project_uuid,
-                                    table_id,
-                                    [
-                                        column_name,
-                                    ]
-                                )
-                            
-                            logger.info('Successfully add column %s for project %s table %s', column_name, project_uuid, seadb_table_name)
-                except Exception as e:
-                    logger.error("project_uuid:%s fail to add column %s for table %s, error: %s", project_uuid, column_name, table_name, str(e))
-            
-            start += limit
+                    logger.info('Successfully add column %s for project %s table %s', column_name, TEMPLATE_BASE_ID, seadb_table_name)
+        except Exception as e:
+            logger.error("template base:%s fail to add column %s for table %s, error: %s", TEMPLATE_BASE_ID, column_name, table_name, str(e))
 
-            if len(projects) < limit:
-                break
-    
-    def delete_seadb_column(self, table_name, table_type, column_name):
-        limit = 1000
-        start = 0
-        while True:
-            projects = self.get_projects_by_page(limit, start)
+    def delete_seadb_column(self, table_name, column_name):
+        template_info = self.seadb_api.get_template_info(TEMPLATE_BASE_NAME)
 
-            for project in projects:
-                project_uuid = project.uuid
-                logger.info('start delete column %s for project %s table_name %s', column_name, project_uuid, table_name)
-                try:
-                    try:
-                        base_info = self.seadb_api.get_base_metadata(project_uuid)
-                    except Exception as e:
-                        logger.error('project %s fail to add column: %s to table name: %s, error: %s', project_uuid, column_name, table_name, e)
+        tables = template_info.get('tables')
+        try:
+            for table in tables: # type: ignore
+                seadb_table_name = table['name']
+                table_id = table.get('id')
+                columns = table.get('columns')
+                if self.is_this_table(seadb_table_name, table_name):
+                    column = next((column for column in columns if column['name'] == column_name), None)
+                    if not column:
+                        logger.warning('project %s table_name %s does not found %s column', TEMPLATE_BASE_ID, table_name, column_name)
                         continue
+                    column_key = column.get('key')
+                    self.seadb_api.delete_column(TEMPLATE_BASE_ID, table_id, column_key)
+                    logger.info('Successfully delete column %s for project %s table %s', column_name, TEMPLATE_BASE_ID, seadb_table_name)
+        except Exception as e:
+            logger.error("project_uuid:%s fail to add column %s for table %s, error: %s", TEMPLATE_BASE_ID, column_name, table_name, str(e))
 
-                    tables = base_info['tables']
-                    for table in tables:
-                        seadb_table_name = table['name']
-                        table_id = table.get('id')
-                        columns = table.get('columns')
-                        if self.is_this_table(seadb_table_name, table_name, table_type):
-                            column = next((column for column in columns if column['name'] == column_name), None)
-                            if not column:
-                                logger.warning('project %s table_name %s does not found %s column', project_uuid, table_name, column_name)
-                                continue
-                            column_key = column.get('key')
-                            self.seadb_api.delete_column(project_uuid, table_id, column_key)
-                            logger.info('Successfully delete column %s for project %s table %s', column_name, project_uuid, seadb_table_name)
-                except Exception as e:
-                    logger.error("project_uuid:%s fail to add column %s for table %s, error: %s", project_uuid, column_name, table_name, str(e))
-            
-            start += limit
+    def update_seadb_column_format(self, table_name, column_name, column_format):
+        template_info = self.seadb_api.get_template_info(TEMPLATE_BASE_NAME)
+        tables = template_info.get('tables')
 
-            if len(projects) < limit:
-                break
+        try:
+            for table in tables: # type: ignore
+                seadb_table_name = table['name']
+                if not self.is_this_table(seadb_table_name, table_name):
+                    continue
 
-    def update_seadb_column_format(self, table_name, table_type, column_name, column_format):
-        limit = 1000
-        start = 0
-        while True:
-            projects = self.get_projects_by_page(limit, start)
-
-            for project in projects:
-                project_uuid = project.uuid
-                logger.info(
-                    'start update column %s format for project %s table_name %s',
-                    column_name, project_uuid, table_name
+                column = next(
+                    (column for column in table.get('columns') or [] if column['name'] == column_name),
+                    None
                 )
-                try:
-                    base_info = self.seadb_api.get_base_metadata(project_uuid)
-                    for table in base_info['tables']:
-                        seadb_table_name = table['name']
-                        if not self.is_this_table(seadb_table_name, table_name, table_type):
-                            continue
-
-                        column = next(
-                            (column for column in table.get('columns') or [] if column['name'] == column_name),
-                            None
-                        )
-                        if not column:
-                            logger.warning(
-                                'project %s table_name %s does not have column %s',
-                                project_uuid, seadb_table_name, column_name
-                            )
-                            continue
-                        if (column.get('data') or {}).get('format') == column_format:
-                            continue
-
-                        self.seadb_api.update_column(
-                            project_uuid,
-                            table['id'],
-                            column['key'],
-                            update_column_data={'format': column_format},
-                        )
-                        logger.info(
-                            'Successfully updated column %s format for project %s table %s',
-                            column_name, project_uuid, seadb_table_name
-                        )
-                except Exception as e:
-                    logger.error(
-                        'project_uuid:%s fail to update column %s format for table %s, error: %s',
-                        project_uuid, column_name, table_name, str(e)
+                if not column:
+                    logger.warning(
+                        'project %s table_name %s does not have column %s',
+                        TEMPLATE_BASE_ID, seadb_table_name, column_name
                     )
+                    continue
+                if (column.get('data') or {}).get('format') == column_format:
+                    continue
 
-            start += limit
-            if len(projects) < limit:
-                break
+                self.seadb_api.update_column(
+                    TEMPLATE_BASE_ID,
+                    table['id'],
+                    column['key'],
+                    update_column_data={'format': column_format},
+                )
+                logger.info(
+                    'Successfully updated column %s format for project %s table %s',
+                    column_name, TEMPLATE_BASE_ID, seadb_table_name
+                )
+        except Exception as e:
+            logger.error(
+                'project_uuid:%s fail to update column %s format for table %s, error: %s',
+                TEMPLATE_BASE_ID, column_name, table_name, str(e)
+            )
 
 
 def start_add_column(args):
     table_name = args.table_name
-    table_type = args.table_type
     column_name = args.column_name
     column_type = args.column_type
     column_data_name = args.column_data_name
     need_add_index = args.need_add_index
-    logger.info('start to add column %s for table %s, table_type: %s, column_type: %s, column_data_name: %s', column_name, table_name, table_type, column_type, column_data_name)
+    logger.info('start to add column %s for table %s, column_type: %s, column_data_name: %s', column_name, table_name, column_type, column_data_name)
     try:
         manager = ColumnManager()
-        manager.add_seadb_column(table_name, table_type, column_name, column_type, column_data_name, need_add_index)
+        manager.add_seadb_column(table_name, column_name, column_type, column_data_name, need_add_index)
         logger.info("table %s add new column %s successfully.", table_name, column_name)
 
     except Exception as e:
@@ -218,12 +239,11 @@ def start_add_column(args):
 
 def start_delete_column(args):
     table_name = args.table_name
-    table_type = args.table_type
     column_name = args.column_name
     try:
         manager = ColumnManager()
         manager.delete_seadb_column(
-            table_name, table_type, column_name
+            table_name, column_name
         )
         logger.info(f"Successfully deleted column")
 
@@ -236,7 +256,7 @@ def start_update_column_format(args):
     try:
         manager = ColumnManager()
         manager.update_seadb_column_format(
-            args.table_name, args.table_type, args.column_name, args.column_format
+            args.table_name, args.column_name, args.column_format
         )
         logger.info('Successfully updated column format')
     except Exception as e:
@@ -245,8 +265,8 @@ def start_update_column_format(args):
 
 
 def validate_arguments(args):
-    if not args.table_name or not args.table_type or not args.column_name:
-        raise ValueError('--table-name, --table-type, and --column-name must be provided')
+    if not args.table_name or not args.column_name:
+        raise ValueError('--table-name and --column-name must be provided')
     if args.command == 'update-column-format' and not args.column_format:
         raise ValueError('--format must be provided')
 
@@ -282,13 +302,6 @@ def create_parser():
         '--table-name',
         dest='table_name',
         help='Table Name'
-    )
-
-    parent_parser.add_argument(
-        '--table-type',
-        dest='table_type',
-        choices=[TableType.PROJECT, TableType.CONNECTION],
-        help='Table type'
     )
 
     parent_parser.add_argument(
@@ -371,7 +384,6 @@ def main():
 
     print(f"Table Name: {args.table_name}")
     print(f"Column Name: {args.column_name}")
-    print(f"Table Type: {args.table_type}")
 
     init_logging(args)
 
