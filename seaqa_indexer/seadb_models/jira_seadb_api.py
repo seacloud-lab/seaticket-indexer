@@ -213,7 +213,7 @@ class JiraSeaDBAPI:
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
-        sql = f"""SELECT `_pk`, `issue_id`, `issue_key`, `title`, `content`, `status`, `priority`,
+        sql = f"""SELECT `_pk`, `issue_id`, `issue_key`, `title`, `content`, `status`, `status_category`, `priority`,
                 `assignees`, `author`, `issue_type`, `due_date`, `created_time`, `modified_time`, `deleted`
                 FROM `{table_name}` WHERE `issue_id` = {issue_id}"""
         response = self.seadb_api.query_rows(self.base_id, sql)
@@ -238,6 +238,7 @@ class JiraSeaDBAPI:
             SchemaTables.JIRA_ISSUES.column.title.name: fields_data.get('summary'),
             SchemaTables.JIRA_ISSUES.column.content.name:content,
             SchemaTables.JIRA_ISSUES.column.status.name: (fields_data.get('status') or {}).get('name'),
+            SchemaTables.JIRA_ISSUES.column.status_category.name: (((fields_data.get('status') or {}).get('statusCategory') or {}).get('key') or '').strip() or None,
             SchemaTables.JIRA_ISSUES.column.priority.name: (fields_data.get('priority') or {}).get('name'),
             SchemaTables.JIRA_ISSUES.column.assignees.name: assignees_list,
             SchemaTables.JIRA_ISSUES.column.author.name: (fields_data.get('creator') or {}).get('accountId'),

@@ -15,11 +15,13 @@ def test_sync_jira_issues_publishes_completed_status_event():
         'issue_key': 'PROJ-1',
         'title': 'Fix login',
         'status': 'In Progress',
+        'status_category': 'indeterminate',
         'modified_time': '2026-01-01T00:00:00+00:00',
     }
     latest_issue = {
         **existed_issue,
         'status': 'Done',
+        'status_category': 'done',
         'modified_time': '2026-01-02T00:00:00+00:00',
     }
 
@@ -62,7 +64,7 @@ def test_sync_jira_issues_publishes_completed_status_event():
         False,
     )
 
-    jira_api.get_statuses.assert_called_once_with('PROJ', 'site-1')
+    jira_api.get_statuses.assert_not_called()
     handler.mq.publish.assert_called_once()
     payload = json.loads(handler.mq.publish.call_args[0][1])
     assert payload['source_type'] == ConnectionType.JIRA_ISSUE.value

@@ -33,7 +33,7 @@ class LinearSeaDBAPI:
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
-        sql = f"""SELECT `_pk`, `issue_id`, `identifier`, `title`, `content`, `state`, `author`,
+        sql = f"""SELECT `_pk`, `issue_id`, `identifier`, `title`, `content`, `state`, `state_type`, `author`,
                 `assignees`, `labels`, `priority`, `due_date`, `created_time`, `modified_time`,
                 `closed_time`, `deleted`
                 FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"""
@@ -222,6 +222,7 @@ class LinearSeaDBAPI:
             SchemaTables.LINEAR_ISSUES.column.title.name: title,
             SchemaTables.LINEAR_ISSUES.column.content.name: content,
             SchemaTables.LINEAR_ISSUES.column.state.name: (issue.get('state') or {}).get('name'),
+            SchemaTables.LINEAR_ISSUES.column.state_type.name: ((issue.get('state') or {}).get('type') or '').strip() or None,
             SchemaTables.LINEAR_ISSUES.column.author.name: author,
             SchemaTables.LINEAR_ISSUES.column.assignees.name: json.dumps(assignees_list),
             SchemaTables.LINEAR_ISSUES.column.created_time.name: time_to_utc_time(issue.get('createdAt')).isoformat(),

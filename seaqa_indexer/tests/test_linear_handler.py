@@ -101,11 +101,13 @@ def test_sync_linear_issue_publishes_completed_state_event():
         'issue_id': 'issue-1',
         'title': 'Fix login',
         'state': 'In Progress',
+        'state_type': 'started',
         'modified_time': '2026-01-01T00:00:00+00:00',
     }
     latest_issue = {
         **existed_issue,
         'state': 'Done',
+        'state_type': 'completed',
         'modified_time': '2026-01-02T00:00:00+00:00',
         'closed_time': '2026-01-02T00:00:00+00:00',
     }
@@ -134,7 +136,7 @@ def test_sync_linear_issue_publishes_completed_state_event():
         12, None, {}, linear_api, Mock(), linear_seadb_api, 'team-1', True, False
     )
 
-    linear_api.get_workflow_states.assert_called_once_with(team_id='team-1')
+    linear_api.get_workflow_states.assert_not_called()
     handler.mq.publish.assert_called_once()
     payload = json.loads(handler.mq.publish.call_args[0][1])
     assert payload['source_type'] == ConnectionType.LINEAR.value
