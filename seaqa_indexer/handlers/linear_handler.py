@@ -4,7 +4,7 @@ import logging
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import SchemaTables
-from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
+from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
 from seaqa_indexer.utils.linear_api import LinearAPI
 from seaqa_indexer.seadb_models.linear_seadb_api import LinearSeaDBAPI
 from seaqa_indexer.utils.seadb_api import OptionValueInvalidException
@@ -13,6 +13,9 @@ from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_
 from seaqa_indexer.index.index_store.linear_index import LinearIssuesIndex
 
 logger = logging.getLogger(__name__)
+
+LINEAR_EVENT_IGNORED_FIELDS = ('modified_time', 'record_modified_time', 'sync_time')
+LINEAR_EVENT_DATE_FIELDS = ('due_date',)
 
 
 class LinearIssueHandler(ConnectionHandler):
@@ -188,6 +191,7 @@ class LinearIssueHandler(ConnectionHandler):
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
         user_cache = set()
+        state_type_by_name = None
         if is_first_sync:
             self.sync_linear_options(connection_id, linear_seadb_api, linear_api, team_id=team_id)
 
@@ -199,6 +203,29 @@ class LinearIssueHandler(ConnectionHandler):
                 return
             user_cache.add(user_id)
             linear_seadb_api.upsert_user(connection_id, user_id, name)
+
+        def _state_type_by_name():
+            nonlocal state_type_by_name
+            if state_type_by_name is None:
+                state_type_by_name = {}
+                for state in linear_api.get_workflow_states(team_id=team_id) or []:
+                    name = state.get('name')
+                    state_type = (state.get('type') or '').strip()
+                    if name and state_type:
+                        state_type_by_name[name] = state_type
+            return state_type_by_name
+
+        def _state_type_extras(existed_issue, issue):
+            if not existed_issue:
+                return None, None
+            new_state = issue.get('state') or {}
+            old_state_name = existed_issue.get('state')
+            new_state_name = new_state.get('name')
+            if old_state_name == new_state_name:
+                return None, None
+            old_state_type = _state_type_by_name().get(old_state_name) if old_state_name else None
+            new_state_type = (new_state.get('type') or '').strip() or None
+            return {'state_type': old_state_type}, {'state_type': new_state_type}
 
         while True:
             issues, page_info = linear_api.list_issues(
@@ -259,6 +286,24 @@ class LinearIssueHandler(ConnectionHandler):
                 linear_seadb_api.save_or_update_issue_comments(connection_id, issue_id, all_comments)
                 for comment in all_comments:
                     _upsert_user(comment.get('user'))
+
+                old_state_type_extra, new_state_type_extra = _state_type_extras(existed_issue, issue)
+                self.publish_synced_record_events(
+                    get_latest_row=lambda iid=issue_id: linear_seadb_api.get_issue_by_issue_id(iid, connection_id),
+                    project_uuid=linear_seadb_api.base_id,
+                    connection_id=connection_id,
+                    item_id=issue_id,
+                    old_row=existed_issue or None,
+                    state_event_type=(
+                        DataEventType.LINEAR_ISSUE_UPDATED.value if existed_issue
+                        else DataEventType.LINEAR_ISSUE_ADDED.value
+                    ),
+                    state_event_ignored_fields=LINEAR_EVENT_IGNORED_FIELDS,
+                    state_event_date_fields=LINEAR_EVENT_DATE_FIELDS,
+                    state_event_extra_old_value=old_state_type_extra,
+                    state_event_extra_new_value=new_state_type_extra,
+                    log_object_name='linear issue',
+                )
 
             if not page_info.get('hasNextPage'):
                 break

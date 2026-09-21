@@ -213,7 +213,9 @@ class JiraSeaDBAPI:
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = SchemaTables.JIRA_ISSUES.table_name(connection_id)
-        sql = f"SELECT `_pk`, `modified_time` FROM `{table_name}` WHERE `issue_id` = {issue_id}"
+        sql = f"""SELECT `_pk`, `issue_id`, `issue_key`, `title`, `content`, `status`, `priority`,
+                `assignees`, `author`, `issue_type`, `due_date`, `created_time`, `modified_time`, `deleted`
+                FROM `{table_name}` WHERE `issue_id` = {issue_id}"""
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and 'results' in response and response['results']:
             return response['results'][0]

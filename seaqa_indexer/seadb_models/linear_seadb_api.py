@@ -33,7 +33,10 @@ class LinearSeaDBAPI:
 
     def get_issue_by_issue_id(self, issue_id, connection_id):
         table_name = SchemaTables.LINEAR_ISSUES.table_name(connection_id)
-        sql = f"SELECT `_pk`, `issue_id`, `modified_time`, `deleted` FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"
+        sql = f"""SELECT `_pk`, `issue_id`, `identifier`, `title`, `content`, `state`, `author`,
+                `assignees`, `labels`, `priority`, `due_date`, `created_time`, `modified_time`,
+                `closed_time`, `deleted`
+                FROM `{table_name}` WHERE `issue_id` = '{issue_id}'"""
         response = self.seadb_api.query_rows(self.base_id, sql)
         if response and response.get('results'):
             return response['results'][0]

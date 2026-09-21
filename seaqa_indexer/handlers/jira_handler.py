@@ -4,7 +4,7 @@ import logging
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import SchemaTables
-from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
+from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
 from seaqa_indexer.seadb_models.jira_seadb_api import JiraSeaDBAPI
 from seaqa_indexer.index.index_store.jira_issues_index import JiraIssuesIndex
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
@@ -14,6 +14,9 @@ from seaqa_indexer.utils.seadb_api import OptionValueInvalidException
 
 
 logger = logging.getLogger(__name__)
+
+JIRA_EVENT_IGNORED_FIELDS = ('modified_time', 'record_modified_time', 'sync_time')
+JIRA_EVENT_DATE_FIELDS = ('due_date',)
 
 
 class JiraIssueHandler(ConnectionHandler):
@@ -145,6 +148,7 @@ class JiraIssueHandler(ConnectionHandler):
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
         user_cache = set()
+        status_category_by_name = None
 
         if is_first_sync:
             self._sync_jira_options(connection_id, jira_api, site_id, project_key, jira_seadb_api)
@@ -167,6 +171,29 @@ class JiraIssueHandler(ConnectionHandler):
                 return
             user_cache.add(account_id)
             jira_seadb_api.upsert_user(connection_id, account_id, display_name)
+
+        def _status_category_by_name():
+            nonlocal status_category_by_name
+            if status_category_by_name is None:
+                status_category_by_name = {}
+                for status in jira_api.get_statuses(project_key, site_id) or []:
+                    name = status.get('name')
+                    category_key = ((status.get('statusCategory') or {}).get('key') or '').strip()
+                    if name and category_key:
+                        status_category_by_name[name] = category_key
+            return status_category_by_name
+
+        def _status_category_extras(existed_issue, fields_data):
+            if not existed_issue:
+                return None, None
+            new_status = fields_data.get('status') or {}
+            old_status_name = existed_issue.get('status')
+            new_status_name = new_status.get('name')
+            if old_status_name == new_status_name:
+                return None, None
+            old_category = _status_category_by_name().get(old_status_name) if old_status_name else None
+            new_category = ((new_status.get('statusCategory') or {}).get('key') or '').strip() or None
+            return {'status_category': old_category}, {'status_category': new_category}
 
         while True:
             data = jira_api.search_issues(project_key, since, site_id, start_at, page_size)
@@ -206,6 +233,24 @@ class JiraIssueHandler(ConnectionHandler):
                 jira_seadb_api.save_or_update_issue_comments(connection_id, issue_id, issue_key, all_comments)
                 for comment in all_comments:
                     _upsert_user(comment.get('author'))
+
+                old_category_extra, new_category_extra = _status_category_extras(existed_issue, fields_data)
+                self.publish_synced_record_events(
+                    get_latest_row=lambda iid=issue_id: jira_seadb_api.get_issue_by_issue_id(iid, connection_id),
+                    project_uuid=project_uuid,
+                    connection_id=connection_id,
+                    item_id=issue_id,
+                    old_row=existed_issue or None,
+                    state_event_type=(
+                        DataEventType.JIRA_ISSUE_UPDATED.value if existed_issue
+                        else DataEventType.JIRA_ISSUE_ADDED.value
+                    ),
+                    state_event_ignored_fields=JIRA_EVENT_IGNORED_FIELDS,
+                    state_event_date_fields=JIRA_EVENT_DATE_FIELDS,
+                    state_event_extra_old_value=old_category_extra,
+                    state_event_extra_new_value=new_category_extra,
+                    log_object_name='jira issue',
+                )
 
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count
