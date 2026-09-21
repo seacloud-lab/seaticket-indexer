@@ -26,7 +26,6 @@ Options:
 
 BUSINESS_ARGS (for all commands):
   --table-name NAME                Name of the SeaDB table.
-  --table-type TYPE                Type of the table (project or connection).
   --column-name column_name        Name of the target column.
 
 
@@ -42,19 +41,19 @@ BUSINESS_ARGS (only for 'update-column-format'):
 
 Examples:
   # Add a compressed text column
-  $0 add-column --table-name tickets --table-type project --column-name test1 --column-type text --column-data-name text_compressed
+  $0 add-column --table-name tickets --column-name test1 --column-type text --column-data-name text_compressed
 
 
   # Add a column with an index
-  $0 add-column --table-name tickets --table-type project --column-name test1 --column-type text --need-add-index true
+  $0 add-column --table-name tickets --column-name test1 --column-type text --need-add-index true
 
 
   # Delete a column
-  $0 delete-column --table-name tickets --table-type project --column-name test1 --log-file /tmp/alter_column.log
+  $0 delete-column --table-name tickets --column-name test1 --log-file /tmp/alter_column.log
 
 
   # Mark a datetime column as a calendar date
-  $0 update-column-format --table-name tickets --table-type project --column-name due_date --format YYYY-MM-DD
+  $0 update-column-format --table-name tickets --column-name due_date --format YYYY-MM-DD
 
 
 EOF
