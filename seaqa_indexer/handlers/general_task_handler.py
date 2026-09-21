@@ -47,7 +47,7 @@ class GeneralTaskHandler(ConnectionHandler):
             'priority': record.get('priority', ''),
         }
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, connection_id, project_uuid):
         page_size = 100
         updates = []
         ai_processing_count = 0

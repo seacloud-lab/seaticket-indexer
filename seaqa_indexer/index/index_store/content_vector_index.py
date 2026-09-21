@@ -2,7 +2,6 @@ import logging
 import json
 
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.utils.seaqa_ai_api import SeaQAAIAPI
 from seaqa_indexer.index.index_store.base_vector_index import BaseVectorIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT, ConnectionType, AIScenario
@@ -43,7 +42,7 @@ class ContentVectorIndex(BaseVectorIndex):
 
 
     def update(self, table_name, index_name, connection_id, project_uuid,
-               content_vector_status, seaqa_db, seadb_api, storage, since, connection_type):
+               content_vector_status, seaqa_db, seadb_api, since, connection_type):
 
         index_count = 0
         page_size = 100  # Smaller page size since we process chunks
@@ -54,22 +53,7 @@ class ContentVectorIndex(BaseVectorIndex):
         seaqa_ai_api = SeaQAAIAPI()
 
         while True:
-            if connection_type == ConnectionType.SITE.value:
-                sql = f"""
-                    SELECT _pk, url, deleted, outdated, sync_time, modified_time 
-                    FROM `{table_name}` 
-                    WHERE record_modified_time >= '{since}'
-                    ORDER BY sync_time 
-                    LIMIT {page_size} OFFSET {offset}
-                """
-
-                def get_content(row):
-                    url = row.get('url')
-                    filename = url_to_filename(url)
-                    file_json = storage.read_json(connection_id, project_uuid, filename)
-                    return (file_json or {}).get('content')
-
-            elif connection_type == ConnectionType.SEAFILE.value:
+            if connection_type in (ConnectionType.SITE.value, ConnectionType.SEAFILE.value):
                 sql = f"""
                     SELECT _pk, content, deleted, outdated, sync_time, modified_time
                     FROM `{table_name}`

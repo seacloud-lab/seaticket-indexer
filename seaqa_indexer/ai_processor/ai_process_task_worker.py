@@ -2,7 +2,6 @@ import json
 import logging
 
 from seaqa_indexer.workers.base_task_worker import LockingTaskWorker, run_worker
-from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.ai_processor.ai_processor import (
     generate_summaries_and_vectors,
@@ -28,7 +27,6 @@ class AIProcessTaskWorker(LockingTaskWorker):
         return f'ai_process_{task_id}'
 
     def init_dependencies(self):
-        self.storage = get_storage()
         self.seadb_api = SeaDBAPI()
         self.db_session_class = init_db_session_class()
         self.seaqa_db = SeaqaDB(self.db_session_class)
@@ -102,7 +100,7 @@ class AIProcessTaskWorker(LockingTaskWorker):
 
     def process_ai_summary(self, connection_id):
         try:
-            generate_summaries_and_vectors(self.seadb_api, self.storage, self.seaqa_db, self.mq, connection_id)
+            generate_summaries_and_vectors(self.seadb_api, self.seaqa_db, self.mq, connection_id)
         except Exception as e:
             logger.exception('AI process connection: %s failed, error: %s', connection_id, e)
 

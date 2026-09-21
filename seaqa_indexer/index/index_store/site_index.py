@@ -2,7 +2,6 @@ import json
 import logging
 
 from seaqa_indexer.utils import need_update_connection_status
-from seaqa_indexer.crawler.utils import url_to_filename
 from seaqa_indexer.index.index_store.base_connection_index import BaseConnectionIndex
 from seaqa_indexer.utils.constants import SEASEARCH_BULK_OPERATE_LIMIT
 
@@ -13,12 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class SiteIndex(BaseConnectionIndex):
-    def update(self, index_name, connection_id, project_uuid, connection_status, seaqa_db, seadb_api, storage, since):
+    def update(self, index_name, connection_id, project_uuid, connection_status, seaqa_db, seadb_api, since):
         new_index_ids_set = set()
         deleted_index_id_set = set()
 
         index_count = 0
-        page_size = 1000
+        # smaller page size than other indexes: each row now carries its page content
+        page_size = 200
         offset = 0
         bulk_params = []
 
@@ -30,8 +30,8 @@ class SiteIndex(BaseConnectionIndex):
 
         table_name = SchemaTables.WEB_CRAWL.table_name(connection_id=connection_id)
         while True:
-            sql = f"""SELECT `_pk`, `url`, `title`, `modified_time`, `deleted`, `outdated` FROM `{table_name}` 
-                    WHERE record_modified_time >= '{since}' 
+            sql = f"""SELECT `_pk`, `url`, `title`, `content`, `modified_time`, `deleted`, `outdated` FROM `{table_name}`
+                    WHERE record_modified_time >= '{since}'
                     LIMIT {page_size} OFFSET {offset}"""
             result = seadb_api.query_rows(project_uuid, sql)
             rows = result.get('results', [])
@@ -54,9 +54,7 @@ class SiteIndex(BaseConnectionIndex):
 
                 logger.debug('start to update url: %s', url)
 
-                filename = url_to_filename(url)
-                file_json = storage.read_json(connection_id, project_uuid, filename)
-                content = file_json.get('content')
+                content = row.get('content')
 
                 index_info = {'index': {'_index': index_name, '_id': key}}
                 doc_info = {
