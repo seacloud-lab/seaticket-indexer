@@ -4,7 +4,6 @@ import argparse
 import requests
 import base64
 from urllib.parse import quote
-import fnmatch
 
 from sqlalchemy import text
 
@@ -29,9 +28,6 @@ COLUMN_TYPE_TO_DATA_MAPPING = {
         'list_int': ListTypes.int,
     }
 }
-
-TABLE_CONTAINING_SUB_TABLE_NAMES = ['email', 'github_issue', 'discourse_forum', 'linear_issue', 'discord_thread', 'jira_issue']
-SUB_TABLE_NAMES = ['email_thread', 'github_issue_comments', 'discourse_forum_replies', 'linear_issue_comments', 'discord_thread_messages', 'jira_issue_comments']
 
 
 def parse_response(response):
@@ -130,16 +126,6 @@ class ColumnManager:
         return column_data
     
     def is_this_table(self, seadb_table_name, table_name):
-        # Wildcard matching, e.g. linear_issue_* matches linear_issue_123.
-        if '*' in table_name:
-            if not fnmatch.fnmatchcase(seadb_table_name, table_name):
-                return False
-            # Do not touch sub tables, e.g. linear_issue_* must not match linear_issue_comments_123
-            main_table_name = table_name.split('*', 1)[0].rstrip('_')
-            if main_table_name in TABLE_CONTAINING_SUB_TABLE_NAMES and \
-                any(keyword in seadb_table_name for keyword in SUB_TABLE_NAMES):
-                return False
-            return True
         return seadb_table_name == table_name
     
     def add_seadb_column(self, table_name, column_name, column_type, column_data_name, need_add_index=False):

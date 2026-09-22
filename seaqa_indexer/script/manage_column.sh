@@ -25,10 +25,7 @@ Options:
 
 
 BUSINESS_ARGS (for all commands):
-  --table-name NAME                Name of the SeaDB table. Supports '*' wildcard
-                                   (e.g. 'linear_issue_*', quote it to avoid shell glob
-                                   expansion). Wildcard patterns never match sub tables
-                                   such as linear_issue_comments_*.
+  --table-name NAME                Name of the SeaDB table.
   --column-name column_name        Name of the target column.
 
 
@@ -49,11 +46,6 @@ Examples:
 
   # Add a column with an index
   $0 add-column --table-name tickets --column-name test1 --column-type text --need-add-index true
-
-
-  # Add a column to all linear issue main tables via wildcard (sub tables like
-  # linear_issue_comments_* are excluded automatically; quote the pattern)
-  $0 add-column --table-name 'linear_issue_*' --column-name state_type --column-type text
 
 
   # Delete a column
