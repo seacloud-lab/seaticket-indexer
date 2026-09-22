@@ -51,7 +51,7 @@ class LinearIssueHandler(ConnectionHandler):
             'url': url,
         }
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, connection_id, project_uuid):
         page_size = 100
         updates = []
         table_name = self.gen_table_name(connection_id)

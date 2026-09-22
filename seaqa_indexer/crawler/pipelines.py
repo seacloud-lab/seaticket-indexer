@@ -1,8 +1,7 @@
 import json
 import datetime
 
-from seaqa_indexer.crawler.utils import url_to_filename
-from seaqa_indexer.utils.constants import CrawlStatus
+from seaqa_indexer.utils.constants import CrawlStatus, SEADB_CONTENT_SIZE_LIMIT
 from seaqa_indexer.utils import need_update_connection_last_sync_count
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -16,7 +15,6 @@ class BatchCrawlPipeline:
         self.project_uuid = spider.project_uuid
         self.site_id = spider.site_id
         self.seadb_api = spider.seadb_api
-        self.storage = spider.storage
 
     def close_spider(self, spider):
         urls_to_delete = set(spider.existing_site_info.keys()) - spider.processed_urls
@@ -39,9 +37,7 @@ class BatchCrawlPipeline:
                 }
                 rows.append(row)
             self.seadb_api.update_rows(self.project_uuid, table_name, rows)
-            files = [url_to_filename(url) for url in urls_to_delete]
-            self.storage.batch_delete_files(self.site_id, self.project_uuid, files)
-            spider.logger.info('delete files: %s', files)
+            spider.logger.info('mark deleted urls: %s', ', '.join(urls_to_delete))
 
         spider.connection_status['total_records'] = len(spider.processed_urls)
         spider.connection_status['last_sync_status'] = CrawlStatus.COMPLETED
@@ -68,21 +64,18 @@ class BatchCrawlPipeline:
     def save_content(self, item):
         url = item['url']
         title = item['title']
-        content = item['content']
+        content = (item['content'] or '')[:SEADB_CONTENT_SIZE_LIMIT]
         hash = item.get('hash') if item else None
         etag = item.get('etag') if item else None
         modified_time = item.get('last_modified') if item else None
-        filename = url_to_filename(url)
 
         table_name = SchemaTables.WEB_CRAWL.table_name(connection_id=self.site_id)
         sql = f"""SELECT _pk FROM `{table_name}` WHERE url='{url}'"""
         resp_result = self.seadb_api.query_rows(self.project_uuid, sql)
         results = resp_result.get('results')
         if results:
-            old_hash = results[0].get('hash')
-            if hash and hash != old_hash:
-                self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
-                return
+            # spider_parse_item only yields an item for a new or changed page, so whenever
+            # this runs the content is fresh and replaces whatever is stored
             rows = [
                 {
                     "pk": results[0].get('_pk'),
@@ -93,12 +86,12 @@ class BatchCrawlPipeline:
                         SchemaTables.WEB_CRAWL.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                         SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                         SchemaTables.WEB_CRAWL.column.hash.name: hash,
+                        SchemaTables.WEB_CRAWL.column.content.name: content,
                     }
                 }
             ]
             self.seadb_api.update_rows(self.project_uuid, table_name, rows)
         else:
-            self.storage.write_json(self.site_id, self.project_uuid, filename, {'content': content})
             rows = [
                 {
                     SchemaTables.WEB_CRAWL.column.url.name: url,
@@ -108,6 +101,7 @@ class BatchCrawlPipeline:
                     SchemaTables.WEB_CRAWL.column.sync_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     SchemaTables.WEB_CRAWL.column.hash.name: hash,
+                    SchemaTables.WEB_CRAWL.column.content.name: content,
                 }
             ]
             self.seadb_api.insert_rows(self.project_uuid, table_name, rows)

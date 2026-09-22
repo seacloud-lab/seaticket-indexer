@@ -21,7 +21,6 @@ from seaqa_indexer.index.index_store.portal_issue_summary_vector_index import Po
 from seaqa_indexer.handlers import get_handler
 from seaqa_indexer.utils import get_since_time
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.crawler.storage import get_storage
 
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -183,9 +182,8 @@ def update_connection_content_vector_index(connection_id, db_session_class, is_r
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
 
-        storage = get_storage()
         seasearch_api = SeaSearchAPI(SEASEARCH_URL, SEASEARCH_TOKEN)
-        handler.update_content_vector_index(project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api, storage, seasearch_api, since)
+        handler.update_content_vector_index(project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api, seasearch_api, since)
     except Exception as e:
         logger.exception('Connection %s update content vector index failed, error: %s', connection_id, e)
         content_vector_status['last_content_vector_index_status'] = IndexStatus.FAILED

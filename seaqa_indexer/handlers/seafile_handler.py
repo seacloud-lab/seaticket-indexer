@@ -71,7 +71,7 @@ class SeafileHandler(ConnectionHandler):
             formatted['content'] = result.get('content', '')
         return formatted
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, connection_id, project_uuid):
         page_size = 100
         updates = []
         table_name = self.gen_table_name(connection_id)
@@ -129,7 +129,7 @@ class SeafileHandler(ConnectionHandler):
         seaqa_db.update_connection(connection_id, new_indexed_at, json.dumps(connection_status))
 
     def update_content_vector_index(self, project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api,
-                                    storage, seasearch_api, since):
+                                    seasearch_api, since):
         table_name = self.gen_table_name(connection_id)
         content_vector_index = ContentVectorIndex(seasearch_api)
         content_index_name = gen_content_vector_index_name(connection_id, self.connection_type)
@@ -143,7 +143,6 @@ class SeafileHandler(ConnectionHandler):
             content_vector_status,
             seaqa_db,
             seadb_api,
-            storage,
             since,
             self.connection_type
         )

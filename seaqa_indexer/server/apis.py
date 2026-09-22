@@ -109,7 +109,7 @@ def cleanup_deleted_connection():
 
     try:
         application.app.index_manager.delete_index_by_connection(connection_id, connection_type)
-        if connection_type in (ConnectionType.SITE.value, ConnectionType.EMAIL.value):
+        if connection_type == ConnectionType.EMAIL.value:
             storage = get_storage()
             storage.delete_connection_crawl_data(connection_id, project_uuid)
     except Exception as e:

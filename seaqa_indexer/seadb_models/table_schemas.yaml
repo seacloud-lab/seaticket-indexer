@@ -19,6 +19,10 @@ tables:
         column_type: datetime
       hash:
         column_type: text
+      content:
+        column_type: text
+        column_data:
+          compressed: true
       ai_summary:
         column_type: text
       ai_processed_time:

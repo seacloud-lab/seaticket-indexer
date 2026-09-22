@@ -48,7 +48,7 @@ class NotionHandler(ConnectionHandler):
             'url': url,
         }
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, connection_id, project_uuid):
         page_size = 100
         updates = []
         table_name = SchemaTables.NOTION.table_name(connection_id=connection_id)

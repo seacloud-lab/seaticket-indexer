@@ -8,7 +8,7 @@ class SitemapCrawlerSpider(SitemapSpider):
     sitemap_follow = ['.xml']
     sitemap_urls = []
 
-    def __init__(self, site_url, project_uuid, site_id, sitemap_url, connection_status, update_connection_status, seadb_api, storage, sync_logger, *args, **kwargs):
+    def __init__(self, site_url, project_uuid, site_id, sitemap_url, connection_status, update_connection_status, seadb_api, sync_logger, *args, **kwargs):
         super(SitemapCrawlerSpider, self).__init__(*args, **kwargs)
         self.start_urls = [site_url]
         self.project_uuid = project_uuid
@@ -22,7 +22,6 @@ class SitemapCrawlerSpider(SitemapSpider):
 
         self.existing_site_info = {}
         self.seadb_api = seadb_api
-        self.storage = storage
         self.sync_logger = sync_logger
         self._load_existing_site_info()
         self.logger.info(f"Spider loaded {len(self.existing_site_info)} cached URLs for {site_url}")

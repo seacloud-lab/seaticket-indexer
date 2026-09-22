@@ -30,7 +30,7 @@ class DummyHandler(ConnectionHandler):
     def format_vector_search_result(self, record, connection, result):
         return {}
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, connection_id, project_uuid):
         return 0
 
     def update_index(self, connection, seasearch_api, seaqa_db, since):

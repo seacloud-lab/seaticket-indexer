@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50
 
-def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_id):
+def generate_summaries_and_vectors(seadb_api, seaqa_db, mq, connection_id):
     logger.info('start generate summaries and vectors, connection: %s', connection_id)
     project_connection = seaqa_db.get_project_connection_by_id(connection_id)
     if not project_connection:
@@ -48,7 +48,7 @@ def generate_summaries_and_vectors(seadb_api, storage, seaqa_db, mq, connection_
             logger.warning('Unsupported connection type: %s for connection %s', connection_type, connection_id)
             return
 
-        ai_processing_count = conn_handler.process_ai(seadb_api, storage, connection_id, project_uuid)
+        ai_processing_count = conn_handler.process_ai(seadb_api, connection_id, project_uuid)
 
         logger.info('AI processing completed for connection %s', connection_id)
         ai_status['last_ai_processing_status'] = AIStatus.COMPLETED

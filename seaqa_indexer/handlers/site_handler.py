@@ -6,11 +6,9 @@ from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.index.utils import gen_index_name_by_type, gen_content_vector_index_name
 from seaqa_indexer.utils.constants import IndexStatus
-from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
 from seaqa_indexer.index.index_store.site_index import SiteIndex
 from seaqa_indexer.index.index_store.content_vector_index import ContentVectorIndex
-from seaqa_indexer.crawler.utils import url_to_filename
 
 from seaqa_indexer.seadb_models.models import SchemaTables
 
@@ -54,14 +52,14 @@ class SiteHandler(ConnectionHandler):
             formatted['content'] = result.get('content', '')
         return formatted
 
-    def process_ai(self, seadb_api, storage, connection_id, project_uuid):
+    def process_ai(self, seadb_api, connection_id, project_uuid):
         page_size = 100
         updates = []
         ai_processing_count = 0
         table_name = self.gen_table_name(connection_id)
         while True:
             sql = f"""
-                SELECT _pk, url FROM `{table_name}`
+                SELECT _pk, content FROM `{table_name}`
                 WHERE (ai_processed_time IS NULL OR ai_processed_time < record_modified_time) AND (deleted IS NULL OR deleted = false)
                 LIMIT {page_size}
             """
@@ -72,10 +70,7 @@ class SiteHandler(ConnectionHandler):
 
             for row in rows:
                 pk = row.get('_pk')
-                url = row.get('url')
-                filename = url_to_filename(url)
-                file_json = storage.read_json(connection_id, project_uuid, filename)
-                content = file_json.get('content', '')
+                content = row.get('content') or ''
                 summary = self.seaqa_ai_api.generate_summary(content, ConnectionType.SITE.value, project_uuid)
                 vector = self.seaqa_ai_api.generate_embedding(summary, project_uuid)
                 updates.append({
@@ -107,16 +102,15 @@ class SiteHandler(ConnectionHandler):
         site_index.create_index_if_missing(site_index_name)
 
         seadb_api = SeaDBAPI()
-        storage = get_storage()
 
-        index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db, seadb_api, storage, since)
+        index_count = site_index.update(site_index_name, connection_id, project_uuid, connection_status, seaqa_db, seadb_api, since)
         connection_status['last_indexed_count'] = index_count
         connection_status['last_index_status'] = IndexStatus.COMPLETED
         indexed_at = datetime.datetime.now(datetime.UTC)
         seaqa_db.update_connection(connection_id, indexed_at, json.dumps(connection_status))
 
     def update_content_vector_index(self, project_uuid, connection_id, content_vector_status, seaqa_db, seadb_api,
-                                    storage, seasearch_api, since):
+                                    seasearch_api, since):
         table_name = self.gen_table_name(connection_id)
         content_vector_index = ContentVectorIndex(seasearch_api)
         content_index_name = gen_content_vector_index_name(connection_id, self.connection_type)
@@ -130,7 +124,6 @@ class SiteHandler(ConnectionHandler):
             content_vector_status,
             seaqa_db,
             seadb_api,
-            storage,
             since,
             self.connection_type
         )

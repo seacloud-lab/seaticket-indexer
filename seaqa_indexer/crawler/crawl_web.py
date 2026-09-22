@@ -4,7 +4,7 @@ from seaqa_indexer.utils.constants import CrawlStatus
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 from seaqa_indexer.crawler.web_crawl import WebCrawl
 from seaqa_indexer.utils.sync_logger import SyncLogger
-from seaqa_indexer.syncer.utils import publish_project_storage_update, send_connection_sync_result_msg
+from seaqa_indexer.syncer.utils import send_connection_sync_result_msg
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,6 @@ def craw_web(connection_id, db_session_class, mq):
 
     def failed_crawl_site(error_msg, params):
         site_id, site_url, connection_status, is_first_sync = params
-        publish_project_storage_update(mq, project_uuid)
         connection_status['last_sync_status'] = CrawlStatus.FAILED
         seaqa_db.update_connection_status(site_id, json.dumps(connection_status))
         logger.exception('crawl site failed, id: %s, url: %s, error: %s', site_id, site_url, error_msg)
@@ -23,12 +22,10 @@ def craw_web(connection_id, db_session_class, mq):
 
     def success_call_back(msg, params):
         site_id = params[0]
-        callback_project_uuid = params[1]
         is_first_sync = params[2]
         msg_content = {
             'connection_id': site_id,
         }
-        publish_project_storage_update(mq, callback_project_uuid)
         sync_logger.log(f"Completed crawl connection: {connection_id}")
         sync_logger.stop_capture()
         mq.lpush('ai_process_task', json.dumps(msg_content))
