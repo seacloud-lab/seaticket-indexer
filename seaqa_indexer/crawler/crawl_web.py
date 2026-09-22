@@ -66,6 +66,7 @@ def craw_web(connection_id, db_session_class, mq):
     connection_config = json.loads(project_connection.config)
     site_url = connection_config.get('url')
     sitemap_url = connection_config.get('sitemap_url')
+    exclude_paths = connection_config.get('exclude_paths', [])
     project_uuid = str(project_connection.project_uuid)
 
     old_last_sync_time = project_connection.last_sync_time
@@ -83,7 +84,17 @@ def craw_web(connection_id, db_session_class, mq):
             seaqa_db.update_connection_config(connection_id, json.dumps(connection_config))
 
     try:
-        web_crawl.crawl(connection_id, site_url, sitemap_url, project_uuid, connection_status, is_first_sync, success_call_back, failed_crawl_site)
+        web_crawl.crawl(
+            connection_id,
+            site_url,
+            sitemap_url,
+            project_uuid,
+            connection_status,
+            is_first_sync,
+            success_call_back,
+            failed_crawl_site,
+            exclude_paths=exclude_paths,
+        )
     except Exception as e:
         logger.exception('failed to crawl site: %s, error: %s', connection_id, e)
         sync_logger.log(f'Internal Server Error')

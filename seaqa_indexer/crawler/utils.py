@@ -93,7 +93,7 @@ def load_existing_site_info(connection_id, project_uuid, existing_site_info, sea
         `{SchemaTables.WEB_CRAWL.column.etag.name}`, 
         `{SchemaTables.WEB_CRAWL.column.modified_time.name}`, 
         `{SchemaTables.WEB_CRAWL.column.hash.name}`
-        FROM `{table_name}`
+        FROM `{table_name}` where deleted=false or deleted is NULL
         LIMIT {limit} OFFSET {offset}"""
         result = seadb_api.query_rows(project_uuid, sql)
         if not result.get('results', []):
