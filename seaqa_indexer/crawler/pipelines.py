@@ -87,6 +87,7 @@ class BatchCrawlPipeline:
                         SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                         SchemaTables.WEB_CRAWL.column.hash.name: hash,
                         SchemaTables.WEB_CRAWL.column.content.name: content,
+                        SchemaTables.WEB_CRAWL.column.deleted.name: False,
                     }
                 }
             ]
@@ -102,6 +103,7 @@ class BatchCrawlPipeline:
                     SchemaTables.WEB_CRAWL.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
                     SchemaTables.WEB_CRAWL.column.hash.name: hash,
                     SchemaTables.WEB_CRAWL.column.content.name: content,
+                    SchemaTables.WEB_CRAWL.column.deleted.name: False,
                 }
             ]
             self.seadb_api.insert_rows(self.project_uuid, table_name, rows)
