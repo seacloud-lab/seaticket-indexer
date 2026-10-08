@@ -307,7 +307,7 @@ def create_parser():
     parent_parser.add_argument(
         '--column-data-name',
         dest='column_data_name',
-        choices=['text_compresse', 'list_float32', 'list_float64', 'list_int', 'list_bool', 'list_datetime'],
+        choices=['text_compressed', 'list_float32', 'list_float64', 'list_int', 'list_bool', 'list_datetime'],
         help='column data name'
     )
 
