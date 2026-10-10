@@ -936,6 +936,8 @@ tables:
           compressed: true
       state:
         column_type: single-select
+      state_type:
+        column_type: text
       author:
         column_type: text
       labels:
@@ -1146,6 +1148,8 @@ tables:
           compressed: true
       status:
         column_type: single-select
+      status_category:
+        column_type: text
       priority:
         column_type: single-select
       assignees:

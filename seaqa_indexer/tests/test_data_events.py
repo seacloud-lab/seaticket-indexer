@@ -208,6 +208,48 @@ class TestPublishSyncedRecordEvents:
 
         handler.mq.publish.assert_not_called()
 
+    def test_publish_state_event_merges_extra_old_value(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {'_pk': 11, 'title': 'new title', 'modified_time': '2026-05-22T10:00:00+00:00'},
+            project_uuid='project-1',
+            connection_id=9,
+            item_id='item-9',
+            old_row={'_pk': 11, 'title': 'old title', 'modified_time': '2026-05-22T09:00:00+00:00'},
+            state_event_type='dummy_updated',
+            state_event_ignored_fields=('_pk', 'modified_time'),
+            state_event_extra_old_value={'status_category': 'indeterminate'},
+            state_event_extra_new_value={'status_category': 'done'},
+        )
+
+        handler.mq.publish.assert_called_once()
+        payload = json.loads(handler.mq.publish.call_args[0][1])
+        assert payload['event']['type'] == 'dummy_updated'
+        assert payload['event']['old_value']['status_category'] == 'indeterminate'
+        assert payload['event']['old_value']['title'] == 'old title'
+        assert payload['event']['new_value']['status_category'] == 'done'
+        assert payload['event']['new_value']['title'] == 'new title'
+
+    def test_publish_state_event_extra_old_value_does_not_force_publish(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {'_pk': 11, 'title': 'same', 'modified_time': '2026-05-22T10:00:00+00:00'},
+            project_uuid='project-1',
+            connection_id=9,
+            item_id='item-9',
+            old_row={'_pk': 11, 'title': 'same', 'modified_time': '2026-05-22T09:00:00+00:00'},
+            state_event_type='dummy_updated',
+            state_event_ignored_fields=('_pk', 'modified_time'),
+            state_event_extra_old_value={'status_category': 'indeterminate'},
+            state_event_extra_new_value={'status_category': 'done'},
+        )
+
+        handler.mq.publish.assert_not_called()
+
     def test_publish_additional_event_preserves_message_content(self):
         handler = DummyHandler()
         handler.mq = Mock()

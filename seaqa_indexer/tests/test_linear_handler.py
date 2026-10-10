@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock
 
 from seaqa_indexer.handlers.linear_handler import LinearIssueHandler
@@ -89,3 +90,58 @@ def test_sync_linear_issue_skips_user_upsert_when_issue_is_up_to_date():
 
     linear_seadb_api.upsert_user.assert_not_called()
     linear_seadb_api.save_or_update_issue_to_db.assert_not_called()
+
+
+def test_sync_linear_issue_publishes_completed_state_event():
+    handler = LinearIssueHandler()
+    handler.mq = Mock()
+
+    existed_issue = {
+        '_pk': 5,
+        'issue_id': 'issue-1',
+        'title': 'Fix login',
+        'state': 'In Progress',
+        'state_type': 'started',
+        'modified_time': '2026-01-01T00:00:00+00:00',
+    }
+    latest_issue = {
+        **existed_issue,
+        'state': 'Done',
+        'state_type': 'completed',
+        'modified_time': '2026-01-02T00:00:00+00:00',
+        'closed_time': '2026-01-02T00:00:00+00:00',
+    }
+
+    linear_api = Mock()
+    linear_api.list_issues.return_value = ([
+        {
+            'id': 'issue-1',
+            'updatedAt': '2026-01-02T00:00:00Z',
+            'title': 'Fix login',
+            'state': {'name': 'Done', 'type': 'completed'},
+        }
+    ], {'hasNextPage': False})
+    linear_api.list_issue_comments.return_value = ([], {'hasNextPage': False})
+    linear_api.get_workflow_states.return_value = [
+        {'id': 's1', 'name': 'In Progress', 'type': 'started'},
+        {'id': 's2', 'name': 'Done', 'type': 'completed'},
+    ]
+
+    linear_seadb_api = Mock()
+    linear_seadb_api.base_id = 'project-uuid'
+    linear_seadb_api.get_issue_by_issue_id.side_effect = [existed_issue, latest_issue]
+    linear_seadb_api.get_linear_issues_count.return_value = 1
+
+    handler._sync_linear_issue(
+        12, None, {}, linear_api, Mock(), linear_seadb_api, 'team-1', True, False
+    )
+
+    linear_api.get_workflow_states.assert_not_called()
+    handler.mq.publish.assert_called_once()
+    payload = json.loads(handler.mq.publish.call_args[0][1])
+    assert payload['source_type'] == ConnectionType.LINEAR.value
+    assert payload['event']['type'] == 'linear_issue_updated'
+    assert payload['event']['old_value']['state'] == 'In Progress'
+    assert payload['event']['old_value']['state_type'] == 'started'
+    assert payload['event']['new_value']['state'] == 'Done'
+    assert payload['event']['new_value']['state_type'] == 'completed'

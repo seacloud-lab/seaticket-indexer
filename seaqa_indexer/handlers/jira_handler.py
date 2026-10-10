@@ -4,7 +4,7 @@ import logging
 
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.seadb_models.models import SchemaTables
-from seaqa_indexer.utils.constants import ConnectionType, IndexStatus
+from seaqa_indexer.utils.constants import ConnectionType, DataEventType, IndexStatus
 from seaqa_indexer.seadb_models.jira_seadb_api import JiraSeaDBAPI
 from seaqa_indexer.index.index_store.jira_issues_index import JiraIssuesIndex
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
@@ -14,6 +14,9 @@ from seaqa_indexer.utils.seadb_api import OptionValueInvalidException
 
 
 logger = logging.getLogger(__name__)
+
+JIRA_EVENT_IGNORED_FIELDS = ('modified_time', 'record_modified_time', 'sync_time')
+JIRA_EVENT_DATE_FIELDS = ('due_date',)
 
 
 class JiraIssueHandler(ConnectionHandler):
@@ -206,6 +209,21 @@ class JiraIssueHandler(ConnectionHandler):
                 jira_seadb_api.save_or_update_issue_comments(connection_id, issue_id, issue_key, all_comments)
                 for comment in all_comments:
                     _upsert_user(comment.get('author'))
+
+                self.publish_synced_record_events(
+                    get_latest_row=lambda iid=issue_id: jira_seadb_api.get_issue_by_issue_id(iid, connection_id),
+                    project_uuid=project_uuid,
+                    connection_id=connection_id,
+                    item_id=issue_id,
+                    old_row=existed_issue or None,
+                    state_event_type=(
+                        DataEventType.JIRA_ISSUE_UPDATED.value if existed_issue
+                        else DataEventType.JIRA_ISSUE_ADDED.value
+                    ),
+                    state_event_ignored_fields=JIRA_EVENT_IGNORED_FIELDS,
+                    state_event_date_fields=JIRA_EVENT_DATE_FIELDS,
+                    log_object_name='jira issue',
+                )
 
                 should, new_time, new_count = need_update_connection_last_sync_count(
                     sync_count, _status_last_update_time, _status_last_update_count

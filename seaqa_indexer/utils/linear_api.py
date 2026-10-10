@@ -68,7 +68,7 @@ class LinearAPI:
               identifier
               title
               description
-              state { name }
+              state { name type }
               creator { id name }
               assignee { id name }
               labels { nodes { name color } }
@@ -153,7 +153,7 @@ class LinearAPI:
             query = """
             query WorkflowStates($after: String, $first: Int!, $filter: WorkflowStateFilter) {
               workflowStates(after: $after, first: $first, filter: $filter) {
-                nodes { id name color }
+                nodes { id name color type }
                 pageInfo { hasNextPage endCursor }
               }
             }
