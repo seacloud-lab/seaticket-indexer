@@ -9,7 +9,6 @@ from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.syncer.utils import upload_email_attachment, insert_and_update_thread_rows, EMAIL_SYNC_INTERVAL_DAYS
 from seaqa_indexer.utils.mail_viewer import get_mail_viewer_from_config, EmailConfigError, EmailViewError, EmailAuthProviderError
 from seaqa_indexer.seadb_models.email_seadb_api import EmailSeaDBAPI
-from seaqa_indexer.crawler.storage import get_storage
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus, DataEventType
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
@@ -131,7 +130,6 @@ class EmailHandler(ConnectionHandler):
         since = time_to_utc_time(str(since)).isoformat()
 
         email_seadb_api = EmailSeaDBAPI(project_uuid)
-        storage = get_storage()
 
         try:
             oauth_token = None
@@ -168,7 +166,7 @@ class EmailHandler(ConnectionHandler):
 
         try:
             sync_count, total_count = self._sync_email(connection_id, project_uuid, connection_status, since,
-                        mail_viewer, seaqa_db, email_seadb_api, storage, is_first_update, is_oauth=(oauth_token is not None))
+                        mail_viewer, seaqa_db, email_seadb_api, is_first_update, is_oauth=(oauth_token is not None))
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s email sync failed: %s', connection_id, e)
             sync_logger.log(str(e))
@@ -215,7 +213,7 @@ class EmailHandler(ConnectionHandler):
 
     def _sync_email(
             self, connection_id, project_uuid, connection_status, since, mail_viewer,
-            seaqa_db, email_seadb_api, storage, is_first_sync, is_oauth):
+            seaqa_db, email_seadb_api, is_first_sync, is_oauth):
         sync_count = 0
         added_count = 0
         updated_count = 0
@@ -275,7 +273,7 @@ class EmailHandler(ConnectionHandler):
                 changed_email_list.append(email_info)
 
                 pk = email_seadb_api.save_or_update_email_to_db(connection_id, email, cleaned_content, existed_email, is_first_sync)
-                upload_email_attachment(connection_id, project_uuid, storage, email, pk)
+                upload_email_attachment(connection_id, project_uuid, email, pk)
                 email_seadb_api.update_html_content_and_attachments(connection_id, pk, email)
                 if existed_email:
                     updated_count += 1

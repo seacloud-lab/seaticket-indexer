@@ -31,8 +31,7 @@ class TestEmailHandlerOAuthConfig:
         mail_viewer = Mock()
         mail_viewer.refresh_access_token_if_needed.return_value = None
 
-        with patch('seaqa_indexer.handlers.email_handler.get_storage'), \
-                patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer) as viewer_mock, \
+        with patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer) as viewer_mock, \
                 patch.object(handler, '_sync_email', return_value=(0, 0)):
             handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, sync_logger)
 
@@ -60,8 +59,7 @@ class TestEmailHandlerOAuthConfig:
         mail_viewer = Mock()
         mail_viewer.refresh_access_token_if_needed.return_value = None
 
-        with patch('seaqa_indexer.handlers.email_handler.get_storage'), \
-                patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer) as viewer_mock, \
+        with patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer) as viewer_mock, \
                 patch.object(handler, '_sync_email', return_value=(0, 0)):
             handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, sync_logger)
 
@@ -123,8 +121,7 @@ class TestEmailHandlerOAuthRefresh:
         }
         mail_viewer.search_emails.side_effect = EmailViewError('sync failed')
 
-        with patch('seaqa_indexer.handlers.email_handler.get_storage'), \
-                patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer):
+        with patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer):
             result = handler.sync(connection_id, project_uuid, config, None, {}, seaqa_db, sync_logger)
 
         assert result == (None, None, None, None)
@@ -143,8 +140,7 @@ class TestEmailHandlerOAuthRefresh:
         mail_viewer = Mock()
         mail_viewer.refresh_access_token_if_needed.return_value = None
 
-        with patch('seaqa_indexer.handlers.email_handler.get_storage'), \
-                patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer), \
+        with patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer), \
                 patch.object(handler, '_sync_email', return_value=(0, 0)):
             handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, Mock())
 
