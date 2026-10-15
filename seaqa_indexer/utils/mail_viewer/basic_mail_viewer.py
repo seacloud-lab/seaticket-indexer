@@ -140,7 +140,9 @@ class BasicMailViewer:
 
     def gen_email_dict(self, mail_body, is_sender, **extra_fields):
         msg = self._parse_message(mail_body)
+        return self.gen_email_dict_from_message(msg, is_sender, **extra_fields)
 
+    def gen_email_dict_from_message(self, msg, is_sender, **extra_fields):
         header_info = self.get_email_header(msg)
         message_id = header_info.get('Message-ID')
         if not message_id:

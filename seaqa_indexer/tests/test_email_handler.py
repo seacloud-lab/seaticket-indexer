@@ -1,4 +1,5 @@
 import datetime
+import pytest
 from unittest.mock import Mock, patch
 
 from seaqa_indexer.handlers.email_handler import EMAIL_OAUTH_CONFIGS, EmailHandler
@@ -6,6 +7,28 @@ from seaqa_indexer.utils.mail_viewer import EmailViewError, OAuthMailViewer
 
 
 class TestEmailHandlerOAuthConfig:
+    @pytest.mark.parametrize('provider,account_type', [
+        ('Gmail', 'personal'), ('Gmail', 'alias'),
+        ('Microsoft', 'personal'), ('Microsoft', 'alias'), ('Microsoft', 'shared'),
+    ])
+    @pytest.mark.parametrize('mode', ['default', 'custom'])
+    def test_client_choice_is_independent_of_account_type(self, provider, account_type, mode):
+        config = {'server_provider': provider, 'account_type': account_type, 'oauth_client_mode': mode,
+                  'client_id': 'custom-id', 'client_secret': 'custom-secret', 'sender_email': 'alias@example.com'}
+        oauth = Mock(access_token='access', refresh_token='refresh', expires_at=Mock(timestamp=lambda: 1))
+        db = Mock()
+        db.get_connection_oauth.return_value = oauth
+        handler = EmailHandler()
+        platform_config = {'client_id': 'platform-id', 'client_secret': 'platform-secret', 'token_url': 'https://provider.example/token'}
+        with patch.dict(EMAIL_OAUTH_CONFIGS, {provider: platform_config}), \
+                patch('seaqa_indexer.handlers.email_handler.get_storage'), \
+                patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config') as viewer, \
+                patch.object(handler, '_sync_email', return_value=(0, 0)):
+            handler.sync(1, 'project-id', config, None, {}, db, Mock())
+        effective = viewer.call_args.args[2]
+        assert effective['client_id'] == ('custom-id' if mode == 'custom' else 'platform-id')
+        assert effective['client_secret'] == ('custom-secret' if mode == 'custom' else 'platform-secret')
+
     def test_oauth_configs_contain_credentials_and_token_url_only(self):
         assert set(EMAIL_OAUTH_CONFIGS['Gmail']) == {'client_id', 'client_secret', 'token_url'}
         assert EMAIL_OAUTH_CONFIGS['Gmail']['token_url'] == 'https://oauth2.googleapis.com/token'
@@ -18,6 +41,7 @@ class TestEmailHandlerOAuthConfig:
         config = {
             'server_provider': 'Microsoft',
             'account_type': 'shared',
+            'oauth_client_mode': 'custom',
             'client_id': 'shared-client-id',
             'client_secret': 'shared-client-secret',
             'sender_email': 'shared@example.com',
@@ -43,11 +67,12 @@ class TestEmailHandlerOAuthConfig:
             'token_url': 'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
         }
 
-    def test_shared_gmail_uses_connection_credentials_and_default_token_url(self):
+    def test_alias_gmail_uses_connection_credentials_and_default_token_url(self):
         connection_id = 1
         config = {
             'server_provider': 'Gmail',
-            'account_type': 'shared',
+            'account_type': 'alias',
+            'oauth_client_mode': 'custom',
             'client_id': 'shared-client-id',
             'client_secret': 'shared-client-secret',
             'sender_email': 'shared@example.com',
