@@ -1,6 +1,10 @@
 from enum import Enum
 
 
+# Refresh the access token when it is within this many seconds of expiring.
+OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS = 60
+
+
 class CrawlStatus:
     PENDING = 'pending'
     CRAWLING = 'crawling'

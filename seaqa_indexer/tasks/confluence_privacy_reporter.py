@@ -8,7 +8,7 @@ from seaqa_indexer.utils import decrypt_config, time_to_utc_time
 from seaqa_indexer.utils.confluence_api import ConfluenceAPI, ConfluenceWorkspaceUnavailableException, ConfluenceTokenRevokedError, ConfluenceUserNotFoundException, DEFAULT_CYCLE_DAYS
 from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class ConfluencePrivacyReporterTimer(Thread):
     def _ensure_token_fresh(self, confluence_api, project_uuid):
         """Refresh the Confluence OAuth token if it is near or past expiry."""
         now = datetime.datetime.now(datetime.UTC)
-        if confluence_api.expires_at and time_to_utc_time(str(confluence_api.expires_at)) > now + datetime.timedelta(seconds=120):
+        if confluence_api.expires_at and time_to_utc_time(str(confluence_api.expires_at)) > now + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
             return
         logger.info('Refreshing Confluence access token for project %s', project_uuid)
         new_token = confluence_api.refresh_access_token()

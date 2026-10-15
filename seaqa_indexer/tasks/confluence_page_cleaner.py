@@ -9,7 +9,7 @@ from seaqa_indexer.utils import decrypt_config, time_to_utc_time
 from seaqa_indexer.utils.confluence_api import ConfluenceAPI
 from seaqa_indexer.seadb_models.confluence_seadb_api import ConfluenceSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class ConfluencePageCleanerTimer(Thread):
             while True:
                 # Check token freshness before each API request to avoid mid-sync expiry
                 now = datetime.datetime.now(datetime.UTC)
-                if not confluence_api.expires_at or time_to_utc_time(str(confluence_api.expires_at)) <= now + datetime.timedelta(seconds=60):
+                if not confluence_api.expires_at or time_to_utc_time(str(confluence_api.expires_at)) <= now + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
                     logger.info('Confluence access token near expiry, refreshing during page fetch')
                     new_tokens = confluence_api.refresh_access_token()
                     self.seaqa_db.update_project_connection_oauth(

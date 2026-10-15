@@ -6,7 +6,7 @@ from threading import Event, Thread
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.seadb_models.jira_seadb_api import JiraSeaDBAPI
 from seaqa_indexer.utils import decrypt_config, time_to_utc_time
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 from seaqa_indexer.utils.jira_api import (
     DEFAULT_CYCLE_DAYS,
     JiraAPI,
@@ -60,7 +60,7 @@ class JiraPrivacyReporterTimer(Thread):
 
     def _ensure_token_fresh(self, jira_api, project_uuid):
         now = datetime.datetime.now(datetime.UTC)
-        if jira_api.expires_at and time_to_utc_time(str(jira_api.expires_at)) > now + datetime.timedelta(seconds=120):
+        if jira_api.expires_at and time_to_utc_time(str(jira_api.expires_at)) > now + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
             return
         logger.info('Refreshing Jira access token for project %s', project_uuid)
         new_token = jira_api.refresh_access_token()

@@ -1,16 +1,15 @@
 import time
-import json
 import logging
 import datetime
 from threading import Thread, Event
 
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.utils.seadb_api import SeaDBAPI
-from seaqa_indexer.utils import decrypt_config
+from seaqa_indexer.utils import time_to_utc_time
 from seaqa_indexer.utils.notion_api import NotionAPI
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +99,26 @@ class NotionPageCleanerTimer(Thread):
             project_uuid = connection.project_uuid
 
             try:
-                connection_config = decrypt_config(json.loads(connection.config))
-                token = connection_config.get('integration_secret')
-                if not token:
-                    logger.warning('Notion token missing for connection %s, skipping', connection_id)
+                oauth = self.seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.NOTION.value, connection_id)
+                if not oauth:
+                    logger.warning('Notion OAuth missing for connection %s, skipping', connection_id)
                     continue
 
-                notion_api = NotionAPI(token)
+                access_token = oauth.access_token
+                refresh_token = oauth.refresh_token
+                expires_at = oauth.expires_at
+
+                notion_api = NotionAPI(access_token, refresh_token)
+
+                if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
+                    new_tokens = notion_api.refresh_access_token()
+                    access_token = new_tokens['access_token']
+                    refresh_token = new_tokens['refresh_token']
+                    expires_at = new_tokens['expires_at']
+                    self.seaqa_db.update_project_connection_oauth(
+                        project_uuid, ConnectionType.NOTION.value,
+                        access_token, expires_at, refresh_token, connection_id)
+
                 notion_seadb_api = NotionSeaDBAPI(project_uuid)
 
                 remote_page_ids = self.fetch_remote_page_ids(notion_api)

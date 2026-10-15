@@ -5,7 +5,7 @@ import logging
 from seaqa_indexer.handlers.base_handler import ConnectionHandler
 from seaqa_indexer.index.index_store.notion_index import NotionIndex
 from seaqa_indexer.seadb_models.notion_seadb_api import NotionSeaDBAPI
-from seaqa_indexer.utils.constants import ConnectionType
+from seaqa_indexer.utils.constants import ConnectionType, OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS
 from seaqa_indexer.index.utils import gen_index_name_by_type
 from seaqa_indexer.utils.constants import IndexStatus
 from seaqa_indexer.utils import need_update_connection_last_sync_count, time_to_utc_time
@@ -108,8 +108,27 @@ class NotionHandler(ConnectionHandler):
 
     def sync(self, connection_id, project_uuid, config, old_last_sync_time,
              connection_status, seaqa_db, sync_logger):
-        token = config.get('integration_secret')
-        notion_api = NotionAPI(token)
+        oauth = seaqa_db.get_project_connection_oauth(project_uuid, ConnectionType.NOTION.value, connection_id)
+        if not oauth:
+            sync_logger.log('Notion OAuth not found.')
+            raise RuntimeError('Notion OAuth not found.')
+
+        access_token = oauth.access_token
+        refresh_token = oauth.refresh_token
+        expires_at = oauth.expires_at
+
+        notion_api = NotionAPI(access_token, refresh_token)
+
+        # Refresh proactively when the token has expired.
+        if not expires_at or time_to_utc_time(str(expires_at)) <= datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=OAUTH_TOKEN_REFRESH_THRESHOLD_SECONDS):
+            new_tokens = notion_api.refresh_access_token()
+            access_token = new_tokens['access_token']
+            refresh_token = new_tokens['refresh_token']
+            expires_at = new_tokens['expires_at']
+            seaqa_db.update_project_connection_oauth(
+                project_uuid, ConnectionType.NOTION.value,
+                access_token, expires_at, refresh_token, connection_id)
+
         notion_seadb_api = NotionSeaDBAPI(project_uuid)
         sync_count, total_count = self._sync_notion(
             connection_id,
