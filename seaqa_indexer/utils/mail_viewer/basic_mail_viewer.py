@@ -59,6 +59,19 @@ class BasicMailViewer:
 
         return plain_content, html_content
 
+    @staticmethod
+    def normalize_attachment_filename(filename):
+        parts = []
+        for part in filename.replace('\\', '/').split('/'):
+            if part in ('', '.'):
+                continue
+            if part == '..':
+                if parts:
+                    parts.pop()
+                continue
+            parts.append(part.replace('\x00', '_'))
+        return '/'.join(parts) or 'attachment'
+
     def get_attachments(self, msg):
         file_list = []
         filename2content_id = {}
@@ -72,6 +85,7 @@ class BasicMailViewer:
             if filename is not None or (content_id is not None and 'image' in content_type):
                 data = part.get_payload(decode=True)
                 filename = self.decode_str(filename) if filename else content_id[1:-1] + '.' + content_type[6:]
+                filename = self.normalize_attachment_filename(filename)
                 filename = get_no_duplicate_obj_name(filename, exist_file_names)
                 exist_file_names.add(filename)
                 file_list.append({'file_name': filename, 'file_data': data, 'content_disposition': disposition})

@@ -145,6 +145,8 @@ S3_FILE_BUCKET = configs.get('S3_FILE_BUCKET', '')
 S3_WEB_CRAWL_BUCKET = configs.get('S3_WEB_CRAWL_BUCKET', '')
 S3_KEY_ID = configs.get('S3_KEY_ID', '')
 S3_SECRET_KEY = configs.get('S3_SECRET_KEY', '')
+ATTACHMENT_STORAGE_BACKEND = configs.get('ATTACHMENT_STORAGE_BACKEND', 's3').lower()
+ATTACHMENT_STORAGE_LOCAL_ROOT = configs.get('ATTACHMENT_STORAGE_LOCAL_ROOT', '/opt/seaticket/data/attachments')
 
 GITHUB_APP_ID = configs.get('GITHUB_APP_ID', '')
 GITHUB_PRIVATE_KEY_PATH = configs.get('GITHUB_PRIVATE_KEY_PATH', '')

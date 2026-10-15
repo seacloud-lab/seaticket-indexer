@@ -4,6 +4,7 @@ import logging
 import json
 
 from seaqa_indexer.utils import time_to_utc_time, uuid_str_to_32_chars, uuid_str_to_36_chars
+from seaqa_indexer.utils.attachment_backend import CONNECTION_ATTACHMENTS, PROJECT_ATTACHMENTS, get_backend
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,33 @@ EMAIL_SYNC_INTERVAL_DAYS = 10
 PROJECT_STORAGE_UPDATE_CHANNEL = 'project_storage_update'
 
 
-def upload_email_attachment(connection_id, project_uuid, storage, email, pk):
+def get_project_storage_usage(backend, project_uuid):
+    project_uuid_32 = uuid_str_to_32_chars(project_uuid)
+    project_uuid_36 = uuid_str_to_36_chars(project_uuid)
+    file_objects = backend.list_files_by_prefix(
+        PROJECT_ATTACHMENTS, f'/projects/{project_uuid_36}/'
+    )
+    connection_objects = backend.list_files_by_prefix(
+        CONNECTION_ATTACHMENTS, f'{project_uuid_32}/'
+    )
+    file_size = file_count = connection_size = connection_count = 0
+    for _, size in file_objects:
+        file_size += size
+        file_count += 1
+    for _, size in connection_objects:
+        connection_size += size
+        connection_count += 1
+    return {
+        'file_size': file_size,
+        'file_object_count': file_count,
+        'crawl_data_size': connection_size,
+        'crawl_object_count': connection_count,
+    }
+
+
+def upload_email_attachment(connection_id, project_uuid, email, pk):
+    project_uuid = uuid_str_to_32_chars(project_uuid)
+    backend = get_backend()
     file_list = email.pop('attachments', [])
     filename2content_id = email.pop('filename2content_id', {})
     html_content = email.pop('html_content', '')
@@ -22,7 +49,8 @@ def upload_email_attachment(connection_id, project_uuid, storage, email, pk):
         content_disposition = file.get('content_disposition')
         upload_file_name = file_name
         if file_data:
-            storage.upload_connection_record_file(project_uuid, connection_id, pk, upload_file_name, file_data)
+            path = f'{project_uuid}/{connection_id}/{pk}/{upload_file_name}'
+            backend.upload_file_by_bytes(CONNECTION_ATTACHMENTS, path, file_data)
 
         if content_disposition == 'attachment':
             attachment_list.append(upload_file_name)

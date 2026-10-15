@@ -8,7 +8,13 @@ from seaqa_indexer import config
 from seaqa_indexer.syncer.sync_manager import ForumNotFoundException, \
     ForumInActiveException
 from seaqa_indexer.utils.constants import ConnectionType
-from seaqa_indexer.crawler.storage import get_storage
+from seaqa_indexer.utils import uuid_str_to_32_chars, uuid_str_to_36_chars
+from seaqa_indexer.utils.attachment_backend import (
+    CONNECTION_ATTACHMENTS,
+    PROJECT_ATTACHMENTS,
+    get_backend,
+)
+from seaqa_indexer.syncer.utils import get_project_storage_usage
 
 
 application = Flask(__name__)
@@ -78,11 +84,11 @@ def cleanup_deleted_project():
         # delete project index
         application.app.index_manager.delete_index_by_project(project_uuid)
 
-        storage = get_storage()
-        # delete crawled file folder
-        storage.delete_project_crawl_data(project_uuid)
-        # delete project attachment
-        storage.delete_project_attachment(project_uuid)
+        backend = get_backend()
+        project_uuid_36 = uuid_str_to_36_chars(project_uuid)
+        project_uuid_32 = uuid_str_to_32_chars(project_uuid)
+        backend.delete_files_by_prefix(PROJECT_ATTACHMENTS, f'/projects/{project_uuid_36}/')
+        backend.delete_files_by_prefix(CONNECTION_ATTACHMENTS, f'{project_uuid_32}/')
     except Exception as e:
         logger.exception('cleanup deleted project failed: %s', e)
         return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
@@ -109,9 +115,10 @@ def cleanup_deleted_connection():
 
     try:
         application.app.index_manager.delete_index_by_connection(connection_id, connection_type)
-        if connection_type == ConnectionType.EMAIL.value:
-            storage = get_storage()
-            storage.delete_connection_crawl_data(connection_id, project_uuid)
+        project_uuid_32 = uuid_str_to_32_chars(project_uuid)
+        get_backend().delete_files_by_prefix(
+            CONNECTION_ATTACHMENTS, f'{project_uuid_32}/{connection_id}/'
+        )
     except Exception as e:
         logger.exception('cleanup deleted connection failed: %s', e)
         return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
@@ -131,7 +138,7 @@ def project_storage_usage():
         return jsonify({'success': False, 'error_msg': 'Missing project_uuid parameter'}), 400
 
     try:
-        usage = get_storage().get_project_storage_usage(project_uuid)
+        usage = get_project_storage_usage(get_backend(), project_uuid)
     except Exception:
         logger.exception('Project storage usage failed for project %s', project_uuid)
         return jsonify({'success': False, 'error_msg': 'Internal server error'}), 500
