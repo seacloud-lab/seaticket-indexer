@@ -278,9 +278,9 @@ def get_backend():
             S3_FILE_BUCKET,
             S3_WEB_CRAWL_BUCKET,
         )
-    elif ATTACHMENT_STORAGE_BACKEND == 'local':
+    elif ATTACHMENT_STORAGE_BACKEND == 'disk':
         if not ATTACHMENT_STORAGE_LOCAL_ROOT:
-            raise ValueError('ATTACHMENT_STORAGE_LOCAL_ROOT must be configured for local storage')
+            raise ValueError('ATTACHMENT_STORAGE_LOCAL_ROOT must be configured for disk storage')
         _backend = LocalBackend(ATTACHMENT_STORAGE_LOCAL_ROOT)
     else:
         raise ValueError('Unsupported ATTACHMENT_STORAGE_BACKEND: %s' % ATTACHMENT_STORAGE_BACKEND)
