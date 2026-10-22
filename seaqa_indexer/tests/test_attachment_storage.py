@@ -8,8 +8,28 @@ from seaqa_indexer.utils.attachment_backend import (
     FileNotFound,
     LocalBackend,
     S3Backend,
+    get_backend,
 )
 from seaqa_indexer.syncer.utils import get_project_storage_usage
+
+
+def test_backend_factory_loads_disk_configuration(monkeypatch, tmp_path):
+    monkeypatch.setattr('seaqa_indexer.utils.attachment_backend.ATTACHMENT_STORAGE_BACKEND', 'disk')
+    monkeypatch.setattr('seaqa_indexer.utils.attachment_backend.ATTACHMENT_STORAGE_LOCAL_ROOT', str(tmp_path))
+    monkeypatch.setattr('seaqa_indexer.utils.attachment_backend._backend', None)
+
+    backend = get_backend()
+
+    assert isinstance(backend, LocalBackend)
+    assert backend.root == tmp_path.resolve()
+
+
+def test_backend_factory_rejects_local_configuration(monkeypatch):
+    monkeypatch.setattr('seaqa_indexer.utils.attachment_backend.ATTACHMENT_STORAGE_BACKEND', 'local')
+    monkeypatch.setattr('seaqa_indexer.utils.attachment_backend._backend', None)
+
+    with pytest.raises(ValueError, match='Unsupported ATTACHMENT_STORAGE_BACKEND: local'):
+        get_backend()
 
 
 def test_local_backend_round_trips_project_and_connection_files(tmp_path):
