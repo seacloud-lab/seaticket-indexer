@@ -99,7 +99,7 @@ SEADB_SERVER_URL = configs.get('SEADB_SERVER_URL', 'http://seadb:8888')
 DISCORD_BOT_TOKEN = configs.get('DISCORD_BOT_TOKEN', '')
 
 # SeaQA AI
-SEAQA_AI_INNER_SERVER_URL = configs.get('SEAQA_AI_INNER_SERVER_URL', 'http://seaqa-ai:8887')
+SEAQA_AI_INNER_SERVER_URL = configs.get('SEAQA_AI_INNER_SERVER_URL', 'http://seaticket-ai:8887')
 
 # index setting
 LANG = configs.get('LANG', 'chinese')
