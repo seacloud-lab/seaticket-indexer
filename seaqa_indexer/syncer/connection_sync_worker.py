@@ -3,6 +3,7 @@ import logging
 from seaqa_indexer.workers.base_task_worker import BaseTaskWorker, run_worker
 from seaqa_indexer.db import init_db_session_class
 from seaqa_indexer.syncer.sync_connection import sync_connection
+from seaqa_indexer.utils.attachment_backend import get_backend
 from seaqa_indexer.utils.seaqa_db import SeaqaDB
 
 
@@ -36,6 +37,8 @@ class ConnectionSyncTaskWorker(BaseTaskWorker):
 
 
 def main():
+    # Email attachment writes run in daemon task threads; initialize boto3 first.
+    get_backend()
     run_worker(ConnectionSyncTaskWorker)
 
 

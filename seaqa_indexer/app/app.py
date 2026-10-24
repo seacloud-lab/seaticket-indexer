@@ -22,6 +22,7 @@ from seaqa_indexer.index.ticket_index_master import TicketIndexMaster
 from seaqa_indexer.index.portal_issue_index_master import PortalIssueIndexMaster
 from seaqa_indexer.syncer.sync_manager import SyncManager
 from seaqa_indexer.utils import get_python_executable, run
+from seaqa_indexer.utils.attachment_backend import get_backend
 from seaqa_indexer.app.signal_handler import _shutdown
 
 
@@ -52,6 +53,8 @@ class SeaqaIndexerApp(object):
         self.web_crawl_task_publisher = WebCrawlTaskPublisher()
 
     def serve_forever(self):
+        # Initialize boto3 before starting service threads that may access storage.
+        get_backend()
         self._start_worker('seaqa_indexer.crawler.web_crawl_task_worker', 'web crawl worker')
         self._start_worker('seaqa_indexer.index.index_task_worker', 'index worker')
         self._start_worker('seaqa_indexer.index.summary_index_task_worker', 'ai index worker')
@@ -79,6 +82,7 @@ class SeaqaIndexerApp(object):
         self.confluence_privacy_reporter.start()
         self.jira_privacy_reporter.start()
         self.http_server.start()
+        self.http_server.join()
 
     def _start_worker_monitor(self):
         def monitor():
