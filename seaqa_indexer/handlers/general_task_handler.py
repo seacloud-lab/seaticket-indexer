@@ -29,6 +29,19 @@ class GeneralTaskHandler(ConnectionHandler):
     def gen_table_name(self, connection_id):
         return SchemaTables.GENERAL_TASK.table_name(connection_id)
 
+    def build_event(self, event_type, old_row=None, new_row=None, ignored_fields=None):
+        old_row = dict(old_row or {})
+        new_row = dict(new_row or {})
+        for row in (old_row, new_row):
+            due_date = row.get('due_date')
+            if not due_date:
+                continue
+            try:
+                row['due_date'] = time_to_utc_time(str(due_date)).isoformat()
+            except (ValueError, TypeError) as error:
+                logger.warning('Failed to normalize general task due_date %r to UTC: %s', due_date, error)
+        return super().build_event(event_type, old_row, new_row, ignored_fields)
+
     def get_search_param(self, seasearch_api, index_name, keyword, start, size, time_from, time_to):
         general_task_index = GeneralTaskIndex(seasearch_api)
         return general_task_index.get_search_param(index_name, keyword, start, size, time_from, time_to)
