@@ -329,13 +329,10 @@ class EmailHandler(ConnectionHandler):
 
     def _publish_thread_events(self, email_seadb_api, connection_id, email_list, old_thread_rows_by_id):
         published_thread_ids = set()
+        emails_by_thread_id = {}
         new_emails_by_thread_id = {}
 
         for email in email_list:
-            if self._is_new_outbound_email(email):
-                logger.info('Skip agent event for new outbound email (message_id=%s)', email.get('message_id'))
-                continue
-
             message_id = email.get('message_id')
             if not message_id:
                 continue
@@ -344,10 +341,15 @@ class EmailHandler(ConnectionHandler):
             thread_id = latest_email.get('thread_id')
             if not thread_id:
                 continue
+            public_email = {key: value for key, value in email.items() if not key.startswith('_')}
+            # Outbound mail still counts when locating the opening email of a new thread.
+            emails_by_thread_id.setdefault(thread_id, []).append(public_email)
+
+            if self._is_new_outbound_email(email):
+                logger.info('Skip agent event for new outbound email (message_id=%s)', message_id)
+                continue
             if email.get('_is_new_email'):
-                new_emails_by_thread_id.setdefault(thread_id, []).append({
-                    key: value for key, value in email.items() if not key.startswith('_')
-                })
+                new_emails_by_thread_id.setdefault(thread_id, []).append(public_email)
 
         for email in email_list:
             if self._is_new_outbound_email(email):
@@ -365,8 +367,10 @@ class EmailHandler(ConnectionHandler):
             old_thread = old_thread_rows_by_id.get(thread_id)
             if old_thread is None:
                 state_event_type = DataEventType.EMAIL_THREAD_ADDED.value
+                extra_new_value = self._build_opening_email_extra(emails_by_thread_id.get(thread_id))
             else:
                 state_event_type = DataEventType.EMAIL_MESSAGE_ADDED.value
+                extra_new_value = self._build_reply_from_extra(new_emails_by_thread_id.get(thread_id))
 
             self.publish_synced_record_events(
                 get_latest_row=lambda tid=thread_id: email_seadb_api.get_thread_by_pk(connection_id, tid),
@@ -378,7 +382,7 @@ class EmailHandler(ConnectionHandler):
                 additional_items=new_emails_by_thread_id.get(thread_id),
                 additional_event_type=DataEventType.EMAIL_MESSAGE_ADDED.value,
                 state_event_ignored_fields=('modified_time', 'unread', 'record_modified_time', 'sync_time'),
-                state_event_extra_new_value=self._build_reply_from_extra(new_emails_by_thread_id.get(thread_id)),
+                state_event_extra_new_value=extra_new_value,
                 log_object_name='email thread',
             )
             published_thread_ids.add(thread_id)
@@ -391,3 +395,20 @@ class EmailHandler(ConnectionHandler):
         latest_email = max(new_emails, key=lambda item: str(item.get('email_date') or ''))
         email_from = latest_email.get('email_from')
         return {'email_from': email_from} if email_from else None
+
+    @staticmethod
+    def _build_opening_email_extra(thread_emails):
+        """Expose the earliest synced email as the opening email on a new thread state event."""
+        if not thread_emails:
+            return None
+        dated_emails = [item for item in thread_emails if item.get('email_date')]
+        if dated_emails:
+            opening_email = min(dated_emails, key=lambda item: time_to_utc_time(item['email_date']))
+        else:
+            opening_email = thread_emails[0]
+        extra = {
+            field: opening_email.get(field)
+            for field in ('message_id', 'email_date', 'is_sender', 'email_from', 'content')
+            if opening_email.get(field) is not None
+        }
+        return extra or None
