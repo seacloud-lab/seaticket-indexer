@@ -1,8 +1,9 @@
 import logging
 from datetime import datetime, timezone
 from email.header import decode_header
+from email import policy
 from email.parser import BytesParser, Parser
-from email.utils import getaddresses, parseaddr, parsedate_to_datetime
+from email.utils import getaddresses, parseaddr, parsedate_to_datetime, formataddr
 
 from charset_normalizer import from_bytes
 
@@ -94,19 +95,21 @@ class BasicMailViewer:
                     filename2content_id[filename] = content_id[1:-1]
         return file_list, filename2content_id
 
-    def parse_addr(self, addr):
-        addr_info = parseaddr(addr)
-        email_address = addr_info[1]
-        if not email_address:
-            return self.decode_str(addr)
+    def parse_addr(self, name, addr):
+        formatted_addr = addr
         try:
-            nickname = self.decode_str(addr_info[0])
+            nickname = self.decode_str(name)
             if not nickname:
-                nickname = email_address.split('@')[0]
-            return nickname + ' <' + email_address + '>'
+                nickname = addr.rsplit('@', 1)[0]
+
+            local_part, separator, domain = addr.rpartition('@')
+            if separator:
+                # To handle `UnicodeEncodeError` when formatting email addresses, such as `user@bücher.example`
+                formatted_addr = f'{local_part}@{domain.encode("idna").decode("ascii")}'
+            return formataddr((nickname, formatted_addr))
         except Exception as e:
-            logger.warning('parse addr: %s addr_info: %s error: %s', addr, addr_info, e)
-            return '%s <%s>' % (email_address.split('@')[0], email_address)
+            logger.warning('parse addr: %s nickname: %s error: %s', addr, name, e)
+            return formatted_addr
 
     def get_email_header(self, msg):
         header_info = {}
@@ -119,7 +122,7 @@ class BasicMailViewer:
                     value = parsedate_to_datetime(value)
                 elif header in ['From', 'To', 'CC']:
                     value = ','.join([
-                        self.parse_addr(f'{name} <{address}>' if name else address)
+                        self.parse_addr(name, address)
                         for name, address in getaddresses([value])
                         if address
                     ])
@@ -142,8 +145,8 @@ class BasicMailViewer:
     @staticmethod
     def _parse_message(mail_body):
         if isinstance(mail_body, bytes):
-            return BytesParser().parsebytes(mail_body)
-        return Parser().parsestr(mail_body)
+            return BytesParser(policy=policy.default).parsebytes(mail_body)
+        return Parser(policy=policy.default).parsestr(mail_body)
 
     @staticmethod
     def _merge_extra_fields(email_dict, extra_fields):
