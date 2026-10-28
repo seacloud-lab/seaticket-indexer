@@ -265,14 +265,18 @@ class DiscordHandler(ConnectionHandler):
                 if int(last_message_id) <= int(after_snowflake):
                     continue
 
-            thread_messages = self._fetch_all_messages(
-                discord_api, thread_id, after=after_snowflake
-            )
-
             existing_thread = discord_seadb_api.get_thread_by_thread_id(
                 connection_id, thread_id
             )
             is_new_record = not existing_thread
+            # A thread can be new locally while the connection already has a sync cutoff,
+            # for example after a channel becomes visible. Incremental fetch would then
+            # omit the opening post, so load the full history once for a new record.
+            thread_messages = self._fetch_all_messages(
+                discord_api,
+                thread_id,
+                after=None if is_new_record else after_snowflake,
+            )
 
             discord_seadb_api.save_or_update_thread_to_db(
                 connection_id, thread, existing_thread
@@ -295,6 +299,7 @@ class DiscordHandler(ConnectionHandler):
                 if not is_new_record
                 else DataEventType.DISCORD_THREAD_ADDED.value
             )
+            added_messages = message_result.get('added_messages', [])
             sync_count += 1
 
             self.publish_synced_record_events(
@@ -306,10 +311,13 @@ class DiscordHandler(ConnectionHandler):
                 item_id=thread_id,
                 old_row=existing_thread,
                 state_event_type=event_type,
-                additional_items=message_result.get('added_messages', []),
+                additional_items=added_messages,
                 additional_event_type=DataEventType.DISCORD_THREAD_MESSAGE_ADDED.value,
                 state_event_ignored_fields=(
                     'modified_time', 'record_modified_time', 'sync_time'
+                ),
+                state_event_extra_new_value=(
+                    self._build_opening_message_extra(added_messages) if is_new_record else None
                 ),
                 log_object_name='forum thread',
             )
@@ -332,3 +340,25 @@ class DiscordHandler(ConnectionHandler):
         }
         total_count = discord_seadb_api.get_thread_count(connection_id)
         return sync_count, total_count
+
+    @staticmethod
+    def _build_opening_message_extra(added_messages):
+        """Expose the earliest message as the opening message on a new thread state event."""
+        candidates = []
+        for item in added_messages or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                snowflake = int(item.get('message_id'))
+            except (TypeError, ValueError):
+                continue
+            candidates.append((snowflake, item))
+        if not candidates:
+            return None
+        opening_message = min(candidates, key=lambda pair: pair[0])[1]
+        extra = {
+            field: opening_message.get(field)
+            for field in ('message_id', 'author', 'content', 'modified_time')
+            if opening_message.get(field) is not None
+        }
+        return extra or None

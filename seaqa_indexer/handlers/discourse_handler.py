@@ -268,6 +268,9 @@ class DiscourseHandler(ConnectionHandler):
                     additional_items=added_replies,
                     additional_event_type=DataEventType.DISCOURSE_TOPIC_COMMENT_ADDED.value,
                     state_event_ignored_fields=('views', 'modified_time', 'record_modified_time', 'sync_time'),
+                    state_event_extra_new_value=(
+                        None if existing_topic else self._build_opening_post_extra(added_replies)
+                    ),
                     log_object_name='topic',
                 )
 
@@ -282,3 +285,20 @@ class DiscourseHandler(ConnectionHandler):
         }
         total_count = discourse_seadb_api.get_topic_count(connection_id)
         return sync_count, total_count
+
+    @staticmethod
+    def _build_opening_post_extra(added_replies):
+        """Expose the earliest reply as the opening post on a new topic state event."""
+        posts = [
+            item for item in added_replies or []
+            if isinstance(item, dict) and item.get('post_number') is not None
+        ]
+        if not posts:
+            return None
+        opening_post = min(posts, key=lambda item: item['post_number'])
+        extra = {
+            field: opening_post.get(field)
+            for field in ('post_number', 'author', 'content', 'modified_time')
+            if opening_post.get(field) is not None
+        }
+        return extra or None
