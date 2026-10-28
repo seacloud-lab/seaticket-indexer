@@ -265,14 +265,18 @@ class DiscordHandler(ConnectionHandler):
                 if int(last_message_id) <= int(after_snowflake):
                     continue
 
-            thread_messages = self._fetch_all_messages(
-                discord_api, thread_id, after=after_snowflake
-            )
-
             existing_thread = discord_seadb_api.get_thread_by_thread_id(
                 connection_id, thread_id
             )
             is_new_record = not existing_thread
+            # A thread can be new locally while the connection already has a sync cutoff,
+            # for example after a channel becomes visible. Incremental fetch would then
+            # omit the opening post, so load the full history once for a new record.
+            thread_messages = self._fetch_all_messages(
+                discord_api,
+                thread_id,
+                after=None if is_new_record else after_snowflake,
+            )
 
             discord_seadb_api.save_or_update_thread_to_db(
                 connection_id, thread, existing_thread
