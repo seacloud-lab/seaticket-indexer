@@ -13,9 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 class BasicMailViewer:
+    # Narrow charsets whose wider superset decodes more characters.
+    _CHARSET_ALIASES = {'gb2312': 'gb18030', 'gbk': 'gb18030'}
+
     def __init__(self, config):
         self.config = config
         self.config_updated = False
+
+    @staticmethod
+    def _normalize_charset(charset):
+        return BasicMailViewer._CHARSET_ALIASES.get((charset or '').lower(), charset)
 
     @staticmethod
     def decode_str(value):
@@ -30,8 +37,7 @@ class BasicMailViewer:
                     continue
                 result_str += part
                 continue
-            if charset.lower() in ['gb2312', 'gbk', 'gb18030']:
-                charset = 'gb18030'
+            charset = BasicMailViewer._normalize_charset(charset)
             result_str += part.decode(charset, errors='replace')
         return result_str
 
@@ -40,6 +46,17 @@ class BasicMailViewer:
         payload = part.get_payload(decode=True)
         if not payload:
             return ''
+
+        # Declared charset first: guessing over it is what turned GBK Chinese
+        # into Hangul (charset_normalizer misreads those bytes as cp949).
+        for charset in (BasicMailViewer._normalize_charset(part.get_content_charset()), 'utf-8'):
+            if not charset:
+                continue
+            try:
+                return payload.decode(charset)
+            except (UnicodeDecodeError, LookupError):
+                continue
+
         guess = from_bytes(payload).best()
         return str(guess) if guess else payload.decode('utf-8', errors='replace')
 
