@@ -141,7 +141,7 @@ class IndexManager:
 
 def main():
     logging.basicConfig(
-        format='[seaqa_indexer] [%(asctime)s] [%(levelname)s] %(message)s',
+        format='[seaticket-indexer] [%(asctime)s] [%(levelname)s] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
         level='INFO',
         stream=sys.stdout
