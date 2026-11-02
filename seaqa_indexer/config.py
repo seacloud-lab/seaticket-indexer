@@ -75,12 +75,12 @@ class _ConfigParser(object):
     
 # init configs reader
 CONF_DIR = os.environ.get('CONF_PATH', '/opt/seaqa/conf/')
-yaml_file_path = os.path.join(CONF_DIR, os.environ.get('SEAQA_CONFIG_NAME', 'seaqa_config.yaml'))
-configs = _ConfigParser(yaml_file_path, 'seaqa-indexer')
+yaml_file_path = os.path.join(CONF_DIR, os.environ.get('SEATICKET_CONFIG_NAME', 'seaticket_config.yaml'))
+configs = _ConfigParser(yaml_file_path, 'seaticket-indexer')
 
 # Service info & logs
 LOG_LEVEL = configs.get('LOG_LEVEL', 'info')
-LOG_FILE = os.path.join(configs.get('LOG_PATH', '/tmp'), 'seaqa-indexer.log')
+LOG_FILE = os.path.join(configs.get('LOG_PATH', '/tmp'), 'seaticket-indexer.log')
 
 HOST = configs.get('SEAQA_INDEXER_LISTEN_HOST', '0.0.0.0')
 PORT = configs.get('SEAQA_INDEXER_LISTEN_PORT', 8888)
