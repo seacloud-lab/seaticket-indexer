@@ -39,6 +39,14 @@ class SeaqaDB(object):
             }).fetchone()
             return row
 
+    def get_portal_customer_email_domains(self, project_uuid):
+        project_uuid = uuid_str_to_36_chars(project_uuid)
+        with self.db_session_class() as session:
+            sql = """SELECT id, email_domain
+                     FROM portal_customers
+                     WHERE project_uuid=:project_uuid"""
+            return session.execute(text(sql), {'project_uuid': project_uuid}).fetchall()
+
     def get_connection_oauth_page(self, connection_type, offset=0, limit=100):
         with self.db_session_class() as session:
             sql = """

@@ -1,6 +1,7 @@
 import json
 import logging
 import datetime
+from email.utils import parseaddr
 
 from dateutil.relativedelta import relativedelta
 
@@ -219,6 +220,8 @@ class EmailHandler(ConnectionHandler):
         updated_count = 0
         _status_last_update_time = datetime.datetime.now()
         _status_last_update_count = 0
+        customer_id_by_domain = None
+        customers_loaded = False
 
         since = time_to_utc_time(str(since))
         today = datetime.datetime.now(datetime.timezone.utc).date()
@@ -260,6 +263,18 @@ class EmailHandler(ConnectionHandler):
                 # The event carries the same body as the stored record: what this
                 # sender wrote, without the quoted history.
                 cleaned_content = email_seadb_api.gen_email_content(email)
+                customer_id = None
+                if not email.get('is_sender'):
+                    email_domain = self._get_email_domain(email.get('email_from'))
+                    if email_domain and not customers_loaded:
+                        customer_id_by_domain = {
+                            (row.email_domain or '').strip().lower(): row.id
+                            for row in seaqa_db.get_portal_customer_email_domains(project_uuid)
+                            if (row.email_domain or '').strip()
+                        }
+                        customers_loaded = True
+                    if email_domain:
+                        customer_id = customer_id_by_domain.get(email_domain)
                 email_info = {
                     'message_id': email.get('message_id'),
                     'reply_to_message_id': email.get('reply_to_message_id'),
@@ -269,6 +284,7 @@ class EmailHandler(ConnectionHandler):
                     'email_from': email.get('email_from'),
                     'content': cleaned_content,
                     '_is_new_email': not bool(existed_email),
+                    '_customer_id': customer_id,
                 }
                 changed_email_list.append(email_info)
 
@@ -306,6 +322,14 @@ class EmailHandler(ConnectionHandler):
         }
         total_count = email_seadb_api.get_email_total_count(connection_id)
         return sync_count, total_count
+
+    @staticmethod
+    def _get_email_domain(email_from):
+        if not isinstance(email_from, str):
+            return None
+        address = parseaddr(email_from)[1] or email_from
+        _, separator, domain = address.rpartition('@')
+        return domain.strip().lower() if separator and domain.strip() else None
 
     def _get_old_thread_rows_by_id(self, email_seadb_api, connection_id, email_list):
         old_thread_rows_by_id = {}
