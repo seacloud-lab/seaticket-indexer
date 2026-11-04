@@ -504,12 +504,15 @@ tables:
           list_type: float32
       linked_ticket:
         column_type: int64
+      customer_id:
+        column_type: int64
     indexes:
     - - title
     - - modified_time
     - - deleted
     - - sync_time
     - - linked_ticket
+    - - customer_id
     - - ai_processed_time
     - - record_modified_time
     - - is_replied

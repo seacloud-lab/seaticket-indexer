@@ -108,6 +108,8 @@ class EmailSeaDBAPI:
             SchemaTables.THREAD.column.record_modified_time.name: datetime.datetime.now(datetime.UTC).isoformat(),
             SchemaTables.THREAD.column.deleted.name: False
         }
+        if thread.get('customer_id') is not None:
+            insert_row[SchemaTables.THREAD.column.customer_id.name] = thread['customer_id']
 
         table_name = SchemaTables.THREAD.table_name(connection_id=connection_id)
         return self.seadb_api.insert_rows(self.base_id, table_name, [insert_row]).get('pks')[0]
@@ -130,6 +132,13 @@ class EmailSeaDBAPI:
             }
         ]
         self.seadb_api.update_rows(self.base_id, table_name, update_row)
+
+    def update_thread_customer_id_if_missing(self, connection_id, thread_id, customer_id):
+        table_name = SchemaTables.THREAD.table_name(connection_id=connection_id)
+        sql = f"""UPDATE `{table_name}`
+                  SET customer_id = {int(customer_id)}
+                  WHERE `_pk` = {int(thread_id)} AND customer_id IS NULL"""
+        self.seadb_api.query_rows(self.base_id, sql)
 
     def get_email_total_count(self, connection_id):
         table_name = SchemaTables.EMAIL.table_name(connection_id=connection_id)
@@ -179,7 +188,7 @@ class EmailSeaDBAPI:
 
     def get_thread_by_pk(self, connection_id, thread_id):
         table_name = SchemaTables.THREAD.table_name(connection_id=connection_id)
-        sql = f"SELECT _pk, title, modified_time, unread, linked_ticket, deleted, tags FROM `{table_name}` WHERE `_pk` = {thread_id} LIMIT 1"
+        sql = f"SELECT _pk, title, modified_time, unread, linked_ticket, customer_id, deleted, tags FROM `{table_name}` WHERE `_pk` = {thread_id} LIMIT 1"
         res = self.seadb_api.query_rows(self.base_id, sql)
         result = res.get('results', [])
         return result[0] if result else {}

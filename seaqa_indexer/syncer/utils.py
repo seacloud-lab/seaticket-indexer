@@ -121,6 +121,10 @@ def insert_and_update_thread_rows(
                 update_thread['last_updated_at'] = email['email_date']
             if not email.get('is_sender'):
                 update_thread['unread'] = not is_first_sync
+                if email.get('_customer_id') is not None:
+                    email_seadb_api.update_thread_customer_id_if_missing(
+                        connection_id, thread_id, email['_customer_id'],
+                    )
             if update_thread:
                 update_thread['thread_id'] = thread_id
                 email_seadb_api.update_thread_to_db(connection_id, update_thread)
@@ -132,6 +136,8 @@ def insert_and_update_thread_rows(
             }
             if not email.get('is_sender'):
                 insert_thread['unread'] = not is_first_sync
+                if email.get('_customer_id') is not None:
+                    insert_thread['customer_id'] = email['_customer_id']
             insert_thread_id = email_seadb_api.save_thread_to_db(connection_id, insert_thread)
             to_be_updated_thread_dict[insert_thread_id] = {
                 'last_updated_at': email['email_date']
