@@ -22,7 +22,6 @@ class TestEmailHandlerOAuthConfig:
         handler = EmailHandler()
         platform_config = {'client_id': 'platform-id', 'client_secret': 'platform-secret', 'token_url': 'https://provider.example/token'}
         with patch.dict(EMAIL_OAUTH_CONFIGS, {provider: platform_config}), \
-                patch('seaqa_indexer.handlers.email_handler.get_storage'), \
                 patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config') as viewer, \
                 patch.object(handler, '_sync_email', return_value=(0, 0)):
             handler.sync(1, 'project-id', config, None, {}, db, Mock())
