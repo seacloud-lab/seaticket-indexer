@@ -1,4 +1,5 @@
 from datetime import datetime
+from email.utils import getaddresses
 from urllib.parse import quote
 
 from .oauth_mail_viewer import OAuthMailViewer
@@ -6,6 +7,29 @@ from .oauth_mail_viewer import OAuthMailViewer
 
 class MicrosoftOAuthMailViewer(OAuthMailViewer):
     provider_name = 'Microsoft'
+
+    @staticmethod
+    def _normalize_associated_address(address):
+        address = address.strip().casefold()
+        local_part, separator, domain = address.rpartition('@')
+        if separator and domain in ('outlook.com', 'hotmail.com', 'live.com', 'msn.com'):
+            # Only normalize known consumer domains. Exchange tenants may disable
+            # plus addressing or resolve the full plus address to another mailbox.
+            local_part = local_part.split('+', 1)[0]
+            return f'{local_part}@{domain}'
+        return address
+
+    def is_associated_message(self, msg, message_ref):
+        if self.account_type == 'personal':
+            return True
+        headers = []
+        for key in ('From', 'To', 'Cc', 'Bcc', 'Delivered-To', 'X-Original-To'):
+            headers.extend(msg.get_all(key, []))
+        addresses = {self._normalize_associated_address(address)
+                     for _, address in getaddresses(headers) if address}
+        addresses.update(self._normalize_associated_address(address)
+                         for address in message_ref.get('participant_addresses', []) if address)
+        return self._normalize_associated_address(self.sender_email) in addresses
 
     @property
     def base_url(self):
