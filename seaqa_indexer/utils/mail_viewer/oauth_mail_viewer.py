@@ -22,7 +22,9 @@ class OAuthMailViewer(BasicMailViewer):
     def __init__(self, config, oauth_token=None, oauth_config=None):
         super().__init__(config)
         oauth_token = oauth_token or {}
-        oauth_config = oauth_config or config
+        oauth_config = oauth_config or {}
+        if config.get('oauth_client_mode') not in (None, '', 'default'):
+            raise EmailConfigError('Custom email OAuth applications are no longer supported. Reauthorize with the platform application.')
         self.client_id = oauth_config.get('client_id')
         self.client_secret = oauth_config.get('client_secret')
         self.refresh_token = oauth_token.get('refresh_token')
@@ -32,16 +34,16 @@ class OAuthMailViewer(BasicMailViewer):
         self.account_type = config.get('account_type') or 'personal'
         self.sender_email = config.get('sender_email')
         provider = self.provider_name or config.get('server_provider')
-        supported_types = ('personal', 'alias', 'shared') if provider == 'Microsoft' else ('personal', 'alias')
+        supported_types = ('personal', 'shared') if provider == 'Microsoft' else ('personal',)
         if self.account_type not in supported_types:
             raise EmailConfigError('Email account type is invalid')
 
         if not all([self.client_id, self.client_secret, self.refresh_token, self.token_url]):
             logger.error('OAuth mail viewer config is invalid. client_id: %s, token_url: %s', self.client_id, self.token_url)
             raise EmailConfigError('OAuth mail viewer configuration is incomplete')
-        if self.account_type in ('alias', 'shared') and (
+        if self.account_type == 'shared' and (
                 not isinstance(self.sender_email, str) or '@' not in self.sender_email):
-            raise EmailConfigError('Alias or shared mailbox sender address is required')
+            raise EmailConfigError('Shared mailbox sender address is required')
 
     def refresh_access_token_if_needed(self):
         if not self.access_token or self.expires_at is None or self.expires_at - time.time() < 300:

@@ -146,7 +146,7 @@ class EmailHandler(ConnectionHandler):
                 }
                 provider = config.get('server_provider')
                 account_type = config.get('account_type') or 'personal'
-                supported_types = ('personal', 'alias', 'shared') if provider == 'Microsoft' else ('personal', 'alias')
+                supported_types = ('personal', 'shared') if provider == 'Microsoft' else ('personal',)
                 if account_type not in supported_types:
                     raise EmailConfigError('Email account type is invalid')
                 provider_config = EMAIL_OAUTH_CONFIGS.get(provider)
@@ -157,16 +157,8 @@ class EmailHandler(ConnectionHandler):
                     'client_secret': provider_config['client_secret'],
                     'token_url': provider_config['token_url']
                 }
-                client_mode = config.get('oauth_client_mode') or 'default'
-                if client_mode not in ('default', 'custom'):
-                    raise EmailConfigError('Email OAuth application mode is invalid')
-                if client_mode == 'custom':
-                    oauth_config['client_id'] = config.get('client_id')
-                    oauth_config['client_secret'] = config.get('client_secret')
-                    if provider == 'Microsoft' and config.get('token_url'):
-                        if not config['token_url'].startswith('https://login.microsoftonline.com/'):
-                            raise EmailConfigError('Microsoft OAuth token URL is invalid')
-                        oauth_config['token_url'] = config['token_url']
+                if config.get('oauth_client_mode') not in (None, '', 'default'):
+                    raise EmailConfigError('Custom email OAuth applications are no longer supported. Reauthorize with the platform application.')
             mail_viewer = get_mail_viewer_from_config(config, oauth_token, oauth_config)
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)

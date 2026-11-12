@@ -9,12 +9,10 @@ from seaqa_indexer.utils.mail_viewer import EmailViewError, OAuthMailViewer
 
 class TestEmailHandlerOAuthConfig:
     @pytest.mark.parametrize('provider,account_type', [
-        ('Gmail', 'personal'), ('Gmail', 'alias'),
-        ('Microsoft', 'personal'), ('Microsoft', 'alias'), ('Microsoft', 'shared'),
+        ('Gmail', 'personal'), ('Microsoft', 'personal'), ('Microsoft', 'shared'),
     ])
-    @pytest.mark.parametrize('mode', ['default', 'custom'])
-    def test_client_choice_is_independent_of_account_type(self, provider, account_type, mode):
-        config = {'server_provider': provider, 'account_type': account_type, 'oauth_client_mode': mode,
+    def test_uses_platform_credentials(self, provider, account_type):
+        config = {'server_provider': provider, 'account_type': account_type,
                   'client_id': 'custom-id', 'client_secret': 'custom-secret', 'sender_email': 'alias@example.com'}
         oauth = Mock(access_token='access', refresh_token='refresh', expires_at=Mock(timestamp=lambda: 1))
         db = Mock()
@@ -26,8 +24,7 @@ class TestEmailHandlerOAuthConfig:
                 patch.object(handler, '_sync_email', return_value=(0, 0)):
             handler.sync(1, 'project-id', config, None, {}, db, Mock())
         effective = viewer.call_args.args[2]
-        assert effective['client_id'] == ('custom-id' if mode == 'custom' else 'platform-id')
-        assert effective['client_secret'] == ('custom-secret' if mode == 'custom' else 'platform-secret')
+        assert effective == platform_config
 
     def test_oauth_configs_contain_credentials_and_token_url_only(self):
         assert set(EMAIL_OAUTH_CONFIGS['Gmail']) == {'client_id', 'client_secret', 'token_url'}
@@ -36,12 +33,16 @@ class TestEmailHandlerOAuthConfig:
         assert EMAIL_OAUTH_CONFIGS['Microsoft']['token_url'] == \
             'https://login.microsoftonline.com/common/oauth2/v2.0/token'
 
-    def test_shared_microsoft_uses_connection_credentials_and_tenant_token_url(self):
+    @pytest.mark.parametrize('provider,account_type,mode', [
+        ('Gmail', 'alias', 'default'), ('Microsoft', 'alias', 'default'),
+        ('Microsoft', 'shared', 'custom'), ('Gmail', 'personal', 'custom'),
+    ])
+    def test_rejects_legacy_alias_and_custom_connections(self, provider, account_type, mode):
         connection_id = 1
         config = {
-            'server_provider': 'Microsoft',
-            'account_type': 'shared',
-            'oauth_client_mode': 'custom',
+            'server_provider': provider,
+            'account_type': account_type,
+            'oauth_client_mode': mode,
             'client_id': 'shared-client-id',
             'client_secret': 'shared-client-secret',
             'sender_email': 'shared@example.com',
@@ -57,43 +58,10 @@ class TestEmailHandlerOAuthConfig:
 
         with patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer) as viewer_mock, \
                 patch.object(handler, '_sync_email', return_value=(0, 0)):
-            handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, sync_logger)
-
-        oauth_config = viewer_mock.call_args.args[2]
-        assert oauth_config == {
-            'client_id': 'shared-client-id',
-            'client_secret': 'shared-client-secret',
-            'token_url': 'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
-        }
-
-    def test_alias_gmail_uses_connection_credentials_and_default_token_url(self):
-        connection_id = 1
-        config = {
-            'server_provider': 'Gmail',
-            'account_type': 'alias',
-            'oauth_client_mode': 'custom',
-            'client_id': 'shared-client-id',
-            'client_secret': 'shared-client-secret',
-            'sender_email': 'shared@example.com',
-        }
-        oauth = Mock(access_token='access-token', refresh_token='refresh-token', expires_at=Mock(timestamp=lambda: 1))
-        seaqa_db = Mock()
-        seaqa_db.get_project_connection_oauth.return_value = oauth
-        sync_logger = Mock()
-        handler = EmailHandler()
-        mail_viewer = Mock()
-        mail_viewer.refresh_access_token_if_needed.return_value = None
-
-        with patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer) as viewer_mock, \
-                patch.object(handler, '_sync_email', return_value=(0, 0)):
-            handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, sync_logger)
-
-        oauth_config = viewer_mock.call_args.args[2]
-        assert oauth_config == {
-            'client_id': 'shared-client-id',
-            'client_secret': 'shared-client-secret',
-            'token_url': EMAIL_OAUTH_CONFIGS['Gmail']['token_url'],
-        }
+            result = handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, sync_logger)
+        assert result == (None, None, None, None)
+        viewer_mock.assert_not_called()
+        sync_logger.log.assert_called_once_with('email account is invalid')
 
 
 class TestOAuthMailViewerRefresh:
