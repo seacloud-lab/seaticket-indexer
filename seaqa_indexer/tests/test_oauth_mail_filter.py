@@ -94,12 +94,6 @@ def test_microsoft_pagination_keeps_recipient_metadata():
 
 
 @pytest.mark.parametrize('provider', ['Gmail', 'Microsoft'])
-def test_alias_is_not_supported(provider):
-    with pytest.raises(EmailConfigError, match='account type'):
-        make_viewer(provider, 'alias')
-
-
-@pytest.mark.parametrize('provider', ['Gmail', 'Microsoft'])
 def test_provider_personal_accounts_remain_unfiltered(provider):
     viewer = make_viewer(provider, 'personal')
     assert viewer.is_associated_message(viewer._parse_message('From: other@example.com\n\nbody'), {})

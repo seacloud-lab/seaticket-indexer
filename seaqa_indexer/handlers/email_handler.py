@@ -157,8 +157,6 @@ class EmailHandler(ConnectionHandler):
                     'client_secret': provider_config['client_secret'],
                     'token_url': provider_config['token_url']
                 }
-                if config.get('oauth_client_mode') not in (None, '', 'default'):
-                    raise EmailConfigError('Custom email OAuth applications are no longer supported. Reauthorize with the platform application.')
             mail_viewer = get_mail_viewer_from_config(config, oauth_token, oauth_config)
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)
