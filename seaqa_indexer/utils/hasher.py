@@ -1,29 +1,64 @@
 import base64
+import hashlib
+
 try:
     from Crypto.Cipher import AES
+    from Crypto.Random import get_random_bytes
 except ImportError:
     AES = None
+    get_random_bytes = None
 
 from seaqa_indexer.config import SECRET_KEY
+
 
 class AESPasswordDecodeError(Exception):
     pass
 
-# the block size for the cipher object; must be 16, 24, or 32 for AES
-BLOCK_SIZE = 32
 
-# the character used for padding--with a block cipher such as AES, the value
-# you encrypt must be a multiple of BLOCK_SIZE in length.  This character is
-# used to ensure that your value is always a multiple of BLOCK_SIZE
+BLOCK_SIZE = 32
 PADDING = '{'
 
-# one-liner to sufficiently pad the text to be encrypted
-pad = lambda s: s + (16 - len(s) % 16) * PADDING
 
-# one-liners to encrypt/encode and decrypt/decode a string
-# encrypt with AES, encode with base64
-EncodeAES = lambda c, s: base64.b64encode(c.encrypt(pad(s).encode('utf-8'))).decode('utf-8')
-DecodeAES = lambda c, e: c.decrypt(base64.b64decode(e)).decode('utf-8').rstrip(PADDING)
+class AESPasswordHasher:
+    algorithm = 'aes-gcm'
+    legacy_algorithm = 'aes'
+
+    def __init__(self, secret=None):
+        if not secret:
+            secret = SECRET_KEY[:BLOCK_SIZE]
+        self.secret = secret.encode('utf-8')
+        self.key = hashlib.sha256(self.secret).digest()
+
+    def encode(self, password):
+        password = _force_str(password).encode('utf-8')
+        nonce = get_random_bytes(12)
+        cipher = AES.new(self.key, AES.MODE_GCM, nonce=nonce)
+        ciphertext, tag = cipher.encrypt_and_digest(password)
+        parts = (nonce, tag, ciphertext)
+        data = '$'.join(base64.b64encode(part).decode('ascii') for part in parts)
+        return "%s$%s" % (self.algorithm, data)
+
+    def verify(self, password, encoded):
+        return self.decode(encoded) == password
+
+    def decode(self, encoded):
+        try:
+            algorithm, data = encoded.split('$', 1)
+            if algorithm == self.algorithm:
+                nonce, tag, ciphertext = (
+                    base64.b64decode(part) for part in data.split('$')
+                )
+                cipher = AES.new(self.key, AES.MODE_GCM, nonce=nonce)
+                return cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8')
+            if algorithm == self.legacy_algorithm:
+                cipher = AES.new(self.secret, AES.MODE_ECB)
+                plaintext = cipher.decrypt(base64.b64decode(data))
+                return plaintext.decode('utf-8').rstrip(PADDING)
+        except (ValueError, TypeError, UnicodeDecodeError) as error:
+            raise AESPasswordDecodeError from error
+
+        raise AESPasswordDecodeError
+
 
 def _force_str(s, encoding='utf-8', strings_only=False, errors='strict'):
     if strings_only and isinstance(s, (bytes, bytearray)):
@@ -38,23 +73,3 @@ def _force_str(s, encoding='utf-8', strings_only=False, errors='strict'):
         return {_force_str(key, encoding, strings_only, errors): _force_str(value, encoding, strings_only, errors) for key, value in s.items()}
     else:
         return str(s)
-
-class AESPasswordHasher:
-    algorithm = 'aes'
-
-    def __init__(self, secret=None):
-        if not secret:
-            secret = SECRET_KEY[:BLOCK_SIZE]
-        self.cipher = AES.new(secret.encode('utf-8'), AES.MODE_ECB)
-
-    def encode(self, password):
-        password = _force_str(password)
-        return "%s$%s" % (self.algorithm, EncodeAES(self.cipher, password))
-
-    def decode(self, encoded):
-        algorithm, data = encoded.split('$', 1)
-        if algorithm != self.algorithm:
-            raise AESPasswordDecodeError
-        data = data.encode('utf-8')
-
-        return DecodeAES(self.cipher, data)
