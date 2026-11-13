@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from seaqa_indexer.handlers.email_handler import EMAIL_OAUTH_CONFIGS, EmailHandler
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.mail_viewer import EmailViewError, OAuthMailViewer
+from seaqa_indexer.utils.mail_viewer.exceptions import EmailAuthProviderError, EmailConfigError
 
 
 class TestEmailHandlerOAuthConfig:
@@ -35,6 +36,37 @@ class TestEmailHandlerOAuthConfig:
 
 
 class TestOAuthMailViewerRefresh:
+    def test_incomplete_config_does_not_log_sensitive_values(self, caplog):
+        with pytest.raises(EmailConfigError):
+            OAuthMailViewer(
+                {'server_provider': 'Gmail'}, {},
+                {'client_id': 'sensitive-client-id', 'token_url': 'https://sensitive.example/token'},
+            )
+        assert 'OAuth mail viewer configuration is incomplete.' in caplog.text
+        assert 'sensitive' not in caplog.text
+
+    @pytest.mark.parametrize('operation', ['refresh_access_token_if_needed', '_request_json', '_request_bytes'])
+    def test_request_failure_does_not_log_sensitive_details(self, caplog, operation):
+        sensitive_value = 'sensitive-oauth-response'
+        viewer = OAuthMailViewer(
+            {'server_provider': 'Gmail'}, {'refresh_token': sensitive_value, 'expires_at': 0},
+            {'client_id': sensitive_value, 'client_secret': sensitive_value,
+             'token_url': 'https://sensitive.example/token'},
+        )
+        response = Mock(status_code=400)
+        response.json.return_value = {'error_description': sensitive_value}
+        with patch('seaqa_indexer.utils.mail_viewer.oauth_mail_viewer.requests.post', return_value=response), \
+                patch('seaqa_indexer.utils.mail_viewer.oauth_mail_viewer.requests.get', return_value=response):
+            with pytest.raises((EmailAuthProviderError, EmailViewError)):
+                if operation == 'refresh_access_token_if_needed':
+                    viewer.refresh_access_token_if_needed()
+                else:
+                    getattr(viewer, operation)('https://sensitive.example/messages')
+        assert 'Failure to fetch' in caplog.text
+        assert sensitive_value not in caplog.text
+        assert viewer.token_url not in caplog.text
+        assert all(record.exc_info is None for record in caplog.records)
+
     def test_refresh_request_does_not_include_scope(self):
         viewer = OAuthMailViewer(
             {'server_provider': 'Gmail'},

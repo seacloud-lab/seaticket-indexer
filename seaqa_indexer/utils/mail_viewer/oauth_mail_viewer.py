@@ -37,7 +37,7 @@ class OAuthMailViewer(BasicMailViewer):
             raise EmailConfigError('Email account type is invalid')
 
         if not all([self.client_id, self.client_secret, self.refresh_token, self.token_url]):
-            logger.error('OAuth mail viewer config is invalid. client_id: %s, token_url: %s', self.client_id, self.token_url)
+            logger.error('OAuth mail viewer configuration is incomplete.')
             raise EmailConfigError('OAuth mail viewer configuration is incomplete')
         if self.account_type == 'shared' and (
                 not isinstance(self.sender_email, str) or '@' not in self.sender_email):
@@ -58,12 +58,12 @@ class OAuthMailViewer(BasicMailViewer):
             try:
                 _check_and_raise_error(response)
             except Exception as e:
-                logger.exception('Failure to fetch new access token, error: %s', e)
+                logger.error('Failure to fetch new access token, error_type: %s', type(e).__name__)
                 raise EmailAuthProviderError('Failed to fetch access token')
             else:
                 response = response.json()
                 if 'access_token' not in response:
-                    logger.exception('Failure to fetch new access token. No access_token in response.')
+                    logger.error('Failure to fetch new access token. No access_token in response.')
                     raise EmailAuthProviderError('No access_token in response')
 
             expires_at = 0
@@ -105,7 +105,7 @@ class OAuthMailViewer(BasicMailViewer):
         try:
             _check_and_raise_error(response)
         except Exception as e:
-            logger.exception('Failure to fetch %s message json, error: %s', self.provider_name, e)
+            logger.error('Failure to fetch %s message json, error_type: %s', self.provider_name, type(e).__name__)
             raise EmailViewError(f'Failed to fetch {self.provider_name} message json')
         return response.json()
 
@@ -114,7 +114,7 @@ class OAuthMailViewer(BasicMailViewer):
         try:
             _check_and_raise_error(response)
         except Exception as e:
-            logger.exception('Failure to fetch %s raw message, error: %s', self.provider_name, e)
+            logger.error('Failure to fetch %s raw message, error_type: %s', self.provider_name, type(e).__name__)
             raise EmailViewError(f'Failed to fetch {self.provider_name} raw message')
         return response.content
 
