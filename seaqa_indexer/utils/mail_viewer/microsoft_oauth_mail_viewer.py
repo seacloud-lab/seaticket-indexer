@@ -33,7 +33,7 @@ class MicrosoftOAuthMailViewer(OAuthMailViewer):
         for mailbox, date_field, is_sender in mailboxes:
             next_url = self._mailbox_url(mailbox)
             params = {
-                '$select': 'id,conversationId',
+                '$select': 'id,conversationId,from,toRecipients,ccRecipients,bccRecipients',
                 '$filter': self._date_filter(date_field, start_date, end_date),
                 '$top': 100,
             }
@@ -46,6 +46,13 @@ class MicrosoftOAuthMailViewer(OAuthMailViewer):
                         'origin_thread_id': message.get('conversationId'),
                         'is_sender': is_sender,
                         'mailbox': mailbox,
+                        'participant_addresses': [
+                            recipient.get('emailAddress', {}).get('address', '')
+                            for recipient in ([message.get('from') or {}] +
+                                              message.get('toRecipients', []) +
+                                              message.get('ccRecipients', []) +
+                                              message.get('bccRecipients', []))
+                        ],
                     }
                 next_url = response.get('@odata.nextLink')
                 params = None

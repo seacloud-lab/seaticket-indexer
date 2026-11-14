@@ -1,6 +1,7 @@
 import logging
 import time
 from urllib import parse
+from email.utils import getaddresses
 
 import requests
 
@@ -21,21 +22,26 @@ class OAuthMailViewer(BasicMailViewer):
     def __init__(self, config, oauth_token=None, oauth_config=None):
         super().__init__(config)
         oauth_token = oauth_token or {}
-        oauth_config = oauth_config or config
+        oauth_config = oauth_config or {}
         self.client_id = oauth_config.get('client_id')
         self.client_secret = oauth_config.get('client_secret')
         self.refresh_token = oauth_token.get('refresh_token')
         self.access_token = oauth_token.get('access_token')
         self.expires_at = oauth_token.get('expires_at')
         self.token_url = oauth_config.get('token_url')
-        self.account_type = config.get('account_type', 'personal')
+        self.account_type = config.get('account_type') or 'personal'
         self.sender_email = config.get('sender_email')
+        provider = self.provider_name or config.get('server_provider')
+        supported_types = ('personal', 'shared') if provider == 'Microsoft' else ('personal',)
+        if self.account_type not in supported_types:
+            raise EmailConfigError('Email account type is invalid')
 
         if not all([self.client_id, self.client_secret, self.refresh_token, self.token_url]):
-            logger.error('OAuth mail viewer config is invalid. client_id: %s, token_url: %s', self.client_id, self.token_url)
+            logger.error('OAuth mail viewer configuration is incomplete.')
             raise EmailConfigError('OAuth mail viewer configuration is incomplete')
-        if self.account_type == 'shared' and not self.sender_email:
-            raise EmailConfigError('Shared email sender address is required')
+        if self.account_type == 'shared' and (
+                not isinstance(self.sender_email, str) or '@' not in self.sender_email):
+            raise EmailConfigError('Shared mailbox sender address is required')
 
     def refresh_access_token_if_needed(self):
         if not self.access_token or self.expires_at is None or self.expires_at - time.time() < 300:
@@ -52,12 +58,12 @@ class OAuthMailViewer(BasicMailViewer):
             try:
                 _check_and_raise_error(response)
             except Exception as e:
-                logger.exception('Failure to fetch new access token, error: %s', e)
+                logger.error('Failure to fetch new access token, error_type: %s', type(e).__name__)
                 raise EmailAuthProviderError('Failed to fetch access token')
             else:
                 response = response.json()
                 if 'access_token' not in response:
-                    logger.exception('Failure to fetch new access token. No access_token in response.')
+                    logger.error('Failure to fetch new access token. No access_token in response.')
                     raise EmailAuthProviderError('No access_token in response')
 
             expires_at = 0
@@ -99,7 +105,7 @@ class OAuthMailViewer(BasicMailViewer):
         try:
             _check_and_raise_error(response)
         except Exception as e:
-            logger.exception('Failure to fetch %s message json, error: %s', self.provider_name, e)
+            logger.error('Failure to fetch %s message json, error_type: %s', self.provider_name, type(e).__name__)
             raise EmailViewError(f'Failed to fetch {self.provider_name} message json')
         return response.json()
 
@@ -108,7 +114,7 @@ class OAuthMailViewer(BasicMailViewer):
         try:
             _check_and_raise_error(response)
         except Exception as e:
-            logger.exception('Failure to fetch %s raw message, error: %s', self.provider_name, e)
+            logger.error('Failure to fetch %s raw message, error_type: %s', self.provider_name, type(e).__name__)
             raise EmailViewError(f'Failed to fetch {self.provider_name} raw message')
         return response.content
 
@@ -121,11 +127,24 @@ class OAuthMailViewer(BasicMailViewer):
     def get_provider_email_metadata(self, message_ref):
         return {}
 
+    def is_associated_message(self, msg, message_ref):
+        if self.account_type == 'personal':
+            return True
+        headers = []
+        for key in ('From', 'To', 'Cc', 'Bcc', 'Delivered-To', 'X-Original-To'):
+            headers.extend(msg.get_all(key, []))
+        addresses = {address.strip().casefold() for _, address in getaddresses(headers) if address}
+        addresses.update(address.strip().casefold() for address in message_ref.get('participant_addresses', []) if address)
+        return self.sender_email.strip().casefold() in addresses
+
     def search_emails(self, start_date, end_date):
         for message_ref in self.iter_message_refs(start_date, end_date):
             mail_body = self.fetch_raw_message(message_ref)
-            email_dict = self.gen_email_dict(
-                mail_body,
+            msg = self._parse_message(mail_body)
+            if not self.is_associated_message(msg, message_ref):
+                continue
+            email_dict = self.gen_email_dict_from_message(
+                msg,
                 message_ref.get('is_sender', False),
                 **self.get_provider_email_metadata(message_ref),
             )

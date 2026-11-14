@@ -1,12 +1,32 @@
 import datetime
+import pytest
 from unittest.mock import Mock, patch
 
 from seaqa_indexer.handlers.email_handler import EMAIL_OAUTH_CONFIGS, EmailHandler
 from seaqa_indexer.utils.constants import ConnectionType
 from seaqa_indexer.utils.mail_viewer import EmailViewError, OAuthMailViewer
+from seaqa_indexer.utils.mail_viewer.exceptions import EmailAuthProviderError, EmailConfigError
 
 
 class TestEmailHandlerOAuthConfig:
+    @pytest.mark.parametrize('provider,account_type', [
+        ('Gmail', 'personal'), ('Microsoft', 'personal'), ('Microsoft', 'shared'),
+    ])
+    def test_uses_platform_credentials(self, provider, account_type):
+        config = {'server_provider': provider, 'account_type': account_type,
+                  'sender_email': 'shared@example.com'}
+        oauth = Mock(access_token='access', refresh_token='refresh', expires_at=Mock(timestamp=lambda: 1))
+        db = Mock()
+        db.get_connection_oauth.return_value = oauth
+        handler = EmailHandler()
+        platform_config = {'client_id': 'platform-id', 'client_secret': 'platform-secret', 'token_url': 'https://provider.example/token'}
+        with patch.dict(EMAIL_OAUTH_CONFIGS, {provider: platform_config}), \
+                patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config') as viewer, \
+                patch.object(handler, '_sync_email', return_value=(0, 0)):
+            handler.sync(1, 'project-id', config, None, {}, db, Mock())
+        effective = viewer.call_args.args[2]
+        assert effective == platform_config
+
     def test_oauth_configs_contain_credentials_and_token_url_only(self):
         assert set(EMAIL_OAUTH_CONFIGS['Gmail']) == {'client_id', 'client_secret', 'token_url'}
         assert EMAIL_OAUTH_CONFIGS['Gmail']['token_url'] == 'https://oauth2.googleapis.com/token'
@@ -14,65 +34,39 @@ class TestEmailHandlerOAuthConfig:
         assert EMAIL_OAUTH_CONFIGS['Microsoft']['token_url'] == \
             'https://login.microsoftonline.com/common/oauth2/v2.0/token'
 
-    def test_shared_microsoft_uses_connection_credentials_and_tenant_token_url(self):
-        connection_id = 1
-        config = {
-            'server_provider': 'Microsoft',
-            'account_type': 'shared',
-            'client_id': 'shared-client-id',
-            'client_secret': 'shared-client-secret',
-            'sender_email': 'shared@example.com',
-            'token_url': 'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
-        }
-        oauth = Mock(access_token='access-token', refresh_token='refresh-token', expires_at=Mock(timestamp=lambda: 1))
-        seaqa_db = Mock()
-        seaqa_db.get_project_connection_oauth.return_value = oauth
-        sync_logger = Mock()
-        handler = EmailHandler()
-        mail_viewer = Mock()
-        mail_viewer.refresh_access_token_if_needed.return_value = None
-
-        with patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer) as viewer_mock, \
-                patch.object(handler, '_sync_email', return_value=(0, 0)):
-            handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, sync_logger)
-
-        oauth_config = viewer_mock.call_args.args[2]
-        assert oauth_config == {
-            'client_id': 'shared-client-id',
-            'client_secret': 'shared-client-secret',
-            'token_url': 'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
-        }
-
-    def test_shared_gmail_uses_connection_credentials_and_default_token_url(self):
-        connection_id = 1
-        config = {
-            'server_provider': 'Gmail',
-            'account_type': 'shared',
-            'client_id': 'shared-client-id',
-            'client_secret': 'shared-client-secret',
-            'sender_email': 'shared@example.com',
-        }
-        oauth = Mock(access_token='access-token', refresh_token='refresh-token', expires_at=Mock(timestamp=lambda: 1))
-        seaqa_db = Mock()
-        seaqa_db.get_project_connection_oauth.return_value = oauth
-        sync_logger = Mock()
-        handler = EmailHandler()
-        mail_viewer = Mock()
-        mail_viewer.refresh_access_token_if_needed.return_value = None
-
-        with patch('seaqa_indexer.handlers.email_handler.get_mail_viewer_from_config', return_value=mail_viewer) as viewer_mock, \
-                patch.object(handler, '_sync_email', return_value=(0, 0)):
-            handler.sync(connection_id, 'project-uuid', config, None, {}, seaqa_db, sync_logger)
-
-        oauth_config = viewer_mock.call_args.args[2]
-        assert oauth_config == {
-            'client_id': 'shared-client-id',
-            'client_secret': 'shared-client-secret',
-            'token_url': EMAIL_OAUTH_CONFIGS['Gmail']['token_url'],
-        }
-
 
 class TestOAuthMailViewerRefresh:
+    def test_incomplete_config_does_not_log_sensitive_values(self, caplog):
+        with pytest.raises(EmailConfigError):
+            OAuthMailViewer(
+                {'server_provider': 'Gmail'}, {},
+                {'client_id': 'sensitive-client-id', 'token_url': 'https://sensitive.example/token'},
+            )
+        assert 'OAuth mail viewer configuration is incomplete.' in caplog.text
+        assert 'sensitive' not in caplog.text
+
+    @pytest.mark.parametrize('operation', ['refresh_access_token_if_needed', '_request_json', '_request_bytes'])
+    def test_request_failure_does_not_log_sensitive_details(self, caplog, operation):
+        sensitive_value = 'sensitive-oauth-response'
+        viewer = OAuthMailViewer(
+            {'server_provider': 'Gmail'}, {'refresh_token': sensitive_value, 'expires_at': 0},
+            {'client_id': sensitive_value, 'client_secret': sensitive_value,
+             'token_url': 'https://sensitive.example/token'},
+        )
+        response = Mock(status_code=400)
+        response.json.return_value = {'error_description': sensitive_value}
+        with patch('seaqa_indexer.utils.mail_viewer.oauth_mail_viewer.requests.post', return_value=response), \
+                patch('seaqa_indexer.utils.mail_viewer.oauth_mail_viewer.requests.get', return_value=response):
+            with pytest.raises((EmailAuthProviderError, EmailViewError)):
+                if operation == 'refresh_access_token_if_needed':
+                    viewer.refresh_access_token_if_needed()
+                else:
+                    getattr(viewer, operation)('https://sensitive.example/messages')
+        assert 'Failure to fetch' in caplog.text
+        assert sensitive_value not in caplog.text
+        assert viewer.token_url not in caplog.text
+        assert all(record.exc_info is None for record in caplog.records)
+
     def test_refresh_request_does_not_include_scope(self):
         viewer = OAuthMailViewer(
             {'server_provider': 'Gmail'},

@@ -145,7 +145,10 @@ class EmailHandler(ConnectionHandler):
                     'expires_at': oauth.expires_at.timestamp(),
                 }
                 provider = config.get('server_provider')
-                account_type = config.get('account_type', 'personal')
+                account_type = config.get('account_type') or 'personal'
+                supported_types = ('personal', 'shared') if provider == 'Microsoft' else ('personal',)
+                if account_type not in supported_types:
+                    raise EmailConfigError('Email account type is invalid')
                 provider_config = EMAIL_OAUTH_CONFIGS.get(provider)
                 if not provider_config:
                     raise EmailConfigError('Email OAuth provider configuration is invalid')
@@ -154,11 +157,6 @@ class EmailHandler(ConnectionHandler):
                     'client_secret': provider_config['client_secret'],
                     'token_url': provider_config['token_url']
                 }
-                if account_type == 'shared':
-                    oauth_config['client_id'] = config.get('client_id')
-                    oauth_config['client_secret'] = config.get('client_secret')
-                    if provider == 'Microsoft' and config.get('token_url'):
-                        oauth_config['token_url'] = config['token_url']
             mail_viewer = get_mail_viewer_from_config(config, oauth_token, oauth_config)
         except (EmailConfigError, EmailAuthProviderError, EmailViewError) as e:
             logger.error('connection_id %s mail viewer initialization failed: %s', connection_id, e)
