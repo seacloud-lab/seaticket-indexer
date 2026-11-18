@@ -15,7 +15,7 @@ from seaqa_indexer.config import (
     S3_HOST,
     S3_KEY_ID,
     S3_SECRET_KEY,
-    S3_WEB_CRAWL_BUCKET,
+    S3_CONNECTION_BUCKET,
 )
 
 PROJECT_ATTACHMENTS = 'project_attachments'
@@ -276,7 +276,7 @@ def get_backend():
             S3_KEY_ID,
             S3_SECRET_KEY,
             S3_FILE_BUCKET,
-            S3_WEB_CRAWL_BUCKET,
+            S3_CONNECTION_BUCKET,
         )
     elif ATTACHMENT_STORAGE_BACKEND == 'disk':
         if not ATTACHMENT_STORAGE_LOCAL_ROOT:
