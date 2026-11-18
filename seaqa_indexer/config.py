@@ -142,7 +142,7 @@ REDIS_PASSWORD = configs.get('REDIS_PASSWORD', '')
 
 S3_HOST = configs.get('S3_HOST', '')
 S3_FILE_BUCKET = configs.get('S3_FILE_BUCKET', '')
-S3_WEB_CRAWL_BUCKET = configs.get('S3_WEB_CRAWL_BUCKET', '')
+S3_CONNECTION_BUCKET = configs.get('S3_CONNECTION_BUCKET', '')
 S3_KEY_ID = configs.get('S3_KEY_ID', '')
 S3_SECRET_KEY = configs.get('S3_SECRET_KEY', '')
 ATTACHMENT_STORAGE_BACKEND = configs.get('ATTACHMENT_STORAGE_BACKEND', 's3').lower()
