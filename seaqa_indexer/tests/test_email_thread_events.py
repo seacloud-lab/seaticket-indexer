@@ -94,7 +94,7 @@ class TestEmailThreadAddedEvent:
         assert events == []
 
 
-class TestEmailMessageAddedEvent:
+class TestEmailMessageReceivedEvent:
     def test_state_event_keeps_latest_inbound_sender(self):
         old_thread = {**THREAD_ROW, 'title': 'Old title'}
         events = _publish(
@@ -106,6 +106,6 @@ class TestEmailMessageAddedEvent:
         )
 
         message_events = [event['event'] for event in events]
-        assert [event['type'] for event in message_events] == ['email_message_added'] * 3
+        assert [event['type'] for event in message_events] == ['email_message_received'] * 3
         assert [event['new_value']['message_id'] for event in message_events[:2]] == ['<m3>', '<m2>']
         assert message_events[2]['new_value'] == {'title': 'Export fails', 'email_from': 'carol@example.com'}
