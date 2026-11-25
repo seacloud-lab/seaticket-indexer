@@ -211,7 +211,7 @@ class GeneralTaskHandler(ConnectionHandler):
                         '_pk': pk,
                     }
                     self.publish_synced_record_events(
-                        get_latest_row=lambda latest_row=latest_row: latest_row,
+                        get_latest_row=lambda: latest_row,
                         project_uuid=project_uuid,
                         connection_id=connection_id,
                         item_id=source_task_id,
@@ -219,7 +219,6 @@ class GeneralTaskHandler(ConnectionHandler):
                         state_event_type=DataEventType.GENERAL_TASK_ADDED.value,
                         state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
                         state_event_date_fields=GENERAL_TASK_EVENT_DATE_FIELDS,
-                        log_object_name='general task',
                     )
             if update_rows:
                 general_task_seadb_api.update_rows(connection_id, update_rows)
@@ -234,7 +233,7 @@ class GeneralTaskHandler(ConnectionHandler):
                         '_pk': update_row.get('pk'),
                     }
                     self.publish_synced_record_events(
-                        get_latest_row=lambda latest_row=latest_row: latest_row,
+                        get_latest_row=lambda: latest_row,
                         project_uuid=project_uuid,
                         connection_id=connection_id,
                         item_id=source_task_id,
@@ -242,7 +241,6 @@ class GeneralTaskHandler(ConnectionHandler):
                         state_event_type=DataEventType.GENERAL_TASK_UPDATED.value,
                         state_event_ignored_fields=GENERAL_TASK_EVENT_IGNORED_FIELDS,
                         state_event_date_fields=GENERAL_TASK_EVENT_DATE_FIELDS,
-                        log_object_name='general task',
                     )
 
             page_info = data.get('page_info') or {}

@@ -303,8 +303,8 @@ class DiscordHandler(ConnectionHandler):
             sync_count += 1
 
             self.publish_synced_record_events(
-                get_latest_row=lambda mid=thread_id: discord_seadb_api.get_thread_by_thread_id(
-                    connection_id, mid
+                get_latest_row=lambda: discord_seadb_api.get_thread_by_thread_id(
+                    connection_id, thread_id
                 ),
                 project_uuid=discord_seadb_api.base_id,
                 connection_id=connection_id,
@@ -319,7 +319,6 @@ class DiscordHandler(ConnectionHandler):
                 state_event_extra_new_value=(
                     self._build_opening_message_extra(added_messages) if is_new_record else None
                 ),
-                log_object_name='forum thread',
             )
 
             should, new_time, new_count = need_update_connection_last_sync_count(

@@ -47,6 +47,7 @@ class TestEmailThreadAddedEvent:
         assert len(events) == 1
         event = events[0]['event']
         assert event['type'] == 'email_thread_added'
+        assert 'old_value' not in event
         assert event['new_value'] == {
             '_pk': THREAD_ID,
             'title': 'Export fails',
@@ -95,8 +96,8 @@ class TestEmailThreadAddedEvent:
 
 
 class TestEmailMessageAddedEvent:
-    def test_state_event_keeps_latest_inbound_sender(self):
-        old_thread = {**THREAD_ROW, 'title': 'Old title'}
+    def test_existing_thread_emits_only_new_message_events_without_state_diff(self):
+        old_thread = {**THREAD_ROW, 'is_replied': True, 'title': 'Old title'}
         events = _publish(
             [
                 _email('<m3>', '2026-10-27T03:00:00+00:00', email_from='carol@example.com', reply_to_message_id='<m1>'),
@@ -106,6 +107,9 @@ class TestEmailMessageAddedEvent:
         )
 
         message_events = [event['event'] for event in events]
-        assert [event['type'] for event in message_events] == ['email_message_added'] * 3
-        assert [event['new_value']['message_id'] for event in message_events[:2]] == ['<m3>', '<m2>']
-        assert message_events[2]['new_value'] == {'title': 'Export fails', 'email_from': 'carol@example.com'}
+        assert [event['type'] for event in message_events] == ['email_message_added'] * 2
+        assert [event['new_value']['message_id'] for event in message_events] == ['<m3>', '<m2>']
+        assert [event['new_value']['email_from'] for event in message_events] == [
+            'carol@example.com', 'bob@example.com',
+        ]
+        assert all('old_value' not in event for event in message_events)

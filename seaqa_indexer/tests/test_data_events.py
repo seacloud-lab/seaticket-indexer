@@ -55,7 +55,7 @@ class TestBuildEvent:
         assert event['old_value'] == {'name': 'old'}
         assert event['new_value'] == {'name': 'new'}
 
-    def test_build_event_no_change_returns_none_values(self):
+    def test_build_event_no_change_returns_none(self):
         handler = DummyHandler()
 
         event = handler.build_event(
@@ -64,17 +64,14 @@ class TestBuildEvent:
             new_row={'name': 'same'},
         )
 
-        assert event['old_value'] is None
-        assert event['new_value'] is None
+        assert event is None
 
     def test_build_event_handles_none_inputs(self):
         handler = DummyHandler()
 
         event = handler.build_event('dummy_updated', old_row=None, new_row=None)
 
-        assert event['type'] == 'dummy_updated'
-        assert event['old_value'] is None
-        assert event['new_value'] is None
+        assert event is None
 
     def test_build_event_when_old_row_missing(self):
         handler = DummyHandler()
@@ -82,11 +79,14 @@ class TestBuildEvent:
         event = handler.build_event(
             'dummy_added',
             old_row=None,
-            new_row={'title': 'new'},
+            new_row={'title': 'new', 'empty_field': None},
         )
 
-        assert event['old_value'] == {'title': None}
-        assert event['new_value'] == {'title': 'new'}
+        assert event == {
+            'type': 'dummy_added',
+            'new_value': {'title': 'new'},
+        }
+        assert 'old_value' not in event
 
 
 class TestPublishSyncedRecordEvents:
@@ -164,6 +164,7 @@ class TestPublishSyncedRecordEvents:
         second_payload = json.loads(handler.mq.publish.call_args_list[1][0][1])
 
         assert first_payload['event']['type'] == 'dummy_comment_added'
+        assert 'old_value' not in first_payload['event']
         assert first_payload['event']['new_value'] == {'id': 1}
 
         assert second_payload['event']['type'] == 'dummy_updated'
@@ -188,6 +189,7 @@ class TestPublishSyncedRecordEvents:
         handler.mq.publish.assert_called_once()
         payload = json.loads(handler.mq.publish.call_args[0][1])
         assert payload['event']['type'] == 'dummy_added'
+        assert 'old_value' not in payload['event']
         assert payload['event']['new_value']['email_from'] == 'alice@example.com'
         assert payload['event']['new_value']['title'] == 'new title'
 
@@ -204,48 +206,6 @@ class TestPublishSyncedRecordEvents:
             state_event_type='dummy_updated',
             state_event_ignored_fields=('_pk', 'modified_time'),
             state_event_extra_new_value={'email_from': 'alice@example.com'},
-        )
-
-        handler.mq.publish.assert_not_called()
-
-    def test_publish_state_event_merges_extra_old_value(self):
-        handler = DummyHandler()
-        handler.mq = Mock()
-
-        handler.publish_synced_record_events(
-            get_latest_row=lambda: {'_pk': 11, 'title': 'new title', 'modified_time': '2026-05-22T10:00:00+00:00'},
-            project_uuid='project-1',
-            connection_id=9,
-            item_id='item-9',
-            old_row={'_pk': 11, 'title': 'old title', 'modified_time': '2026-05-22T09:00:00+00:00'},
-            state_event_type='dummy_updated',
-            state_event_ignored_fields=('_pk', 'modified_time'),
-            state_event_extra_old_value={'status_category': 'indeterminate'},
-            state_event_extra_new_value={'status_category': 'done'},
-        )
-
-        handler.mq.publish.assert_called_once()
-        payload = json.loads(handler.mq.publish.call_args[0][1])
-        assert payload['event']['type'] == 'dummy_updated'
-        assert payload['event']['old_value']['status_category'] == 'indeterminate'
-        assert payload['event']['old_value']['title'] == 'old title'
-        assert payload['event']['new_value']['status_category'] == 'done'
-        assert payload['event']['new_value']['title'] == 'new title'
-
-    def test_publish_state_event_extra_old_value_does_not_force_publish(self):
-        handler = DummyHandler()
-        handler.mq = Mock()
-
-        handler.publish_synced_record_events(
-            get_latest_row=lambda: {'_pk': 11, 'title': 'same', 'modified_time': '2026-05-22T10:00:00+00:00'},
-            project_uuid='project-1',
-            connection_id=9,
-            item_id='item-9',
-            old_row={'_pk': 11, 'title': 'same', 'modified_time': '2026-05-22T09:00:00+00:00'},
-            state_event_type='dummy_updated',
-            state_event_ignored_fields=('_pk', 'modified_time'),
-            state_event_extra_old_value={'status_category': 'indeterminate'},
-            state_event_extra_new_value={'status_category': 'done'},
         )
 
         handler.mq.publish.assert_not_called()
@@ -432,3 +392,25 @@ class TestPublishSyncedRecordEvents:
         )
 
         handler.mq.publish.assert_not_called()
+
+    def test_publish_skips_state_event_when_state_event_type_is_none(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {'_pk': 25, 'is_replied': False, 'modified_time': '2026-05-22T10:00:00+00:00'},
+            project_uuid='project-5',
+            connection_id=13,
+            item_id='item-13',
+            old_row={'_pk': 25, 'is_replied': True, 'modified_time': '2026-05-22T09:00:00+00:00'},
+            state_event_type=None,
+            additional_items=[{'message_id': '<m1>', 'content': 'Reply'}],
+            additional_event_type='dummy_message_added',
+        )
+
+        handler.mq.publish.assert_called_once()
+        payload = json.loads(handler.mq.publish.call_args[0][1])
+        assert payload['event'] == {
+            'type': 'dummy_message_added',
+            'new_value': {'message_id': '<m1>', 'content': 'Reply'},
+        }

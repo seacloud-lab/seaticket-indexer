@@ -208,13 +208,12 @@ class ConfluenceHandler(ConnectionHandler):
                     state_event_type = DataEventType.CONFLUENCE_PAGE_UPDATED.value if existed_page else DataEventType.CONFLUENCE_PAGE_ADDED.value
 
                     self.publish_synced_record_events(
-                        get_latest_row=lambda pf=page_id: confluence_seadb_api.get_page_by_page_id(pf, connection_id),
+                        get_latest_row=lambda: confluence_seadb_api.get_page_by_page_id(page_id, connection_id),
                         project_uuid=project_uuid,
                         connection_id=connection_id,
                         item_id=page_id,
                         old_row=existed_page or None,
                         state_event_type=state_event_type,
-                        log_object_name='confluence page',
                     )
 
                     should, new_time, new_count = need_update_connection_last_sync_count(

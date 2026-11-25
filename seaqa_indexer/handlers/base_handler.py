@@ -110,13 +110,53 @@ class ConnectionHandler(ABC):
         return total_deleted
 
     def build_event(self, event_type, old_row=None, new_row=None, ignored_fields=None, date_fields=None):
-        old_row = old_row or {}
-        new_row = new_row or {}
-        old_value = {}
-        new_value = {}
+        if not new_row:
+            return None
+
         ignored_fields = set(ignored_fields or [])
         date_fields = set(date_fields or [])
+        if not old_row:
+            return self._build_added_event(
+                event_type,
+                new_row=new_row,
+                ignored_fields=ignored_fields,
+                date_fields=date_fields,
+            )
+        return self._build_updated_event(
+            event_type,
+            old_row=old_row,
+            new_row=new_row,
+            ignored_fields=ignored_fields,
+            date_fields=date_fields,
+        )
 
+    def _build_added_event(self, event_type, *, new_row, ignored_fields, date_fields):
+        new_value = {}
+        for field_name, field_value in new_row.items():
+            if field_name in ignored_fields:
+                continue
+            if field_name in date_fields:
+                try:
+                    field_value = self._normalize_event_date(field_value)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        'Failed to normalize event date field %s: %r',
+                        field_name, field_value,
+                    )
+            if field_value is None:
+                continue
+            new_value[field_name] = field_value
+
+        if not new_value:
+            return None
+        return {
+            'type': event_type,
+            'new_value': new_value,
+        }
+
+    def _build_updated_event(self, event_type, *, old_row, new_row, ignored_fields, date_fields):
+        old_value = {}
+        new_value = {}
         for field_name, field_value in new_row.items():
             if field_name in ignored_fields:
                 continue
@@ -135,10 +175,12 @@ class ConnectionHandler(ABC):
             old_value[field_name] = old_field_value
             new_value[field_name] = field_value
 
+        if not new_value:
+            return None
         return {
             'type': event_type,
-            'old_value': old_value or None,
-            'new_value': new_value or None,
+            'old_value': old_value,
+            'new_value': new_value,
         }
 
     @staticmethod
@@ -161,9 +203,54 @@ class ConnectionHandler(ABC):
         return value_str
 
     def should_publish_state_event(self, state_event) -> bool:
-        if state_event.get('old_value') is not None or state_event.get('new_value') is not None:
-            return True
-        return False
+        return True
+
+    @staticmethod
+    def _build_additional_events(event_type, items):
+        if not event_type or not items:
+            return []
+        return [
+            {
+                'type': event_type,
+                'new_value': dict(item),
+            }
+            for item in items
+            if isinstance(item, dict)
+        ]
+
+    def _build_state_event(
+        self,
+        event_type,
+        *,
+        old_row,
+        new_row,
+        ignored_fields=None,
+        date_fields=None,
+        extra_new_value=None,
+    ):
+        if not event_type:
+            return None
+        state_event = self.build_event(
+            event_type,
+            old_row=old_row,
+            new_row=new_row,
+            ignored_fields=ignored_fields,
+            date_fields=date_fields,
+        )
+        if state_event is None or not self.should_publish_state_event(state_event):
+            return None
+        if extra_new_value:
+            state_event['new_value'] = {**state_event['new_value'], **extra_new_value}
+        return state_event
+
+    def _build_event_envelope(self, project_uuid, connection_id, latest_row):
+        return {
+            'source_type': self.connection_type,
+            'project_uuid': str(project_uuid),
+            'connection_id': connection_id,
+            'record_id': latest_row['_pk'],
+            'modified_time': time_to_utc_time(str(latest_row.get('modified_time'))).isoformat(),
+        }
 
     def publish_synced_record_events(
         self,
@@ -178,61 +265,52 @@ class ConnectionHandler(ABC):
         additional_event_type=None,
         state_event_ignored_fields=None,
         state_event_date_fields=None,
-        state_event_extra_old_value=None,
         state_event_extra_new_value=None,
-        log_object_name='record',
     ):
         if not self.mq:
             return
 
         try:
             latest_row = get_latest_row()
-            record_id = latest_row.get('_pk') if latest_row else None
-            if record_id is None:
+            if not latest_row or latest_row.get('_pk') is None:
                 return
 
-            base_event = {
-                'source_type': self.connection_type,
-                'project_uuid': str(project_uuid),
-                'connection_id': connection_id,
-                'record_id': record_id,
-                'modified_time': time_to_utc_time(str(latest_row.get('modified_time'))).isoformat(),
-            }
+            events = []
+            # Opening posts/comments of a new record are covered by its added state event;
+            # only existing records emit separate child item events.
+            if old_row:
+                events.extend(self._build_additional_events(additional_event_type, additional_items))
 
-            if old_row and additional_items and additional_event_type:
-                for item in additional_items:
-                    if not isinstance(item, dict):
-                        continue
-                    related_event = {
-                        'type': additional_event_type,
-                        'old_value': None,
-                        'new_value': dict(item),
-                    }
-                    self._publish_data_event(base_event, related_event)
-
-            state_event = self.build_event(
+            state_event = self._build_state_event(
                 state_event_type,
                 old_row=old_row,
                 new_row=latest_row,
                 ignored_fields=state_event_ignored_fields,
                 date_fields=state_event_date_fields,
+                extra_new_value=state_event_extra_new_value,
             )
-            if state_event_extra_old_value and state_event.get('old_value') is not None:
-                state_event['old_value'] = {**state_event['old_value'], **state_event_extra_old_value}
-            if state_event_extra_new_value and state_event.get('new_value') is not None:
-                state_event['new_value'] = {**state_event['new_value'], **state_event_extra_new_value}
-            if self.should_publish_state_event(state_event):
-                self._publish_data_event(base_event, state_event)
+            if state_event is not None:
+                events.append(state_event)
+
+            if not events:
+                return
+
+            envelope = self._build_event_envelope(project_uuid, connection_id, latest_row)
+            for event in events:
+                self._publish_data_event(envelope, event)
         except Exception as e:
-            logger.warning('Failed to publish data_events for synced %s %s: %s', log_object_name, item_id, e)
+            logger.warning(
+                'Failed to publish data_events for %s record %s: %s',
+                self.connection_type, item_id, e,
+            )
 
     def _publish_data_event(self, base_event, event):
-        event = {
-            **event,
-            'old_value': self._limit_event_content(event.get('old_value')),
-            'new_value': self._limit_event_content(event.get('new_value')),
-        }
-        self.mq.publish('data_events', json.dumps({**base_event, 'event': event}))
+        payload_event = {k: v for k, v in event.items() if k not in ('old_value', 'new_value')}
+        for key in ('old_value', 'new_value'):
+            value = event.get(key)
+            if value is not None:
+                payload_event[key] = self._limit_event_content(value)
+        self.mq.publish('data_events', json.dumps({**base_event, 'event': payload_event}))
 
     @staticmethod
     def _limit_event_content(values):
