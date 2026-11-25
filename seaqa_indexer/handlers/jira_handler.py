@@ -213,7 +213,7 @@ class JiraIssueHandler(ConnectionHandler):
                     _upsert_user(comment.get('author'))
 
                 self.publish_synced_record_events(
-                    get_latest_row=lambda iid=issue_id: jira_seadb_api.get_issue_by_issue_id(iid, connection_id),
+                    get_latest_row=lambda: jira_seadb_api.get_issue_by_issue_id(issue_id, connection_id),
                     project_uuid=project_uuid,
                     connection_id=connection_id,
                     item_id=issue_id,
@@ -224,7 +224,6 @@ class JiraIssueHandler(ConnectionHandler):
                     ),
                     state_event_ignored_fields=JIRA_EVENT_IGNORED_FIELDS,
                     state_event_date_fields=JIRA_EVENT_DATE_FIELDS,
-                    log_object_name='jira issue',
                 )
 
                 should, new_time, new_count = need_update_connection_last_sync_count(

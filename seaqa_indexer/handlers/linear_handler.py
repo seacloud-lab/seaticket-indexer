@@ -264,7 +264,7 @@ class LinearIssueHandler(ConnectionHandler):
                     _upsert_user(comment.get('user'))
 
                 self.publish_synced_record_events(
-                    get_latest_row=lambda iid=issue_id: linear_seadb_api.get_issue_by_issue_id(iid, connection_id),
+                    get_latest_row=lambda: linear_seadb_api.get_issue_by_issue_id(issue_id, connection_id),
                     project_uuid=linear_seadb_api.base_id,
                     connection_id=connection_id,
                     item_id=issue_id,
@@ -275,7 +275,6 @@ class LinearIssueHandler(ConnectionHandler):
                     ),
                     state_event_ignored_fields=LINEAR_EVENT_IGNORED_FIELDS,
                     state_event_date_fields=LINEAR_EVENT_DATE_FIELDS,
-                    log_object_name='linear issue',
                 )
 
             if not page_info.get('hasNextPage'):

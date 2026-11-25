@@ -395,7 +395,7 @@ class EmailHandler(ConnectionHandler):
                 extra_new_value = self._build_reply_from_extra(new_emails_by_thread_id.get(thread_id))
 
             self.publish_synced_record_events(
-                get_latest_row=lambda tid=thread_id: email_seadb_api.get_thread_by_pk(connection_id, tid),
+                get_latest_row=lambda: email_seadb_api.get_thread_by_pk(connection_id, thread_id),
                 project_uuid=email_seadb_api.base_id,
                 connection_id=connection_id,
                 item_id=thread_id,
@@ -405,7 +405,6 @@ class EmailHandler(ConnectionHandler):
                 additional_event_type=DataEventType.EMAIL_MESSAGE_ADDED.value,
                 state_event_ignored_fields=('modified_time', 'unread', 'record_modified_time', 'sync_time'),
                 state_event_extra_new_value=extra_new_value,
-                log_object_name='email thread',
             )
             published_thread_ids.add(thread_id)
 
