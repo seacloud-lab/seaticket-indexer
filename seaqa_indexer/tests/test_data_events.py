@@ -392,3 +392,25 @@ class TestPublishSyncedRecordEvents:
         )
 
         handler.mq.publish.assert_not_called()
+
+    def test_publish_skips_state_event_when_state_event_type_is_none(self):
+        handler = DummyHandler()
+        handler.mq = Mock()
+
+        handler.publish_synced_record_events(
+            get_latest_row=lambda: {'_pk': 25, 'is_replied': False, 'modified_time': '2026-05-22T10:00:00+00:00'},
+            project_uuid='project-5',
+            connection_id=13,
+            item_id='item-13',
+            old_row={'_pk': 25, 'is_replied': True, 'modified_time': '2026-05-22T09:00:00+00:00'},
+            state_event_type=None,
+            additional_items=[{'message_id': '<m1>', 'content': 'Reply'}],
+            additional_event_type='dummy_message_added',
+        )
+
+        handler.mq.publish.assert_called_once()
+        payload = json.loads(handler.mq.publish.call_args[0][1])
+        assert payload['event'] == {
+            'type': 'dummy_message_added',
+            'new_value': {'message_id': '<m1>', 'content': 'Reply'},
+        }

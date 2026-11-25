@@ -391,8 +391,11 @@ class EmailHandler(ConnectionHandler):
                 state_event_type = DataEventType.EMAIL_THREAD_ADDED.value
                 extra_new_value = self._build_opening_email_extra(emails_by_thread_id.get(thread_id))
             else:
-                state_event_type = DataEventType.EMAIL_MESSAGE_ADDED.value
-                extra_new_value = self._build_reply_from_extra(new_emails_by_thread_id.get(thread_id))
+                # Existing threads only emit per-message email_message_added events;
+                # thread-row diffs (e.g. is_replied / customer_id) must not trigger
+                # a duplicate email_message_added event without message_id.
+                state_event_type = None
+                extra_new_value = None
 
             self.publish_synced_record_events(
                 get_latest_row=lambda: email_seadb_api.get_thread_by_pk(connection_id, thread_id),
@@ -407,15 +410,6 @@ class EmailHandler(ConnectionHandler):
                 state_event_extra_new_value=extra_new_value,
             )
             published_thread_ids.add(thread_id)
-
-    @staticmethod
-    def _build_reply_from_extra(new_emails):
-        """Expose the latest new inbound sender as email_from on the thread state event."""
-        if not new_emails:
-            return None
-        latest_email = max(new_emails, key=lambda item: str(item.get('email_date') or ''))
-        email_from = latest_email.get('email_from')
-        return {'email_from': email_from} if email_from else None
 
     @staticmethod
     def _build_opening_email_extra(thread_emails):

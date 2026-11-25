@@ -228,6 +228,8 @@ class ConnectionHandler(ABC):
         date_fields=None,
         extra_new_value=None,
     ):
+        if not event_type:
+            return None
         state_event = self.build_event(
             event_type,
             old_row=old_row,
