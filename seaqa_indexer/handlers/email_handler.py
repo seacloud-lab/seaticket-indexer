@@ -391,10 +391,7 @@ class EmailHandler(ConnectionHandler):
                 state_event_type = DataEventType.EMAIL_THREAD_ADDED.value
                 extra_new_value = self._build_opening_email_extra(emails_by_thread_id.get(thread_id))
             else:
-                # Existing threads only emit per-message email_message_added events;
-                # thread-row diffs (e.g. is_replied / customer_id) must not trigger
-                # a duplicate email_message_added event without message_id.
-                state_event_type = None
+                state_event_type = DataEventType.EMAIL_THREAD_UPDATED.value
                 extra_new_value = None
 
             self.publish_synced_record_events(

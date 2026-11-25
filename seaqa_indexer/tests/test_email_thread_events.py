@@ -96,20 +96,53 @@ class TestEmailThreadAddedEvent:
 
 
 class TestEmailMessageAddedEvent:
-    def test_existing_thread_emits_only_new_message_events_without_state_diff(self):
+    def test_existing_thread_emits_message_events_and_separate_thread_state_diff(self):
         old_thread = {**THREAD_ROW, 'is_replied': True, 'title': 'Old title'}
-        events = _publish(
+        latest_thread = {**THREAD_ROW, 'is_replied': False}
+        handler = EmailHandler.__new__(EmailHandler)
+        handler.mq = Mock()
+        email_seadb_api = Mock(base_id='project-1')
+        email_seadb_api.get_email_by_message_id.return_value = {'thread_id': THREAD_ID}
+        email_seadb_api.get_thread_by_pk.return_value = latest_thread
+
+        handler._publish_thread_events(
+            email_seadb_api,
+            3,
             [
                 _email('<m3>', '2026-10-27T03:00:00+00:00', email_from='carol@example.com', reply_to_message_id='<m1>'),
                 _email('<m2>', '2026-10-27T02:00:00+00:00', email_from='bob@example.com', reply_to_message_id='<m1>'),
             ],
-            old_thread_rows_by_id={THREAD_ID: old_thread},
+            {THREAD_ID: old_thread},
         )
+        events = [json.loads(call.args[1])['event'] for call in handler.mq.publish.call_args_list]
 
-        message_events = [event['event'] for event in events]
-        assert [event['type'] for event in message_events] == ['email_message_added'] * 2
+        assert [event['type'] for event in events] == [
+            'email_message_added',
+            'email_message_added',
+            'email_thread_updated',
+        ]
+        message_events = events[:2]
         assert [event['new_value']['message_id'] for event in message_events] == ['<m3>', '<m2>']
         assert [event['new_value']['email_from'] for event in message_events] == [
             'carol@example.com', 'bob@example.com',
         ]
         assert all('old_value' not in event for event in message_events)
+
+        state_event = events[2]
+        assert state_event == {
+            'type': 'email_thread_updated',
+            'old_value': {'is_replied': True, 'title': 'Old title'},
+            'new_value': {'is_replied': False, 'title': 'Export fails'},
+        }
+
+    def test_existing_thread_skips_state_event_when_only_ignored_fields_change(self):
+        old_thread = {**THREAD_ROW, 'modified_time': '2026-10-27T01:00:00+00:00', 'unread': False}
+        events = _publish(
+            [_email('<m2>', '2026-10-27T02:00:00+00:00', email_from='bob@example.com', reply_to_message_id='<m1>')],
+            old_thread_rows_by_id={THREAD_ID: old_thread},
+        )
+
+        assert len(events) == 1
+        assert events[0]['event']['type'] == 'email_message_added'
+        assert events[0]['event']['new_value']['message_id'] == '<m2>'
+        assert 'old_value' not in events[0]['event']
